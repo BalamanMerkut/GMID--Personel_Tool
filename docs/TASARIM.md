@@ -223,8 +223,9 @@ Oyun eklendiğinde (kütüphaneden ya da isimle aratarak) **hiçbir şeyi elle y
 | Kısa açıklama | Mümkünse Türkçe |
 | Oyun modları | Tek oyunculu, çok oyunculu, co-op |
 
-- **Kaynaklar:** Steam'deki oyunlar için Steam mağazasının kendi bilgileri; Steam dışındaki oyunlar için
-  büyük oyun veritabanları (IGDB / RAWG); kapaklar için SteamGridDB. Ayrıntı: [Ek C](ARASTIRMA-OVERLAY-METADATA.md).
+- **Kaynaklar:** Steam'deki oyunlar için Steam mağazasının kendi bilgileri (türler **Türkçe** gelir, Co-op gibi
+  kategoriler ve Roguelike gibi kullanıcı etiketleri dahil); Steam dışındaki oyunlar için büyük oyun
+  veritabanları (önce IGDB, yedek RAWG); kapaklar için SteamGridDB. Ayrıntı: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §3.
 - **Etiketler tek bir Türkçe listeye çevrilir:** Farklı kaynaklar "Rogue-like", "Roguelite", "Action Roguelike"
   gibi farklı yazsa da hepsi filtrede tek bir **Roguelike** kutusunda toplanır.
 - Yanlış eşleşme olursa: "Bu oyun değil" → doğru oyunu seç. Bilgiler istenirse elle düzeltilebilir.
@@ -389,7 +390,7 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 |--------|-----------|-----------------|
 | **1. Kısayol + ekran göstergesi** | Kısayola basarsın, iş yapılır; köşede küçük gösterge çıkar (§3.8). Odak oyunda kalır. | Pencereli ve **çerçevesiz tam ekran** (borderless) oyunlarda; Windows'un tam ekran iyileştirmeleri sayesinde modern tam ekran oyunların çoğunda da. Gösterge görünmese bile **kısayolun kendisi her durumda çalışır**. |
 | **2. GMID Oyun Paneli** | `Ctrl+Shift+G` → oyunun üstünde yarı saydam panel açılır. Aynı tuş / `Esc` ile kapanır, oyuna geri dönersin. | Pencereli / çerçevesiz tam ekran oyunlarda ve modern tam ekran oyunların çoğunda. Eski tip "özel tam ekran" oyunlarda panel açılınca oyun alta düşebilir → orada katman 1 kullanılır. |
-| **3. Xbox Game Bar parçacığı** *(Sonra, araştırmaya bağlı)* | `Win+G` ile açılan Xbox Game Bar'ın içine GMID parçacığı. Microsoft'un resmî yolu. | Tam ekran dahil Game Bar'ın açıldığı her yerde. |
+| **3. Xbox Game Bar parçacığı** *(v1'de yok, belki ileride)* | `Win+G` ile açılan Xbox Game Bar'ın içine GMID parçacığı. Microsoft'un resmî yolu, ama ayrı bir teknolojiyle (UWP) yazılması gerekiyor (~2–3 hafta ek iş). | Game Bar'ın açıldığı yerlerde; gerçek özel tam ekranda çalışıp çalışmadığı kesin değil. |
 
 **Panelde neler var?**
 - 🎧 Ses çıkışı seçimi, ses seviyesi
@@ -399,9 +400,10 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 - 📸 Son kaydedilen klip / ekran görüntüsü
 - 🔔 Yaklaşan hatırlatıcılar
 
-**Güvenlik:** Steam/Discord'un eski yöntemi gibi oyunun **içine** kod sokmuyoruz; panel, oyunun
+**Güvenlik:** Steam'in ve Discord'un eski overlay'i gibi oyunun **içine** kod sokmuyoruz; panel, oyunun
 üstünde duran **ayrı bir Windows penceresi**. Bu yüzden anti-cheat (Vanguard, EasyAntiCheat, BattlEye)
-açısından risk yok. Ayrıntılar: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §1.
+açısından risk yok. Discord da Mart 2025'te overlay'ini tam olarak bu yönteme geçirdi (ve o da yalnızca
+çerçevesiz/pencereli modda çalışıyor) — yani doğru yoldayız. Ayrıntılar: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §1.
 
 > **İpucu:** Oyunları **"Çerçevesiz pencere / Borderless"** modunda oynamak, panelin her oyunda sorunsuz
 > çalışmasını sağlar ve modern Windows'ta performans farkı yok denecek kadar azdır.
@@ -420,7 +422,8 @@ görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
 2. Yeni bir klip kaydedilince (ör. NVIDIA'da `Alt+F10`), dosyanın yazılması bitene kadar bekler.
 3. **Hangi oyunda çekildiğini bilir** — çünkü o an hangi oyunun açık olduğunu zaten takip ediyor (§3.2).
    Böylece "Desktop" ya da garip isimli klasörlere düşen klipler bile doğru oyuna gider.
-4. Dosyayı `Galeri\<Oyun adı>\Klipler\` veya `...\Ekran Goruntuleri\` altına taşır.
+4. Dosyayı `Galeri\<Oyun adı>\Klipler\` veya `...\Ekran Goruntuleri\` altına taşır
+   (Steam ekran görüntüleri Steam'in kendi yükleme özelliği bozulmasın diye **kopyalanır**).
 5. Küçük bir gösterge: "🎬 Klip kaydedildi — Valorant (0:30)".
 
 **Galeri ekranı (MVP)**
@@ -431,7 +434,12 @@ görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
 
 **Sonra:** Klip kırpma (başlangıç–bitiş), birden fazla klibi birleştirme, GIF'e çevirme.
 
-❓ Klipler taşınsın mı, kopyalansın mı? (soru 6)
+> **Bilmen gereken:** NVIDIA App ve Medal kendi galerilerini tutuyor. Klipleri GMID'e taşırsak, onlar
+> **GMID galerisinde** görünür ama **NVIDIA'nın kendi galerisinde (Alt+Z) artık görünmez**. NVIDIA'da
+> kayıt klasörünü bir kez GMID klasörü olarak seçmek de mümkün (GMID adım adım gösterir).
+> Ayrıntılar: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §4.
+
+❓ Klipler taşınsın mı, yerinde mi kalsın? (soru 6)
 
 ---
 
@@ -673,7 +681,10 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 5. Veri klasörü: `Belgeler\GMID Tool` mu, yoksa ayrı bir disk (ör. `D:\GMID Tool`) mi? (Format sonrası kaybolmaması için D: daha güvenli.)
 
 **Modüller**
-6. **Galeri:** Klipler GMID klasörüne taşınsın mı (önerim: taşınsın, disk tasarrufu), yoksa kopyalansın mı?
+6. **Galeri:** Klipler ne olsun?
+   - (A) **GMID klasörüne taşınsın** (önerim — her şey tek yerde, disk tasarrufu; NVIDIA'nın kendi galerisinde görünmez).
+   - (B) Yerinde kalsın, GMID sadece göstersin (hiçbir şey taşınmaz ama dosyalar dağınık kalır).
+   - (C) Kopyalansın (iki yerde de görünür, disk iki kat dolar).
 7. **Oyunları genelde hangi ekran modunda oynuyorsun?** (Tam ekran / Çerçevesiz pencere / Pencereli) — Oyun İçi Panel için.
 8. Mikrofon kilidi için hedef seviye %100 mü?
 9. Steam Web API anahtarı almak ister misin? (Ücretsiz, 1 dakika; silinen oyunların sürelerini de getirir.) AFK süresi oyun süresine sayılsın mı?
