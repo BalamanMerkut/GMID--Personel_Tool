@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.3 (taslak)
+## Tasarım Dokümanı · v0.4 (taslak)
 
 > **Durum:** Fikir / karar aşaması. Kod yazılmadı.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -35,6 +35,9 @@ botu, müzik botu olan kendi oyun evrenimiz. **GMID Tool** da bu malikânenin **
 malikâne sakinlerinin bilgisayarında duran; oyunlarını, film-dizilerini, notlarını, kliplerini,
 indirdiği videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan uygulama.
 
+Uygulama **Merkut Studios** imzasını taşır: açılışta Merkut Studios logosu belirir (§3.13), "Hakkında"
+ekranında *GMID Tool · Merkut Studios* yazar.
+
 ### 1.2 Temel ilkeler
 
 | İlke | Pratikte ne demek? |
@@ -42,7 +45,7 @@ indirdiği videoları ve Windows'taki küçük can sıkıcı işleri tek bir ş�
 | **Optimizasyon** | Tepside beklerken ve oyun oynarken neredeyse sıfır kaynak (hedef: **< 30 MB RAM, ~%0 CPU**). Hızlı açılış (< 1 sn). |
 | **Güzel görünüm** | Arka plan resmi/GIF, cam efektli paneller, oyun kapakları, yumuşak geçişler. Açtığında "vay" dedirtmeli. |
 | **Anlaşılabilirlik** | Her ekran tek bir işi yapar. En fazla 2 tıkla her şeye ulaşılır. Türkçe arayüz, net ikonlar, boş ekranlarda "ne yapmalıyım" ipucu. Elle veri girmek en aza iner (bilgiler internetten otomatik gelir). |
-| **Derli toplu** | Uygulamanın ürettiği **her şey tek bir ana klasörde** durur (videolar, klipler, notlar, arka planlar, veritabanı, yedekler). Hiçbir şey "İndirilenler"e ya da masaüstüne dağılmaz. |
+| **Derli toplu** | GMID'in **kendi ürettiği her şey** (indirilen videolar, notlar, arka planlar, veritabanı, yedekler) tek bir klasörde durur: `Belgeler\GMID Tool`. Başka programların dosyaları (ör. NVIDIA klipleri) **yerinde kalır**, ama uygulamanın içinde **tek yerde, görsel olarak** gösterilir. Dosya gezgininde klasör aramak yerine her şeyi uygulamadan görür, çift tıklayıp açarsın. |
 
 ### 1.3 Denge kuralı: güzellik ↔ optimizasyon ✅
 
@@ -65,38 +68,70 @@ sadece sen kullanacaksın. Arkadaşların da ileride puan girebilsin istiyorsun;
 belli değil. Bu yüzden:
 - **Veri modeli baştan çok kişili** kuruluyor (her puanın, notun bir "yazarı" var).
 - Sunucu gelene kadar **zorunlu hiçbir çevrim içi özellik yok.**
-- Ortak arşiv geldiğinde (§8) hiçbir şeyi yeniden yazmak gerekmeyecek; istenirse sunucusuz bir ara çözüm de var (öneri #12).
+- Ortak arşiv geldiğinde (§8) hiçbir şeyi yeniden yazmak gerekmeyecek; istenirse sunucusuz bir ara çözüm de var (öneri #9).
+
+### 1.5 Görsel kimlik: Oyun Malikânesi ✅
+
+Üç logo tek bir temada buluşuyor: **gece, altın ve neon** — modern bir oyun malikânesi.
+
+| Logo | Kullanıldığı yer | Dosya |
+|------|------------------|-------|
+| **Merkut Studios** (turkuaz kartal) | Açılış animasyonu, Hakkında ekranı | `assets/marka/merkut-studios.jpg` |
+| **GMID** (altın şato) | Uygulama ikonu, görev çubuğu, sistem tepsisi, sol menünün üstü | `assets/marka/gmid-logo.webp` |
+| **GMID AI Butler** (neon uşak) | Sadece renk ilhamı (neon camgöbeği ve mor) | `assets/marka/gmid-ai-butler.webp` |
+
+**Renk paleti** (logolardan ölçüldü):
+
+| Rol | Renk | Kaynak | Nerede? |
+|-----|------|--------|---------|
+| Gece (zemin) | `#121417` | — | Pencere zemini |
+| Kömür (paneller) | `#2F3235` | GMID logosu zemini | Kartlar, menü, paneller |
+| **Malikâne Altını** (ana vurgu) | `#E3C270` · parlama `#F0D878` | GMID logosu | Seçili menü, ana düğmeler, puan yıldızları, ince altın çizgiler |
+| **Merkut Turkuazı** (ikincil vurgu) | `#35A0A2` | Merkut Studios | Aktif durumlar, ilerleme çubukları, bağlantılar |
+| Neon Camgöbeği | `#60D8D8` | Butler | Ekran göstergesi, bildirim, "canlı" durumlar (ör. oyun oynanıyor) |
+| Lacivert | `#0B203E` | Merkut Studios | Açılış ekranı geçişi, koyu vurgu alanları |
+| Butler Moru | `#7848A8` | Butler | Çok az: etiketler, özel rozetler |
+
+**Tarz:**
+- GMID logosundaki gibi **ince çizgi (line-art) ikonlar**, seçiliyken hafif **altın parlama**.
+- Koyu zemin + cam paneller; arka plan resmi/GIF'i bunların arkasında görünür (§3.10).
+- Varsayılan arka plan: koyu zeminde çok hafif altın bir şato silueti (sabit resim, maliyeti yok).
+- Yazı tipi: başlıklarda logodaki gibi yuvarlak hatlı kalın bir yazı tipi (ör. *Montserrat*), metinde okunaklı *Inter*.
+
+**Menü isimleri:** Kategoriler malikânenin odaları; içlerindeki sekmeler **düz ve anlaşılır** isimde kalır
+(tema havası verir ama "bu ne işe yarıyordu?" dedirtmez). Bkz. §2.
 
 ---
 
 ## 2. Uygulama yapısı (kategoriler ve sekmeler)
 
-Sol tarafta daraltılabilir bir menü, sağda içerik:
+Sol tarafta daraltılabilir bir menü (en üstte altın GMID logosu), sağda içerik. Kategoriler malikânenin
+odaları, sekmeler düz isimli:
 
 ```
-🏠 Ana Sayfa             → Özet: bugün/bu hafta oynanan süre, son klipler, yaklaşan
+🏰 Giriş Salonu          → Ana sayfa: bugün/bu hafta oynanan süre, son klipler, yaklaşan
                             hatırlatıcılar, son notlar, devam eden indirmeler
 
-🎮 Oyun
+🎮 Oyun Salonu
    ├─ Kütüphanem         → Steam / Epic / EA / elle eklenen oyunlar, kapaklar, oynama süreleri
    ├─ Oturum Geçmişi     → Hangi gün hangi oyunu ne kadar oynadım (grafik)
-   ├─ Galeri             → Ekran görüntüleri ve klipler (NVIDIA Instant Replay vb.), oyuna göre
+   ├─ Kliplerim          → Ekran görüntüleri ve klipler (NVIDIA Instant Replay vb.), oyuna göre
    └─ Oyun Modu          → Tek tıkla "oyuna hazırlan" profili
 
-🍿 Eğlence
+🍿 Eğlence Salonu
    ├─ Oyun Arşivi        → Puanladığımız oyunlar, yorumlar, notlar + tür/etiket filtreleme
    ├─ Film & Dizi Arşivi → Aynısı film ve diziler için
-   └─ Videolar           → İndirilen videolar (IDM benzeri indiricinin kütüphanesi)
+   └─ Videolarım         → İndirilen videolar (IDM benzeri indiricinin kütüphanesi)
 
-🧰 Araçlar
+🧰 Çalışma Odası
    ├─ Notlar
    ├─ Hatırlatıcılar
    ├─ Sayaç              → Kronometre + geri sayım
    ├─ Ses & Mikrofon     → Kulaklık/hoparlör geçişi, mikrofon seviyesi kilidi, kısayollar
    └─ Format Sonrası Kurulum
 
-⚙️ Ayarlar              → Görünüm (arka plan, kalite), kısayol tuşları, başlangıçta açılma,
-                            veri klasörü, yedekleme, eklenti bağlantısı
+⚙️ Kontrol Odası        → Ayarlar: görünüm (arka plan, kalite, açılış animasyonu), kısayol
+                            tuşları, başlangıçta açılma, veri klasörü, yedekleme, eklenti bağlantısı
 ```
 
 **Pencereyi açmadan erişim:**
@@ -104,7 +139,7 @@ Sol tarafta daraltılabilir bir menü, sağda içerik:
 - **Sistem tepsisi ikonu** (saatin yanı): sağ tık → ses cihazı, mikrofon, hızlı not, hatırlatıcı, sayaç.
 - **Genel kısayol tuşları** — tam liste §3.8'de, hepsi ayarlardan değiştirilebilir.
 
-✅ Oyun arşivine hem **Eğlence → Oyun Arşivi**'nden hem de **oyunun kütüphane kartından** ulaşılır (veri tek yerde).
+✅ Oyun arşivine hem **Eğlence Salonu → Oyun Arşivi**'nden hem de **oyunun kütüphane kartından** ulaşılır (veri tek yerde).
 ✅ Film'in yanında **dizi** de var.
 
 ---
@@ -128,8 +163,8 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 **MVP**
 - YouTube, Twitter/X, Instagram (ve yt-dlp'nin desteklediği yüzlerce site, ücretsiz bonus).
 - Çözünürlük seçimi, sadece ses seçeneği, indirme kuyruğu, duraklat/iptal.
-- Videolar sekmesi: küçük resim, başlık, kaynak site, süre, boyut, tarih; arama ve filtre; tek tıkla oynat / klasörde göster / sil.
-- Dosyalar otomatik olarak siteye göre alt klasörlere: `Videolar\YouTube\`, `Videolar\Twitter\`…
+- **Videolarım** sekmesi: küçük resimli kartlar (başlık, kaynak site, süre, boyut, tarih); arama ve filtre; üzerine gelince kısa önizleme; **çift tık → video açılır**; sağ tık → klasörde göster / sil.
+- Dosyalar arka planda `Belgeler\GMID Tool\Videolar\` altına, siteye göre alt klasörlere iner (`YouTube\`, `Twitter\`…). Klasöre girmen hiç gerekmez; hepsi uygulamada görünür.
 
 **Sonra**
 - Oynatma listesi / kanal toplu indirme, altyazı indirme, video kırpma (başlangıç–bitiş).
@@ -148,7 +183,7 @@ Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §1.
 > adım adım ben anlatacağım). Opera, Chrome eklentilerini doğrudan çalıştırabildiği için
 > **aynı eklenti Opera'da da çalışacak**.
 
-❓ Varsayılan kalite: "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi? (soru 7)
+❓ Varsayılan kalite: "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi? (soru 4)
 
 ---
 
@@ -173,7 +208,7 @@ oynadığını kaydetmek.
 
 **Sonra:** Kütüphaneden oyunu doğrudan başlatma (Playnite gibi), yıllık "GMID Wrapped" özeti.
 
-**İki ayrı süre:** Steam'in tuttuğu süre, kart toplama / süre artırma (ör. Steam Card Idler) ile şişebilir.
+**İki ayrı süre:** Steam'in tuttuğu süre, kart toplama / süre artırma programlarıyla şişebilir.
 Bu yüzden her oyunda iki sayı görünür: **"Gerçek oynama"** (GMID'in ölçtüğü, oyun gerçekten açıkken) ve
 **"Steam'deki süre"**. İstatistikler ve Wrapped gerçek oynamayı kullanır.
 
@@ -181,7 +216,7 @@ Bu yüzden her oyunda iki sayı görünür: **"Gerçek oynama"** (GMID'in ölçt
 etkisi ölçülemeyecek kadar az. Oyunların içine **hiçbir şey enjekte edilmez** (anti-cheat güvenliği).
 Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §2.
 
-❓ Steam Web API anahtarı / AFK süresi (soru 6)
+❓ Steam Web API anahtarı / AFK süresi (soru 3)
 
 ---
 
@@ -305,7 +340,7 @@ Oyun arşiviyle **aynı kart yapısı ve aynı Keşfet ekranı**; sorular filme 
 **Teknik not:** Notlar veritabanının yanında `Notlar\` klasöründe **düz .md dosyası** olarak da
 saklanabilir → uygulama olmasa bile Not Defteri'yle açılır.
 
-❓ Notlar .md dosyası olarak da dursun mu? (soru 8)
+❓ Notlar .md dosyası olarak da dursun mu? (soru 5)
 
 ---
 
@@ -371,7 +406,7 @@ saklanabilir → uygulama olmasa bile Not Defteri'yle açılır.
 açık kaynak programların yıllardır kullandığı yöntemle yapılıyor. Mikrofon kilidi ve sessize alma ise
 Windows'un resmî ses arayüzüyle yapılıyor. Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §3, [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §2.
 
-❓ Mikrofon kilidi için hedef seviye %100 mü? (soru 5)
+❓ Mikrofon kilidi için hedef seviye %100 mü? (soru 2)
 
 ---
 
@@ -392,7 +427,7 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 
 **Teknik not:** Windows 10/11'de yerleşik **winget** (Microsoft'un resmî paket yöneticisi). Paket kimlikleri: [Ek B](ARASTIRMA-TEKNIK.md) §5.
 
-❓ Listene kesin girecek programlar (soru 9)
+❓ Listene kesin girecek programlar (soru 6)
 
 ---
 
@@ -401,7 +436,7 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 **MVP**
 - Arka plan: **düz renk / degrade / resim (JPG, PNG, WebP) / hareketli (GIF, WebM, MP4)**.
 - Bulanıklık ve karartma kaydırıcıları (yazılar hep okunur kalsın diye), cam efektli paneller.
-- Vurgu rengi; koyu tema varsayılan, açık tema seçeneği.
+- Varsayılan tema **Malikâne** (§1.5: gece zemin, altın ve turkuaz vurgular); vurgu rengi değiştirilebilir. Açık tema seçeneği de olacak.
 - Arka planlar `Arkaplanlar\` klasörüne kopyalanır (orijinal silinse de bozulmaz).
 - Notlar ve hızlı not penceresi için ayrı arka plan seçimi.
 - **Görünüm kalitesi:** Otomatik / Yüksek / Hafif (§1.3).
@@ -449,35 +484,57 @@ açısından risk yok. Discord da Mart 2025'te overlay'ini tam olarak bu yöntem
 
 ---
 
-### 3.12 Galeri — Ekran Görüntüleri ve Klipler ✅
+### 3.12 Kliplerim — Ekran Görüntüleri ve Klipler ✅
 
 **Amaç:** NVIDIA Instant Replay, Xbox Game Bar, Steam vb.'nin her yere dağıttığı klip ve ekran
-görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
+görüntülerini **uygulamanın içinde tek yerde, oyuna göre düzenli** göstermek.
+
+✅ **Karar: Dosyalar taşınmaz, yerinde kalır.** GMID onları sadece **bulur, oyuna göre gruplar ve
+gösterir**. Dosya gezgininde klasör aramak yerine her şeyi uygulamadan görürsün, çift tıklayıp açarsın.
+Böylece:
+- NVIDIA'nın, Steam'in, Medal'ın kendi galerileri de **bozulmadan** çalışmaya devam eder.
+- Taşıma/kopyalama olmadığı için disk iki kat dolmaz, dosya kaybolma riski de yok.
 
 **Nasıl çalışır?**
-1. GMID, kayıt programlarının klasörlerini sessizce izler (NVIDIA App / Instant Replay, Xbox Game Bar, Steam, AMD, OBS, Medal…).
-2. Yeni bir klip kaydedilince (ör. NVIDIA'da `Alt+F10`), dosyanın yazılması bitene kadar bekler.
+1. GMID, kayıt programlarının klasörlerini sessizce izler (NVIDIA App / Instant Replay, Xbox Game Bar, Steam, AMD, OBS, Medal…). İlk açılışta mevcut klipleri de tarar.
+2. Yeni bir klip kaydedilince (ör. NVIDIA'da `Alt+F10`), dosyanın yazılması bitince listeye ekler.
 3. **Hangi oyunda çekildiğini bilir** — çünkü o an hangi oyunun açık olduğunu zaten takip ediyor (§3.2).
-   Böylece "Desktop" ya da garip isimli klasörlere düşen klipler bile doğru oyuna gider.
-4. Dosyayı `Galeri\<Oyun adı>\Klipler\` veya `...\Ekran Goruntuleri\` altına taşır
-   (Steam ekran görüntüleri Steam'in kendi yükleme özelliği bozulmasın diye **kopyalanır**).
-5. Küçük bir gösterge: "🎬 Klip kaydedildi — Valorant (0:30)".
+   Böylece "Desktop" ya da garip isimli klasörlere düşen klipler bile uygulamada doğru oyunun altında görünür.
+4. Küçük bir gösterge: "🎬 Klip kaydedildi — Valorant (0:30)".
 
-**Galeri ekranı (MVP)**
-- Oyuna göre gruplanmış küçük resimler, tarih sırası; tıklayınca oynatıcı.
-- Favori ⭐, sil, yeniden adlandır, klasörde göster.
-- **"Discord'a sığdır"** düğmesi: Klibi Discord'un ücretsiz yükleme sınırına (10 MB) sığacak şekilde sıkıştırır, panoya kopyalar → Discord'a direkt yapıştırırsın.
-- Disk koruması: "Favori olmayan, X günden eski klipleri sil" seçeneği (varsayılan kapalı); Galeri başka bir diske taşınabilir.
+**Kliplerim ekranı (MVP)**
+- Oyuna göre gruplanmış kapaklı bölümler, içinde küçük resimler; tarih sırası.
+- Üzerine gelince sessiz önizleme oynar; **çift tık → klip açılır.**
+- Favori ⭐, yeniden adlandır, klasörde göster, sil (Windows Geri Dönüşüm Kutusu'na gider, geri alınabilir).
+- **"Discord'a sığdır"** düğmesi: Klibin Discord'un ücretsiz yükleme sınırına (10 MB) sığan bir kopyasını
+  üretir ve panoya koyar → Discord'a direkt yapıştırırsın. (Kopya `Belgeler\GMID Tool\Discord'a Hazır\`
+  altında durur, birkaç gün sonra kendiliğinden silinir.)
+- Disk koruması: "Favori olmayan, X günden eski klipleri geri dönüşüm kutusuna gönder" seçeneği (varsayılan kapalı).
 
 **Sonra:** Klip kırpma (başlangıç–bitiş), birden fazla klibi birleştirme, GIF'e çevirme.
 
-> **Bilmen gereken:** NVIDIA App ve Medal kendi galerilerini tutuyor. Klipleri GMID'e taşırsak, onlar
-> **GMID galerisinde** görünür ama **NVIDIA'nın kendi galerisinde (Alt+Z) artık görünmez**. NVIDIA'da
-> kayıt klasörünü bir kez GMID klasörü olarak seçmek de mümkün (GMID adım adım gösterir).
-> Ayrıntılar: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §4.
+Ayrıntılar (klasör konumları): [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §4.
 
-✅ **Karar: Klipler GMID klasörüne taşınacak** (Steam ekran görüntüleri hariç — onlar kopyalanır).
-İlk kurulumda GMID, NVIDIA'nın kayıt klasörünü de doğrudan `GMID Tool\Galeri\` yapmayı adım adım gösterecek.
+---
+
+### 3.13 Açılış Animasyonu ✅
+
+Uygulama açılırken karanlıktan yumuşak bir geçişle **Merkut Studios** logosu belirir, sonra kararır ve
+GMID Tool açılır:
+
+```
+ 0.0 sn  ■ Tam siyah ekran
+ 0.3 sn  ◐ Merkut Studios logosu karanlıktan yavaşça belirir (hafif büyüyerek, %96 → %100)
+ 1.2 sn  ● Logo tam görünür; turkuaz çizgilerde çok hafif bir parıltı geçer
+ 2.0 sn  ◑ Logo yavaşça kararır
+ 2.5 sn  ▶ GMID Tool karanlıktan açılır (menü ve içerik yumuşakça belirir)
+```
+
+- Toplam ~2,5 saniye. **Tıklayınca veya `Esc`/`Boşluk`'a basınca atlanır.**
+- Sadece ekran kartının "bedava" yaptığı geçişler kullanılır (solma, büyüme) → takılma olmaz.
+- **Ne zaman oynar?** Uygulama **kapalıyken** açıldığında. Tepsiden pencereyi açarken **oynamaz** (anında açılır).
+  Windows açılışında otomatik başlarken de oynamaz; uygulama sessizce tepsiye yerleşir.
+- Ayar: `Açılış animasyonu: Açık / Kapalı` (Kontrol Odası → Görünüm).
 
 ---
 
@@ -485,7 +542,7 @@ görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
 
 **Durum:** ✅ = onaylandı · ⭐ = önerim · 👍 = eklenirse güzel olur · 🤔 = sonra düşünürüz · ❌ = eklemeyelim
 
-**Onaylananlar:** Oyun Modu, mikrofon kısayolları (+ seviye kilidi), Oyun İçi Panel, otomatik kapak ve bilgi, Galeri.
+**Onaylananlar:** Oyun Modu, mikrofon kısayolları (+ seviye kilidi), Oyun İçi Panel, otomatik kapak ve bilgi, Kliplerim.
 
 | # | Özellik | Ne işe yarar? | Zorluk | Durum |
 |---|---------|---------------|--------|-------|
@@ -497,14 +554,11 @@ görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
 | 6 | **Komut paleti (`Ctrl+K`)** | Her şeyi tek arama kutusundan yap: "kulaklık", "not: market", "hatırlat 20dk çay", "roguelike"… | Orta | 👍 |
 | 7 | **Yıllık özet ("GMID Wrapped")** | En çok oynanan oyunlar, toplam saat, en yüksek puanlar, izlenen filmler — Discord'da paylaşılabilir görsel kart. | Kolay | ⭐ |
 | 8 | **Discord Rich Presence** | Discord profilinde "GMID Tool'da: Hades II puanlıyor" gibi durum. Malikânenin tanıtımı için de iyi. | Kolay | 👍 |
-| 9 | **Butler entegrasyonu** *(çevrim içi fazında)* | Discord'da `/oyun-oner roguelike` → Butler, GMID arşivinden puanlarımızla cevap verir; biri yeni oyun puanlayınca kanala duyuru. | Orta | ⭐ |
+| 9 | **Arşiv paylaşım dosyası** | Sunucu olmadan arkadaş puanları: puan ve yorumlarını tek bir dosya olarak dışa aktar, Discord'dan arkadaşına at; o içe aktarınca kartlarda "Ben 9 · Ali 7" görünür. VDS gelene kadar köprü. | Kolay | ⭐ |
 | 10 | **FPS / donanım izleme** | CPU/GPU sıcaklık, FPS. Sıcaklık sürücüsü bazı anti-cheat'lerle sorun çıkarabiliyor; MSI Afterburner zaten iyi yapıyor. | Orta–Zor | 🤔 |
 | 11 | **Sürücü güncelleme hatırlatıcısı** | "Ekran kartı sürücünü 60 gündür güncellemedin." | Orta | 🤔 |
-| 12 | **Arşiv paylaşım dosyası** | Sunucu olmadan arkadaş puanları: puan ve yorumlarını tek bir dosya olarak dışa aktar, Discord'dan arkadaşına at; o içe aktarınca kartlarda "Ben 9 · Ali 7" görünür. VDS gelene kadar köprü. | Kolay | ⭐ |
-| 13 | **Butler'ın ağzından bildirimler** | İsteğe bağlı tema: "Efendim, çay vaktiniz geldi.", "Efendim, mikrofonunuz kapatıldı." — malikâne havası. Kapalıyken düz bildirimler. | Kolay | 👍 |
-| 14 | **Steam Kart Toplayıcı modülü** | Senin Steam Card Idler'ını GMID Tool'un içine almak (§8.2). | Orta | 🤔 |
-| 15 | Pano geçmişi / ekran görüntüsü aracı | Windows'ta zaten var (`Win+V`, `Win+Shift+S`). | — | ❌ |
-| 16 | Makro, otomatik tıklama, nişangâh (crosshair), oyunun **içine** çizim yapan overlay | Online oyunlarda **ban riski**. | — | ❌ |
+| 12 | Pano geçmişi / ekran görüntüsü aracı | Windows'ta zaten var (`Win+V`, `Win+Shift+S`). | — | ❌ |
+| 13 | Makro, otomatik tıklama, nişangâh (crosshair), oyunun **içine** çizim yapan overlay | Online oyunlarda **ban riski**. | — | ❌ |
 
 > **Güvenlik kuralı (tüm uygulama için):** GMID Tool hiçbir oyunun belleğini okumaz, oyuna kod enjekte
 > etmez, oyunun içine çizim yapmaz. Sadece "hangi program çalışıyor" bilgisini okur (Discord kadar) ve
@@ -549,7 +603,7 @@ Kurulum: Tek bir `GMID-Tool-Kurulum.exe`; güncellemeler uygulama içinden tek t
 │  ┌─ Çekirdek (Rust, her zaman çalışır, tepside) ─────────────────┐  │
 │  │  Oyun Algılayıcı    → çalışan programlar (5 sn), tam ekran tespiti│
 │  │  Ses Servisi        → cihazlar, mikrofon kilidi (olay tabanlı)  │  │
-│  │  Galeri İzleyici    → kayıt klasörlerini izler, klipleri taşır  │  │
+│  │  Klip İzleyici      → kayıt klasörlerini izler, klipleri listeler│  │
 │  │  Bilgi Servisi      → oyun/film bilgisi ve kapak çeker, önbellek│  │
 │  │  Zamanlayıcı        → hatırlatıcılar, sayaçlar, bildirimler     │  │
 │  │  İndirme Yöneticisi → yt-dlp / ffmpeg / deno kuyruğu            │  │
@@ -577,29 +631,55 @@ Kurulum: Tek bir `GMID-Tool-Kurulum.exe`; güncellemeler uygulama içinden tek t
 
 ### 5.4 Arayüz ilkeleri
 
-- **Malikâne kimliği:** Koyu, şık bir tema; GMID'in renkleri ve logosu (❓ soru 1). Yuvarlatılmış köşeler, cam paneller → arka plan görünür ama yazılar okunur.
+- **Malikâne kimliği:** Gece zemin, altın ve turkuaz vurgular, GMID logosu (§1.5). Yuvarlatılmış köşeler, cam paneller → arka plan görünür ama yazılar okunur.
 - **Kapak odaklı:** Oyun ve film listeleri tablo değil, kapaklı kart vitrini.
 - Her ekranda tek bir ana eylem düğmesi (ör. Notlar'da "+ Yeni not").
 - Boş ekranlar boş kalmaz: "Henüz notun yok — `Ctrl+Alt+N` ile her yerden hızlı not alabilirsin" gibi yol gösterici mesajlar.
 - Klavye dostu: ana işlemlerin kısayolu var.
 - Silinen her şey önce çöp kutusuna gider; "Geri al" bildirimi.
 
+### 5.5 Kendiliğinden sığan arayüz ✅
+
+Pencereyi küçültüp büyüttüğünde, tam ekran yaptığında ya da farklı bir monitöre taşıdığında **her şey
+kendiliğinden yerine oturur**. Hiçbir içerik pencerenin dışına taşmaz, arkasında kalmaz, ezilmez veya
+uzamaz. Bunu sağlayan kurallar:
+
+**Resimler, kapaklar, videolar**
+- Hepsi **oranını koruyarak** sığar: kapaklar ve küçük resimler kutularını düzgünce doldurur, hiçbir zaman yamuk/uzamış görünmez.
+- Video oynatıcı ve klip önizlemeleri pencere boyutuna göre büyür/küçülür; görüntü kesilmez (gerekirse kenarlarda ince siyah bant).
+- Arka plan resmi/GIF'i her pencere boyutunda ekranı kaplar; resmin **hangi kısmının görüneceğini** (ör. karakterin yüzü) ayarlardan seçebilirsin, pencere daralınca o kısım ortada kalır.
+- Ekranın netliğine göre doğru boyutta resim yüklenir (4K'da keskin, küçük pencerede gereksiz büyük resim yüklenmez → hız).
+
+**Yerleşim**
+- **Kart ızgaraları akışkan:** Oyun/film/video kartlarının sütun sayısı pencere genişliğine göre otomatik değişir (geniş pencerede 6–7, dar pencerede 2–3). Kartlar boşluk bırakmadan yeniden dizilir.
+- **Sol menü:** Geniş pencerede isimleriyle, dar pencerede **sadece ikonlara** daralır, çok dar pencerede açılır-kapanır menüye dönüşür. İçerik alanı hiçbir zaman menünün altında kalmaz.
+- **Uzun yazılar** satır kaydırır; tek satıra sığması gereken başlıklar "…" ile kısalır, üzerine gelince tamamı görünür.
+- **Pencereler ve kutular** (puanlama kartı, ayarlar, onay pencereleri) her zaman pencerenin içinde ortalanır; sığmazsa kendi içinde kaydırılır — düğmeler asla görünmez olmaz.
+- **Tablolar** dar pencerede karta dönüşür (yan yana sütunlar alt alta).
+- En küçük pencere boyutu sınırlı (ör. 900×600); daha küçüğe indirmek "yarım ekran" görünümü bozmasın diye engellenir.
+
+**Ekran ve monitör**
+- Windows ekran ölçeklendirmesi (%100–%200), 1080p, 1440p, 4K ve geniş (ultrawide) ekranlarda aynı düzgünlükte görünür.
+- Pencerenin boyutu ve konumu hatırlanır. Monitör çıkarılırsa ya da çözünürlük değişirse pencere **ekranın dışında açılmaz**, görünen alana geri getirilir.
+- Açılış animasyonu, Oyun İçi Panel, ekran göstergesi, hızlı not ve yapışkan notlar da bulundukları ekrana göre ölçeklenir ve ekran kenarından taşmaz.
+
+**Test kuralı:** Her faz sonunda her ekran şu boyutlarda kontrol edilir: küçük pencere (900×600), Full HD
+tam ekran, 4K (%150 ölçek) ve ultrawide. Taşan, kesilen, üst üste binen tek bir öğe bile kalmaz.
+
 ---
 
 ## 6. Veri klasörü düzeni (derli toplu yapı)
 
-Varsayılan konum `Belgeler\GMID Tool\` (ayarlardan başka diske, ör. `D:\GMID Tool\` taşınabilir).
+Konum ✅: `Belgeler\GMID Tool\` (istersen ayarlardan başka diske taşınabilir).
+Bu klasör arka planda düzenli durur ama **içine girmen gerekmez** — her şey uygulamada görsel olarak görünür.
 Format atarken **bu tek klasörü yedeklemen yeterli.**
 
 ```
 GMID Tool\
-├─ gmid.db                  ← Tek SQLite veritabanı (oyunlar, puanlar, notlar, hatırlatıcılar, ayarlar)
-├─ Videolar\                ← İndirilen videolar
+├─ gmid.db                  ← Tek SQLite veritabanı (oyunlar, puanlar, notlar, klip listesi, ayarlar)
+├─ Videolar\                ← İndirilen videolar (uygulamada "Videolarım")
 │  ├─ YouTube\  ├─ Twitter\  ├─ Instagram\  └─ Diger\
-├─ Galeri\                  ← Klipler ve ekran görüntüleri
-│  └─ <Oyun adı>\
-│     ├─ Klipler\
-│     └─ Ekran Goruntuleri\
+├─ Discord'a Hazır\         ← "Discord'a sığdır" kopyaları (birkaç gün sonra kendiliğinden silinir)
 ├─ Notlar\                  ← Notların .md kopyaları (uygulama olmadan da okunabilir)
 ├─ Arkaplanlar\
 ├─ Kapaklar\                ← Oyun/film kapak önbelleği (silinirse yeniden indirilir)
@@ -607,6 +687,9 @@ GMID Tool\
 ├─ Yedekler\                ← Veritabanının otomatik günlük yedekleri (son 7 gün)
 └─ Araclar\                 ← yt-dlp, ffmpeg, deno (uygulama kendisi günceller)
 ```
+
+Klipler ve ekran görüntüleri bu klasörde **değildir**; kaydedildikleri yerde (NVIDIA, Steam vb. klasörleri)
+kalır, uygulama sadece listesini tutar (§3.12).
 
 ---
 
@@ -622,7 +705,7 @@ GMID Tool\
 | `play_sessions` | id, game_id, başlangıç, bitiş, süre_sn, kaynak (canlı/içe aktarma) |
 | `reviews` | id, yazar (people), konu (oyun/film/dizi + id), soru_puanları (JSON: soru→puan veya "yok"), genel_puan, elle_düzeltme, tek_cümle, notlar, durum, tavsiye, tarih |
 | `titles` | id, tmdb_id, tür (film/dizi), ad, orijinal_ad, yıl, afiş, özet, yönetmen, oyuncular, sezon_sayısı |
-| `captures` | id, game_id, dosya_yolu, tür (klip/ekran görüntüsü), kaynak (nvidia/xbox/steam…), süre, boyut, favori, tarih |
+| `captures` | id, game_id, dosya_yolu (dosyanın kendi yerinde), tür (klip/ekran görüntüsü), kaynak (nvidia/xbox/steam…), süre, boyut, favori, küçük_resim, tarih |
 | `downloads` | id, url, site, başlık, kalite, dosya_yolu, boyut, durum, tarih |
 | `notes` | id, başlık, içerik, renk, yazı_tipi, sabit, klasör, etiketler, bağlı_oyun, güncellenme |
 | `reminders` | id, başlık, zaman, tekrar_kuralı, ertelenen, tamamlandı |
@@ -641,30 +724,24 @@ Tüm kayıtlar ileride senkronizasyona hazır olacak şekilde benzersiz kimlik +
 - **Ortak arşiv:** Malikâne sakinlerinin oyun/film puanları ve yorumları tek havuzda; kartlarda "Ben 9 · Ali 7 · Ortalama 8".
   Veri modeli bunun için şimdiden hazır (§7 `people`, `reviews.yazar`).
 - **VDS'teki küçük sunucu** (WebSocket): arkadaş listesi, "şu an ne oynuyor" durumu, sohbet, ortak oyun listeleri.
-- **Butler bağlantısı:** `/oyun-oner roguelike` → Butler arşivden puanlarımızla öneri yapar; biri yeni oyun puanlayınca kanala duyuru; "şu an kim ne oynuyor" panosu.
 - Yerel veriler her zaman yerelde kalır; neyin paylaşılacağını herkes kendisi seçer.
-- Sunucu gelene kadar arkadaş puanları için **paylaşım dosyası** (öneri #12) kullanılabilir.
+- Sunucu gelene kadar arkadaş puanları için **paylaşım dosyası** (öneri #9) kullanılabilir.
 
-### 8.2 GMID evreninin mevcut parçaları (kodları incelendi)
+### 8.2 GMID evreninin diğer parçaları (bilgi için)
 
-| Proje | Teknoloji | Ne yapıyor? | GMID Tool ile bağlantı |
-|-------|-----------|-------------|------------------------|
-| [GMID Butler](https://github.com/BalamanMerkut/GMID-Butler) | Python · discord.py · Gemini 2.5 Flash · SQLite · Render'da (Flask ile "uyanık tutma") | Asil uşak kişilikli yapay zekâ sohbeti, geçici özel kanallar, otomatik kanal temizliği, 8 dil | Ortak arşivden öneri ve duyurular (§8.1); uşak kişiliği GMID Tool bildirimlerinde de kullanılabilir (öneri #13) |
-| [GMID Music Bot](https://github.com/BalamanMerkut/GMID-Discord-MusicBot) | Python · discord.py · yt-dlp · OpenAI (şarkı sözleri) · 8 dil | YouTube'dan müzik, düğmeli kontrol paneli, çalma listeleri | İleride Oyun İçi Panel'den bota "geç / durdur" komutu (çevrim içi fazında) |
-| [Steam Card Idler](https://github.com/BalamanMerkut/Steam-Card-Idler) | C# · .NET 8 · WPF · SteamKit2 | Kart düşürme, süre artırma, VAC kontrolü, piyasa fiyatı, tepside çalışma | GMID Tool modülü olabilir (öneri #14) |
+GMID Tool **tek başına çalışan** bir uygulama; Discord botlarına hiçbir şekilde ihtiyaç duymaz.
+Botlarla tek ortak noktası **tema ve logolar**. İleride sunucu kurulursa bağlantı fikirleri isteğe bağlıdır.
 
-**Notlar:**
-- Botlar sandığın kadar ilkel değil: düzenli dosya yapısı, çok dil desteği, SQLite kullanımı var. Toparlama zamanı geldiğinde iyi bir temel.
-- **Bilmekte fayda var:** Müzik botu da GMID Tool'un video indiricisi gibi **yt-dlp** kullanıyor. yt-dlp, 2025 sonundan beri
-  YouTube için ek olarak **deno** istiyor. Müzik botu bir gün YouTube'dan çalmayı bırakırsa sebebi büyük ihtimalle bu:
-  bot sunucusuna deno kurulup yt-dlp güncellenmeli.
-- **VDS'e geçildiğinde:** Butler, müzik botu ve GMID sunucusu aynı VDS'te çalışır; Render'daki "uyanık tutma" hilesine gerek kalmaz.
-  Butler zaten Python + SQLite olduğu için GMID sunucusuna küçük bir API üzerinden kolayca bağlanır.
-- **Steam Card Idler'ı GMID'e almak için** iki yol var:
-  (a) GMID Tool, senin mevcut idler'ını yardımcı program olarak çalıştırıp yönetir (hızlı, kod tekrar yazılmaz);
-  (b) Rust'a yeniden yazmak (Rust'ta SteamKit2 kadar olgun bir kütüphane olmadığı için zor).
-  Önerim **(a)**. Her iki durumda Steam şifren GMID'de saklanmaz; kart toplama süreleri "gerçek oynama" sayılmaz (§3.2).
-- Botların düzenlenmesi ayrı bir iş; bu dokümanın kapsamı dışında, zamanı gelince ele alınır.
+| Proje | Teknoloji | GMID Tool ile ilişkisi |
+|-------|-----------|------------------------|
+| [GMID Butler](https://github.com/BalamanMerkut/GMID-Butler) | Python · discord.py · Gemini 2.5 Flash · SQLite · Render'da | Yok. Logosu tema renklerine ilham verdi. *(İleride istenirse: sunucu kurulduktan sonra Discord'da arşivden oyun önerebilir.)* |
+| [GMID Music Bot](https://github.com/BalamanMerkut/GMID-Discord-MusicBot) | Python · discord.py · yt-dlp · OpenAI | Yok. |
+| [Steam Card Idler](https://github.com/BalamanMerkut/Steam-Card-Idler) | C# · .NET 8 · WPF · SteamKit2 | Şimdilik gerek yok. |
+
+**Botlar için bilmekte fayda var** (GMID Tool'dan bağımsız):
+- Müzik botu da GMID Tool'un video indiricisi gibi **yt-dlp** kullanıyor. yt-dlp, 2025 sonundan beri YouTube için ek olarak
+  **deno** istiyor. Müzik botu bir gün YouTube'dan çalmayı bırakırsa sebebi büyük ihtimalle bu: bot sunucusuna deno kurulup yt-dlp güncellenmeli.
+- VDS'e geçildiğinde botlar da aynı VDS'e taşınabilir; Render'daki "uyanık tutma" hilesine gerek kalmaz.
 
 ---
 
@@ -676,17 +753,17 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | Faz | İçerik | Sonunda elinde ne olacak? |
 |-----|--------|---------------------------|
 | **0 — Tasarım** *(şu an)* | Bu doküman, kararlar, ekran taslakları | Onaylanmış plan |
-| **1 — İskelet** | Tauri projesi, sol menü, Ayarlar, veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
+| **1 — İskelet** | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
 | **2 — Günlük araçlar** | Ses & Mikrofon (kilit, kısayollar, ekran göstergesi), Notlar (+ hızlı not, yapışkan not), Hatırlatıcılar, Sayaç | Her gün kullandığın araçlar |
-| **3 — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Galeri | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
+| **3 — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** | İndirme yöneticisi, Videolar sekmesi, Chrome/Opera eklentisi | IDM benzeri indirici |
 | **6 — Film & Dizi + Kurulum** | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
 | **7 — Öneriler** | Onaylanan ek özellikler (ücretsiz oyunlar, Wrapped, Rich Presence…) | v1.x |
-| **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet, Butler entegrasyonu | v2.0 |
+| **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet | v2.0 |
 
 Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değişiklik notu, performans ölçümü.
-*(Sunucu beklemeden arkadaş puanları istenirse paylaşım dosyası — öneri #12 — Faz 7'de yapılabilir.)*
+*(Sunucu beklemeden arkadaş puanları istenirse paylaşım dosyası — öneri #9 — Faz 7'de yapılabilir.)*
 
 ---
 
@@ -701,7 +778,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Discord oyun listesi / Epic / EA verileri belgelenmemiş | Bazı oyunlar algılanmayabilir | Elle ekleme + "çalışan programlardan ekle" düğmesi |
 | Eski tip "özel tam ekran" oyunlar | Oyun İçi Panel orada açılamayabilir | Kısayollar her durumda çalışır; çerçevesiz pencere önerisi; ileride Xbox Game Bar parçacığı |
 | Oyun bilgi kaynaklarının (IGDB/RAWG/Steam) kullanım sınırları | Çok hızlı toplu eklemede yavaşlama | Bilgiler bir kez çekilip yerelde saklanır; istekler sıraya alınır |
-| Klipler diski doldurur | Disk alanı | Galeri başka diske taşınabilir; isteğe bağlı otomatik temizlik |
+| Klipler diski doldurur | Disk alanı | İsteğe bağlı otomatik temizlik (geri dönüşüm kutusuna); klipler zaten kayıt programının seçtiği diskte durur |
 | Anti-cheat sistemleri | Ban riski | Oyunlara enjeksiyon, bellek okuma, oyun içine çizim **yok** (§4 güvenlik kuralı) |
 | Veri kaybı | Notlar, puanlar kaybolur | Günlük otomatik yedek (son 7 gün) + tek klasör + notların .md kopyası |
 | Çerezlerin (Instagram/X) uygulamaya geçmesi | Hassas veri | Sadece ilgili site, sadece indirme sırasında, iş bitince silinir |
@@ -711,39 +788,37 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 ## 11. Kesinleşen kararlar ve açık sorular
 
 ### ✅ Kesinleşenler
-- **İsim:** GMID Tool — *Game Mansion In Discord*'un alet çantası.
+- **İsim:** GMID Tool — *Game Mansion In Discord*'un alet çantası; imza: **Merkut Studios**.
+- **Görsel kimlik:** Oyun Malikânesi teması — gece zemin, Malikâne Altını + Merkut Turkuazı, ince çizgi ikonlar; GMID logosu uygulama ikonu (§1.5).
+- **Açılış animasyonu:** Karanlıktan Merkut Studios logosu belirir, kararır, uygulama açılır; atlanabilir (§3.13).
+- **Menü:** Kategoriler malikâne odaları (Giriş Salonu, Oyun Salonu, Eğlence Salonu, Çalışma Odası, Kontrol Odası), sekmeler düz isimli (§2).
 - **Kapsam:** Windows 10/11, yerel; başta sadece sen. Veri modeli baştan çok kişili; sunucu (VDS) tarihi belirsiz (§1.4, §8).
+- **GMID Tool botlardan bağımsız**; Butler vb. ile zorunlu bir bağlantı yok. Steam Card Idler şimdilik yok.
 - İlkeler: optimizasyon, güzel görünüm, anlaşılabilirlik, derli toplu — **denge kuralı** (§1.3).
 - Teknoloji: Tauri 2 + Rust + Svelte + SQLite (kodlama tamamen benden).
-- Tüm uygulama verisi tek bir ana klasörde.
-- **Puanlama: 5 kısa soru** (oyunda: oynanış, hikâye, görsellik & ses, performans, keyif) → otomatik genel puan + tek cümle + notlar + durum + tavsiye (§3.3).
+- **Kendiliğinden sığan arayüz:** Pencere boyutu değişince resimler, videolar, kartlar ve menü otomatik uyum sağlar; hiçbir içerik taşmaz veya gizli kalmaz (§5.5).
+- **Veri klasörü:** `Belgeler\GMID Tool`; ama her şey uygulamanın içinde görsel olarak gösterilir, klasöre girmek gerekmez.
+- **Klipler taşınmaz:** yerinde kalır, uygulamada oyuna göre gruplanıp gösterilir; çift tıkla açılır (§3.12).
+- **Puanlama: 5 kısa soru** → otomatik genel puan + tek cümle + notlar + durum + tavsiye (§3.3, §3.4). ✅ Onaylandı.
 - **Oyun bilgileri (tür, etiket, geliştirici, yayıncı, yıl, kapak) internetten otomatik**; tür/etiket ile filtrelenebilir Keşfet ekranı.
-- Film'in yanında **dizi** de var; bilgiler TMDB'den otomatik, kendi 5 sorusu var.
-- Oyun arşivine hem Eğlence menüsünden hem oyun kartından ulaşılır.
-- Onaylanan ekler: **Oyun Modu, mikrofon kısayolları + seviye kilidi, Oyun İçi Panel, otomatik kapak, Galeri (NVIDIA Instant Replay vb.)**.
-- **Galeri:** Klipler GMID klasörüne taşınır (Steam ekran görüntüleri kopyalanır).
+- Film'in yanında **dizi** de var; bilgiler TMDB'den otomatik.
+- Onaylanan ekler: **Oyun Modu, mikrofon kısayolları + seviye kilidi, Oyun İçi Panel, otomatik kapak, Kliplerim**.
 - **Oyun İçi Panel:** Çerçevesiz oyunlar ana hedef; tam ekranda kısayollar + sesli geri bildirim.
-- Video indirici: tarayıcı eklentisi + masaüstü ikilisi (Chrome öncelikli, Opera aynı eklentiyle).
+- Video indirici: tarayıcı eklentisi + masaüstü ikilisi (Chrome öncelikli, Opera aynı eklentiyle); videolar uygulamada "Videolarım"da.
 - Kodlamaya bu doküman onaylandıktan sonra geçilecek.
 
 ### ❓ Açık sorular
-**Görünüm ve genel**
-1. **Görsel kimlik:** GMID'in bir logosu, renkleri var mı? (Discord sunucusunun ikonu/renkleri de olur.) Menülerde malikâne temalı isimler ister misin
-   (ör. "Oyun Salonu", "Sinema Odası")? Önerim: anlaşılırlık için düz isimler + malikâne temalı ikon ve renkler.
-2. Arayüz sadece Türkçe mi olsun, ileride İngilizce de gerekir mi? (Botların 8 dili var; arkadaşların hepsi Türkçe mi?)
-3. Veri klasörü: `Belgeler\GMID Tool` mu, yoksa ayrı bir disk (ör. `D:\GMID Tool`) mi? (Format sonrası kaybolmaması için D: daha güvenli.)
-
-**Modüller**
-4. Puanlama soruları (§3.3 ve §3.4) ve yüzdeleri içine sindi mi? Değiştirmek istediğin soru var mı?
-5. Mikrofon kilidi için hedef seviye %100 mü?
-6. Steam Web API anahtarı almak ister misin? (Ücretsiz, 1 dakika; silinen oyunların sürelerini de getirir.) AFK süresi oyun süresine sayılsın mı?
-7. Video indirmede varsayılan kalite "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi?
-8. Notlar ayrıca **.md dosyası** olarak da dursun mu? (Önerim: evet.)
-9. Format sonrası kurulum listene kesin girecek programlar neler? (Chrome, Steam, Discord, Claude, WinRAR… başka?)
+**Küçük ayarlar** (cevap vermezsen parantez içindeki varsayılanla ilerlerim)
+1. Arayüz sadece Türkçe mi? *(Varsayılan: Türkçe; altyapı ileride İngilizce eklenebilecek şekilde.)*
+2. Mikrofon kilidi hedef seviyesi? *(Varsayılan: %100.)*
+3. Steam Web API anahtarı alalım mı? AFK süresi oyun süresine sayılsın mı? *(Varsayılan: anahtar isteğe bağlı; AFK 15 dk sonra sayılmaz.)*
+4. Video indirmede varsayılan kalite? *(Varsayılan: her seferinde sor + "hep en iyisi" seçeneği; videonun üstünde küçük İndir düğmesi.)*
+5. Notlar ayrıca .md dosyası olarak da dursun mu? *(Varsayılan: evet.)*
+6. Format sonrası kurulum listene kesin girecek programlar? *(Varsayılan: Chrome, Steam, Discord, Claude, WinRAR, Epic Games, NVIDIA App, VLC, 7-Zip.)*
 
 **Öneriler**
-10. §4'teki öneriler (#2–#14) arasından istediklerin hangileri? Özellikle: **paylaşım dosyası (#12)**, **Butler'ın ağzından bildirimler (#13)**, **Steam Kart Toplayıcı modülü (#14)**.
-11. Aklına gelen başka özellik var mı? 🙂
+7. §4'teki öneriler (#2–#11) arasından istediklerin hangileri? *(Varsayılan: ⭐ olanlar — ücretsiz oyun bildirimi, GMID Wrapped, paylaşım dosyası.)*
+8. Aklına gelen başka özellik var mı? 🙂
 
 ---
 
@@ -751,5 +826,6 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.4 | 2026-10-10 | Görsel kimlik (Malikâne teması, logolardan ölçülen renk paleti, Merkut Studios imzası); açılış animasyonu; malikâne odası isimli menü; klipler taşınmıyor, uygulamada gösteriliyor (Galeri → Kliplerim); Videolarım; GMID Tool botlardan bağımsız, Butler önerileri ve Card Idler çıkarıldı; kendiliğinden sığan arayüz kuralları (§5.5); açık sorular varsayılanlarla sadeleştirildi |
 | v0.3 | 2026-10-10 | Puanlama 5 kısa soruya çevrildi (oyun ve film); kapsam: önce yerel, sunucu tarihi belirsiz; Galeri taşıma kararı; tam ekran oyunlar için sesli geri bildirim; "gerçek oynama" ve "Steam süresi" ayrımı; GMID evreninin mevcut parçaları (Butler, Music Bot, Card Idler) incelendi; yeni öneriler: paylaşım dosyası, Butler'ın ağzından bildirimler, Steam Kart Toplayıcı |
 | v0.2 | 2026-10-10 | İsim ve hikâye (Game Mansion In Discord); denge kuralı; sade puanlama + otomatik oyun bilgisi + Keşfet ekranı; dizi eklendi; Ses & Mikrofon (seviye kilidi, kısayollar, ekran göstergesi); yeni modüller: Oyun İçi Panel, Galeri; Oyun Modu onaylandı; teknoloji seçimi kesinleşti; Butler entegrasyonu fikri; yol haritası güncellendi |
