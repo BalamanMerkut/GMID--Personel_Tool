@@ -3,9 +3,9 @@
 > Soru: *"Bir oyun değerlendirilirken, puanlama yapılırken nelere bakılmalı ve puanlanmalı; bu puanlama puanın yüzde kaçını etkiliyor?"*
 > Ana doküman: [TASARIM.md](TASARIM.md) §3.3 ve §3.4
 
-> **v0.2 notu:** Karar gereği uygulamadaki puanlama **sade** tutuldu (1–10 puan + tek cümle + notlar).
-> Buradaki ayrıntılı kriterler ve yüzdeler, puanlama kartındaki isteğe bağlı ve varsayılan olarak
-> kapalı **"Detaylı puanla"** bölümünde ve puan rehberinde (1–10 çapaları) kullanılacak.
+> **v0.3 notu:** Uygulamada bu 9 kriter **5 kısa soruya** sadeleştirildi (oyun: Oynanış %35, Hikâye & Atmosfer %20,
+> Keyif %20, Görsellik & Ses %15, Performans %10 · film: Hikâye %25, Oyunculuk %20, Yönetmenlik & Görsellik %20,
+> Tempo %15, Keyif %20). Bu dosya, o sadeleştirmenin dayandığı arka plan araştırmasıdır. Bkz. [TASARIM.md](TASARIM.md) §3.3–3.4.
 
 ## 1. Sektör puanlamayı nasıl yapıyor?
 

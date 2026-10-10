@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.2 (taslak)
+## Tasarım Dokümanı · v0.3 (taslak)
 
 > **Durum:** Fikir / karar aşaması. Kod yazılmadı.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -58,12 +58,14 @@ Bunu sağlayan kurallar:
 - Animasyonlar yalnızca ekran kartının "bedava" yaptığı türden (kayma, solma) olur; uygulamayı kasan ağır efektler kullanılmaz.
 - **Görünüm kalitesi ayarı:** `Otomatik (önerilen)` · `Yüksek` · `Hafif`. Otomatik mod, bilgisayar zorlanırsa (ör. dizüstü pilde) efektleri kendisi azaltır.
 
-### 1.4 Kapsam
+### 1.4 Kapsam ✅
 
-Şimdilik **yerel (internetsiz çalışan), Windows 10/11**, kurulum senin bilgisayarında.
-Ama arkadaşlar arası puanlama hedeflendiği için **veri modeli baştan çok kişili** kuruluyor
-(her puanın, notun bir "yazarı" var). Böylece ortak arşiv / çevrim içi sürüm geldiğinde hiçbir
-şeyi yeniden yazmak gerekmeyecek (bkz. §8 ve ❓ soru 1).
+Başlangıçta **yerel (internetsiz çalışan), Windows 10/11**, sadece senin bilgisayarında ve uzun süre
+sadece sen kullanacaksın. Arkadaşların da ileride puan girebilsin istiyorsun; ne zaman VDS'e geçileceği
+belli değil. Bu yüzden:
+- **Veri modeli baştan çok kişili** kuruluyor (her puanın, notun bir "yazarı" var).
+- Sunucu gelene kadar **zorunlu hiçbir çevrim içi özellik yok.**
+- Ortak arşiv geldiğinde (§8) hiçbir şeyi yeniden yazmak gerekmeyecek; istenirse sunucusuz bir ara çözüm de var (öneri #12).
 
 ---
 
@@ -146,7 +148,7 @@ Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §1.
 > adım adım ben anlatacağım). Opera, Chrome eklentilerini doğrudan çalıştırabildiği için
 > **aynı eklenti Opera'da da çalışacak**.
 
-❓ Varsayılan kalite: "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi? (soru 10)
+❓ Varsayılan kalite: "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi? (soru 7)
 
 ---
 
@@ -171,11 +173,15 @@ oynadığını kaydetmek.
 
 **Sonra:** Kütüphaneden oyunu doğrudan başlatma (Playnite gibi), yıllık "GMID Wrapped" özeti.
 
+**İki ayrı süre:** Steam'in tuttuğu süre, kart toplama / süre artırma (ör. Steam Card Idler) ile şişebilir.
+Bu yüzden her oyunda iki sayı görünür: **"Gerçek oynama"** (GMID'in ölçtüğü, oyun gerçekten açıkken) ve
+**"Steam'deki süre"**. İstatistikler ve Wrapped gerçek oynamayı kullanır.
+
 **Teknik not:** Süreç kontrolü 5 sn aralıkla, sadece program adı karşılaştırmasıyla yapılır — işlemciye
 etkisi ölçülemeyecek kadar az. Oyunların içine **hiçbir şey enjekte edilmez** (anti-cheat güvenliği).
 Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §2.
 
-❓ Steam Web API anahtarı / AFK süresi (soru 9)
+❓ Steam Web API anahtarı / AFK süresi (soru 6)
 
 ---
 
@@ -185,29 +191,47 @@ Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §2.
 **"canım roguelike bir şey oynamak istiyor"** dendiğinde tür seçip filtreleyerek eski puanlarımızı ve
 notlarımızı görebildiğimiz arşiv.
 
-#### a) Sade puanlama kartı ✅
+#### a) Puanlama kartı: 5 kısa soru ✅
 
-Ayrıntılı kriter ekranı **yok**. Bir oyunu puanlamak 10 saniye sürmeli:
+Sadece "1–10 kaç?" diye sormuyor, ama ayrıntıya da boğmuyor. **5 kısa soru**, hepsi tek kaydırıcı,
+toplam ~30 saniye. Genel puan cevaplardan **otomatik hesaplanır**; içine sinmezse elle oynayabilirsin.
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│ [KAPAK]  Hades II                                              │
-│          Roguelike · Aksiyon · İzometrik     2025 · Supergiant │
-│                                                               │
-│  Puanım      ★ 9 / 10   (kaydırıcı, yarım puan verilebilir)    │
-│  Tek cümle   "Bir tur daha derken sabah oldu."                 │
-│  Durum       [Oynuyorum] [Bitirdim] [%100] [Bıraktım] [İstiyorum]│
-│  Tavsiye     👍 Kesin oyna   🤷 Duruma göre   👎 Uzak dur       │
-│  Notlar      (uzun yazı, ipuçları, build'ler; spoiler gizlenebilir)│
-│                                                  [Kaydet]      │
-└───────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│ [KAPAK]  Hades II                                                  │
+│          Roguelike · Aksiyon · İzometrik        2025 · Supergiant  │
+│                                                                   │
+│  🎮 Oynaması ne kadar zevkli?              ●━━━━━━━━━○  9         │
+│  📖 Hikâye ve atmosfer nasıl?              ●━━━━━━━○━━  8   [Yok] │
+│  🎨 Görsellik ve ses nasıl?                ●━━━━━━━━○━  9         │
+│  ⚙️ Performans / optimizasyon nasıl?       ●━━━━━━━━○━  9         │
+│  ❤️ Seni ne kadar sardı, aklında kaldı mı? ●━━━━━━━━━○ 10         │
+│                                                                   │
+│  ⭐ Genel puan: 9.0 / 10  (otomatik — istersen ±1 değiştir)         │
+│                                                                   │
+│  Tek cümle   "Bir tur daha derken sabah oldu."                     │
+│  Durum       [Oynuyorum] [Bitirdim] [%100] [Bıraktım] [İstiyorum]   │
+│  Tavsiye     👍 Kesin oyna   🤷 Duruma göre   👎 Uzak dur           │
+│  Notlar      (uzun yazı, ipuçları, build'ler; spoiler gizlenebilir) │
+│                                                      [Kaydet]     │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
-- **Puan ölçeği: 1–10** (yarım puan serbest). Kaydırıcının yanında küçük bir rehber durur:
-  `5 = vasat · 7 = iyi · 8 = çok iyi · 9 = mükemmel · 10 = başyapıt` → puanlar zamanla hep 8–9'a kaymaz.
+**Sorular ve genel puana etkisi** (araştırmadaki 9 kriterin sadeleştirilmiş hali — [Ek A](ARASTIRMA-PUANLAMA.md)):
+
+| Soru | İçinde neler var? | Etkisi |
+|------|-------------------|--------|
+| 🎮 Oynanış | Eğlence, kontroller, zorluk dengesi, içerik | **%35** |
+| 📖 Hikâye & Atmosfer | Senaryo, karakterler, dünya, atmosfer | **%20** |
+| ❤️ Keyif & Akılda kalıcılık | Seni ne kadar sardı, tekrar oynar mısın | **%20** |
+| 🎨 Görsellik & Ses | Sanat tarzı, grafik, müzik, seslendirme | **%15** |
+| ⚙️ Performans | FPS, hata/çökme, optimizasyon | **%10** |
+
+- **[Yok] düğmesi:** Hikâyesi olmayan bir multiplayer oyunda "Hikâye" sorusu **Yok** işaretlenir; etkisi diğer sorulara oransal dağılır (puanı düşürmez). Kötü hikâye ≠ hikâye yok.
+- **Puan rehberi:** Her kaydırıcının yanında `5 = vasat · 7 = iyi · 8 = çok iyi · 9 = mükemmel · 10 = başyapıt` → puanlar zamanla hep 8–9'a kaymaz.
+- **Varsayılan konum:** Kaydırıcılar 7'den başlar; sadece farklı düşündüğün soruyu oynatırsın.
 - Oynama süresi, platform ve bitirme tarihi **kütüphaneden otomatik** dolar.
-- İsteyen için **"Detaylı puanla"** düğmesi (varsayılan kapalı): araştırmadaki kriterler
-  (oynanış, hikâye, görsellik, ses…) açılır. Kullanmazsan hiç görmezsin. Kriterler ve yüzdeleri: [Ek A](ARASTIRMA-PUANLAMA.md).
+- Yüzdeler ayarlardan değiştirilebilir (ama değiştirmek zorunda değilsin).
 
 #### b) Bilgiler internetten otomatik gelir ✅
 
@@ -246,13 +270,20 @@ Senaryo: *Arkadaşın "roguelike bir şey oynamak istiyorum" dedi.*
 
 ### 3.4 Film & Dizi Arşivi
 
-Oyun arşiviyle **aynı sade kart ve aynı Keşfet ekranı**.
+Oyun arşiviyle **aynı kart yapısı ve aynı Keşfet ekranı**; sorular filme göre:
+
+| Soru | İçinde neler var? | Etkisi |
+|------|-------------------|--------|
+| 📖 Hikâye & Senaryo | Konu, diyaloglar, sonun tatmin ediciliği | **%25** |
+| 🎭 Oyunculuk | İnandırıcılık, karakterler | **%20** |
+| 🎬 Yönetmenlik & Görsellik | Görüntü, müzik, atmosfer | **%20** |
+| ⏱️ Tempo | Sıktı mı, süresini hak etti mi | **%15** |
+| ❤️ Keyif & Etki | Sende ne bıraktı, tekrar izler misin | **%20** |
 
 - **Otomatik bilgi (TMDB):** Türkçe ad, afiş, özet, tür(ler), yönetmen, başrol oyuncuları, yıl, süre; dizilerde sezon/bölüm sayısı.
-- **Kart alanları:** Puan (1–10), tek cümle, durum (`İzlenecek · İzliyorum · İzledim · Yarıda bıraktım`), tavsiye, notlar, izleme tarihi, nerede izlendi (sinema/Netflix/…), kiminle izlendi.
+- **Kart alanları:** 5 soru + otomatik genel puan, tek cümle, durum (`İzlenecek · İzliyorum · İzledim · Yarıda bıraktım`), tavsiye, notlar, izleme tarihi, nerede izlendi (sinema/Netflix/…), kiminle izlendi.
 - **Diziler için:** "Nerede kaldım?" (ör. **S2 · B5**) ve isteğe bağlı sezon bazında puan.
 - Filtre örnekleri: "Bilim kurgu + puan ≥ 8", "Christopher Nolan filmleri", "Kısa diziler (1–2 sezon)".
-- "Detaylı puanla" burada da isteğe bağlı (kriterler [Ek A](ARASTIRMA-PUANLAMA.md) §4).
 
 ---
 
@@ -274,7 +305,7 @@ Oyun arşiviyle **aynı sade kart ve aynı Keşfet ekranı**.
 **Teknik not:** Notlar veritabanının yanında `Notlar\` klasöründe **düz .md dosyası** olarak da
 saklanabilir → uygulama olmasa bile Not Defteri'yle açılır.
 
-❓ Notlar .md dosyası olarak da dursun mu? (soru 11)
+❓ Notlar .md dosyası olarak da dursun mu? (soru 8)
 
 ---
 
@@ -317,7 +348,8 @@ saklanabilir → uygulama olmasa bile Not Defteri'yle açılır.
   Chrome/Teams/Zoom'un "mikrofonu otomatik ayarla" seçenekleri, Windows'un "uygulamaların özel denetimine izin ver" ayarı.
   Asıl sebebi kapatmak da mümkün; kilit her durumda güvence.
 - **Ekran göstergesi (OSD):** Her kısayolda ekranın köşesinde küçük, şık bir bilgi belirir (🎧 Kulaklık · 🔇 Mikrofon kapalı · 🎙️ %100 🔒).
-  Oyundan odağı **çalmaz**, oyunu alta atmaz.
+  Oyundan odağı **çalmaz**, oyunu alta atmaz. Göstergenin görünmediği eski tip tam ekran oyunlarda
+  **kısa sesli geri bildirim** verilir (§3.11).
 
 **Kısayol tuşları** (varsayılanlar, hepsi ayarlardan değiştirilebilir):
 
@@ -339,7 +371,7 @@ saklanabilir → uygulama olmasa bile Not Defteri'yle açılır.
 açık kaynak programların yıllardır kullandığı yöntemle yapılıyor. Mikrofon kilidi ve sessize alma ise
 Windows'un resmî ses arayüzüyle yapılıyor. Ayrıntılar: [Ek B](ARASTIRMA-TEKNIK.md) §3, [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §2.
 
-❓ Mikrofon kilidi için hedef seviye %100 mü? (soru 8)
+❓ Mikrofon kilidi için hedef seviye %100 mü? (soru 5)
 
 ---
 
@@ -360,7 +392,7 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 
 **Teknik not:** Windows 10/11'de yerleşik **winget** (Microsoft'un resmî paket yöneticisi). Paket kimlikleri: [Ek B](ARASTIRMA-TEKNIK.md) §5.
 
-❓ Listene kesin girecek programlar (soru 12)
+❓ Listene kesin girecek programlar (soru 9)
 
 ---
 
@@ -405,10 +437,15 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 açısından risk yok. Discord da Mart 2025'te overlay'ini tam olarak bu yönteme geçirdi (ve o da yalnızca
 çerçevesiz/pencereli modda çalışıyor) — yani doğru yoldayız. Ayrıntılar: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §1.
 
-> **İpucu:** Oyunları **"Çerçevesiz pencere / Borderless"** modunda oynamak, panelin her oyunda sorunsuz
-> çalışmasını sağlar ve modern Windows'ta performans farkı yok denecek kadar azdır.
-
-❓ Oyunları genelde hangi ekran modunda oynuyorsun? (soru 7)
+**Senin kullanımın ✅:** Çoğunlukla **çerçevesiz**, bazı oyunlarda **tam ekran** oynuyorsun. Buna göre:
+- **Çerçevesiz oyunlar:** Panel ve gösterge sorunsuz çalışır.
+- **Tam ekran oyunlar:** Modern oyunların çoğu (DX11/DX12) Windows'ta aslında "optimize pencere" olarak
+  çalıştığı için panel büyük ihtimalle yine görünür. Görünmediği eski tip oyunlarda:
+  - Kısayollar **yine çalışır** (mikrofon sessize alma, seviye, cihaz değiştirme).
+  - Gösterge görünmediği için **sesli geri bildirim** devreye girer: mikrofon kapanınca/açılınca Discord'daki
+    gibi farklı kısa sesler, cihaz değişince kısa bir "tık". (Ayarlardan kapatılabilir.)
+  - GMID bu oyunları hatırlar; o oyunda paneli açmaya çalışıp oyunu alta atmaz.
+- İleride tam ekran oyunlarda panel çok lazım olursa **Xbox Game Bar parçacığı** (katman 3) eklenebilir.
 
 ---
 
@@ -439,7 +476,8 @@ görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
 > kayıt klasörünü bir kez GMID klasörü olarak seçmek de mümkün (GMID adım adım gösterir).
 > Ayrıntılar: [Ek C](ARASTIRMA-OVERLAY-METADATA.md) §4.
 
-❓ Klipler taşınsın mı, yerinde mi kalsın? (soru 6)
+✅ **Karar: Klipler GMID klasörüne taşınacak** (Steam ekran görüntüleri hariç — onlar kopyalanır).
+İlk kurulumda GMID, NVIDIA'nın kayıt klasörünü de doğrudan `GMID Tool\Galeri\` yapmayı adım adım gösterecek.
 
 ---
 
@@ -462,8 +500,11 @@ görüntülerini **tek yerde, oyuna göre düzenli** toplamak.
 | 9 | **Butler entegrasyonu** *(çevrim içi fazında)* | Discord'da `/oyun-oner roguelike` → Butler, GMID arşivinden puanlarımızla cevap verir; biri yeni oyun puanlayınca kanala duyuru. | Orta | ⭐ |
 | 10 | **FPS / donanım izleme** | CPU/GPU sıcaklık, FPS. Sıcaklık sürücüsü bazı anti-cheat'lerle sorun çıkarabiliyor; MSI Afterburner zaten iyi yapıyor. | Orta–Zor | 🤔 |
 | 11 | **Sürücü güncelleme hatırlatıcısı** | "Ekran kartı sürücünü 60 gündür güncellemedin." | Orta | 🤔 |
-| 12 | Pano geçmişi / ekran görüntüsü aracı | Windows'ta zaten var (`Win+V`, `Win+Shift+S`). | — | ❌ |
-| 13 | Makro, otomatik tıklama, nişangâh (crosshair), oyunun **içine** çizim yapan overlay | Online oyunlarda **ban riski**. | — | ❌ |
+| 12 | **Arşiv paylaşım dosyası** | Sunucu olmadan arkadaş puanları: puan ve yorumlarını tek bir dosya olarak dışa aktar, Discord'dan arkadaşına at; o içe aktarınca kartlarda "Ben 9 · Ali 7" görünür. VDS gelene kadar köprü. | Kolay | ⭐ |
+| 13 | **Butler'ın ağzından bildirimler** | İsteğe bağlı tema: "Efendim, çay vaktiniz geldi.", "Efendim, mikrofonunuz kapatıldı." — malikâne havası. Kapalıyken düz bildirimler. | Kolay | 👍 |
+| 14 | **Steam Kart Toplayıcı modülü** | Senin Steam Card Idler'ını GMID Tool'un içine almak (§8.2). | Orta | 🤔 |
+| 15 | Pano geçmişi / ekran görüntüsü aracı | Windows'ta zaten var (`Win+V`, `Win+Shift+S`). | — | ❌ |
+| 16 | Makro, otomatik tıklama, nişangâh (crosshair), oyunun **içine** çizim yapan overlay | Online oyunlarda **ban riski**. | — | ❌ |
 
 > **Güvenlik kuralı (tüm uygulama için):** GMID Tool hiçbir oyunun belleğini okumaz, oyuna kod enjekte
 > etmez, oyunun içine çizim yapmaz. Sadece "hangi program çalışıyor" bilgisini okur (Discord kadar) ve
@@ -536,7 +577,7 @@ Kurulum: Tek bir `GMID-Tool-Kurulum.exe`; güncellemeler uygulama içinden tek t
 
 ### 5.4 Arayüz ilkeleri
 
-- **Malikâne kimliği:** Koyu, şık bir tema; GMID'in renkleri ve logosu (❓ soru 2). Yuvarlatılmış köşeler, cam paneller → arka plan görünür ama yazılar okunur.
+- **Malikâne kimliği:** Koyu, şık bir tema; GMID'in renkleri ve logosu (❓ soru 1). Yuvarlatılmış köşeler, cam paneller → arka plan görünür ama yazılar okunur.
 - **Kapak odaklı:** Oyun ve film listeleri tablo değil, kapaklı kart vitrini.
 - Her ekranda tek bir ana eylem düğmesi (ör. Notlar'da "+ Yeni not").
 - Boş ekranlar boş kalmaz: "Henüz notun yok — `Ctrl+Alt+N` ile her yerden hızlı not alabilirsin" gibi yol gösterici mesajlar.
@@ -579,7 +620,7 @@ GMID Tool\
 | `games` | id, ad, kaynak (steam/igdb/rawg/manual), kaynak_id, exe_adları, kapak, geliştirici, yayıncı, çıkış_yılı, açıklama, oyun_modları |
 | `tags` / `game_tags` | Türkçe etiket listesi (Roguelike, Co-op…) · oyun↔etiket |
 | `play_sessions` | id, game_id, başlangıç, bitiş, süre_sn, kaynak (canlı/içe aktarma) |
-| `reviews` | id, yazar (people), konu (oyun/film/dizi + id), puan, tek_cümle, notlar, durum, tavsiye, detaylı_puanlar (JSON, isteğe bağlı), tarih |
+| `reviews` | id, yazar (people), konu (oyun/film/dizi + id), puan, soru_puanları (JSON: soru→puan veya "yok"), genel_puan, elle_düzeltme, tek_cümle, notlar, durum, tavsiye, tarih |
 | `titles` | id, tmdb_id, tür (film/dizi), ad, orijinal_ad, yıl, afiş, özet, yönetmen, oyuncular, sezon_sayısı |
 | `captures` | id, game_id, dosya_yolu, tür (klip/ekran görüntüsü), kaynak (nvidia/xbox/steam…), süre, boyut, favori, tarih |
 | `downloads` | id, url, site, başlık, kalite, dosya_yolu, boyut, durum, tarih |
@@ -595,18 +636,35 @@ Tüm kayıtlar ileride senkronizasyona hazır olacak şekilde benzersiz kimlik +
 
 ## 8. Gelecek: çevrim içi sürüm ve GMID evreni
 
-Şu an çevrim içi özellik yok, ama mimari buna hazır:
+### 8.1 Ortak arşiv ve sunucu *(tarih belirsiz — VDS alınınca)*
 
 - **Ortak arşiv:** Malikâne sakinlerinin oyun/film puanları ve yorumları tek havuzda; kartlarda "Ben 9 · Ali 7 · Ortalama 8".
   Veri modeli bunun için şimdiden hazır (§7 `people`, `reviews.yazar`).
 - **VDS'teki küçük sunucu** (WebSocket): arkadaş listesi, "şu an ne oynuyor" durumu, sohbet, ortak oyun listeleri.
-- **GMID evreniyle bağlantı:** Discord sunucusundaki **Butler** ve diğer botlar aynı sunucuya bağlanabilir:
-  - `/oyun-oner roguelike` → Butler arşivden puanlarımızla öneri yapar.
-  - Biri yeni oyun puanlayınca veya "GMID Wrapped" paylaşınca kanala duyuru.
-  - "Şu an kim ne oynuyor" panosu.
+- **Butler bağlantısı:** `/oyun-oner roguelike` → Butler arşivden puanlarımızla öneri yapar; biri yeni oyun puanlayınca kanala duyuru; "şu an kim ne oynuyor" panosu.
 - Yerel veriler her zaman yerelde kalır; neyin paylaşılacağını herkes kendisi seçer.
+- Sunucu gelene kadar arkadaş puanları için **paylaşım dosyası** (öneri #12) kullanılabilir.
 
-❓ Arkadaşların ne zaman dahil olacak, botların kodu sizde mi? (sorular 1 ve 3)
+### 8.2 GMID evreninin mevcut parçaları (kodları incelendi)
+
+| Proje | Teknoloji | Ne yapıyor? | GMID Tool ile bağlantı |
+|-------|-----------|-------------|------------------------|
+| [GMID Butler](https://github.com/BalamanMerkut/GMID-Butler) | Python · discord.py · Gemini 2.5 Flash · SQLite · Render'da (Flask ile "uyanık tutma") | Asil uşak kişilikli yapay zekâ sohbeti, geçici özel kanallar, otomatik kanal temizliği, 8 dil | Ortak arşivden öneri ve duyurular (§8.1); uşak kişiliği GMID Tool bildirimlerinde de kullanılabilir (öneri #13) |
+| [GMID Music Bot](https://github.com/BalamanMerkut/GMID-Discord-MusicBot) | Python · discord.py · yt-dlp · OpenAI (şarkı sözleri) · 8 dil | YouTube'dan müzik, düğmeli kontrol paneli, çalma listeleri | İleride Oyun İçi Panel'den bota "geç / durdur" komutu (çevrim içi fazında) |
+| [Steam Card Idler](https://github.com/BalamanMerkut/Steam-Card-Idler) | C# · .NET 8 · WPF · SteamKit2 | Kart düşürme, süre artırma, VAC kontrolü, piyasa fiyatı, tepside çalışma | GMID Tool modülü olabilir (öneri #14) |
+
+**Notlar:**
+- Botlar sandığın kadar ilkel değil: düzenli dosya yapısı, çok dil desteği, SQLite kullanımı var. Toparlama zamanı geldiğinde iyi bir temel.
+- **Bilmekte fayda var:** Müzik botu da GMID Tool'un video indiricisi gibi **yt-dlp** kullanıyor. yt-dlp, 2025 sonundan beri
+  YouTube için ek olarak **deno** istiyor. Müzik botu bir gün YouTube'dan çalmayı bırakırsa sebebi büyük ihtimalle bu:
+  bot sunucusuna deno kurulup yt-dlp güncellenmeli.
+- **VDS'e geçildiğinde:** Butler, müzik botu ve GMID sunucusu aynı VDS'te çalışır; Render'daki "uyanık tutma" hilesine gerek kalmaz.
+  Butler zaten Python + SQLite olduğu için GMID sunucusuna küçük bir API üzerinden kolayca bağlanır.
+- **Steam Card Idler'ı GMID'e almak için** iki yol var:
+  (a) GMID Tool, senin mevcut idler'ını yardımcı program olarak çalıştırıp yönetir (hızlı, kod tekrar yazılmaz);
+  (b) Rust'a yeniden yazmak (Rust'ta SteamKit2 kadar olgun bir kütüphane olmadığı için zor).
+  Önerim **(a)**. Her iki durumda Steam şifren GMID'de saklanmaz; kart toplama süreleri "gerçek oynama" sayılmaz (§3.2).
+- Botların düzenlenmesi ayrı bir iş; bu dokümanın kapsamı dışında, zamanı gelince ele alınır.
 
 ---
 
@@ -625,10 +683,10 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **5 — Video İndirici** | İndirme yöneticisi, Videolar sekmesi, Chrome/Opera eklentisi | IDM benzeri indirici |
 | **6 — Film & Dizi + Kurulum** | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
 | **7 — Öneriler** | Onaylanan ek özellikler (ücretsiz oyunlar, Wrapped, Rich Presence…) | v1.x |
-| **8 — Çevrim içi** | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet, Butler entegrasyonu | v2.0 |
+| **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet, Butler entegrasyonu | v2.0 |
 
 Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değişiklik notu, performans ölçümü.
-*(Arkadaşların erken dahil olması istenirse ortak arşiv Faz 6'dan sonraya çekilebilir — soru 1.)*
+*(Sunucu beklemeden arkadaş puanları istenirse paylaşım dosyası — öneri #12 — Faz 7'de yapılabilir.)*
 
 ---
 
@@ -654,47 +712,38 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 
 ### ✅ Kesinleşenler
 - **İsim:** GMID Tool — *Game Mansion In Discord*'un alet çantası.
-- Platform: Windows 10/11, yerel; veri modeli baştan çok kişili (ileride ortak arşiv).
+- **Kapsam:** Windows 10/11, yerel; başta sadece sen. Veri modeli baştan çok kişili; sunucu (VDS) tarihi belirsiz (§1.4, §8).
 - İlkeler: optimizasyon, güzel görünüm, anlaşılabilirlik, derli toplu — **denge kuralı** (§1.3).
 - Teknoloji: Tauri 2 + Rust + Svelte + SQLite (kodlama tamamen benden).
 - Tüm uygulama verisi tek bir ana klasörde.
-- **Puanlama sade:** 1–10 puan + tek cümle + notlar + durum + tavsiye; detaylı kriterler isteğe bağlı ve gizli.
+- **Puanlama: 5 kısa soru** (oyunda: oynanış, hikâye, görsellik & ses, performans, keyif) → otomatik genel puan + tek cümle + notlar + durum + tavsiye (§3.3).
 - **Oyun bilgileri (tür, etiket, geliştirici, yayıncı, yıl, kapak) internetten otomatik**; tür/etiket ile filtrelenebilir Keşfet ekranı.
-- Film'in yanında **dizi** de var; bilgiler TMDB'den otomatik.
+- Film'in yanında **dizi** de var; bilgiler TMDB'den otomatik, kendi 5 sorusu var.
 - Oyun arşivine hem Eğlence menüsünden hem oyun kartından ulaşılır.
 - Onaylanan ekler: **Oyun Modu, mikrofon kısayolları + seviye kilidi, Oyun İçi Panel, otomatik kapak, Galeri (NVIDIA Instant Replay vb.)**.
+- **Galeri:** Klipler GMID klasörüne taşınır (Steam ekran görüntüleri kopyalanır).
+- **Oyun İçi Panel:** Çerçevesiz oyunlar ana hedef; tam ekranda kısayollar + sesli geri bildirim.
 - Video indirici: tarayıcı eklentisi + masaüstü ikilisi (Chrome öncelikli, Opera aynı eklentiyle).
 - Kodlamaya bu doküman onaylandıktan sonra geçilecek.
 
 ### ❓ Açık sorular
-**Arkadaşlar ve GMID evreni**
-1. **Arkadaşların da puan girecek mi, ne zaman?**
-   - (A) Şimdilik sadece ben; ortak arşiv çevrim içi fazında gelsin.
-   - (B) Ortak arşiv erken gelsin (küçük bir sunucu / VDS gerekir).
-   - (C) Önce ben kullanayım, beğenirsem karar veririz.
-2. **Görsel kimlik:** GMID'in bir logosu, renkleri var mı? Menülerde malikâne temalı isimler ister misin
-   (ör. "Oyun Salonu", "Sinema Odası", "Çalışma Odası")? Önerim: anlaşılırlık için düz isimler + malikâne temalı ikon ve renkler.
-3. Butler ve diğer botların kodu sizde mi (kendiniz mi yazdınız), yoksa hazır botlar mı? (Butler entegrasyonu için.)
-
-**Genel**
-4. Arayüz sadece Türkçe mi olsun, ileride İngilizce de gerekir mi?
-5. Veri klasörü: `Belgeler\GMID Tool` mu, yoksa ayrı bir disk (ör. `D:\GMID Tool`) mi? (Format sonrası kaybolmaması için D: daha güvenli.)
+**Görünüm ve genel**
+1. **Görsel kimlik:** GMID'in bir logosu, renkleri var mı? (Discord sunucusunun ikonu/renkleri de olur.) Menülerde malikâne temalı isimler ister misin
+   (ör. "Oyun Salonu", "Sinema Odası")? Önerim: anlaşılırlık için düz isimler + malikâne temalı ikon ve renkler.
+2. Arayüz sadece Türkçe mi olsun, ileride İngilizce de gerekir mi? (Botların 8 dili var; arkadaşların hepsi Türkçe mi?)
+3. Veri klasörü: `Belgeler\GMID Tool` mu, yoksa ayrı bir disk (ör. `D:\GMID Tool`) mi? (Format sonrası kaybolmaması için D: daha güvenli.)
 
 **Modüller**
-6. **Galeri:** Klipler ne olsun?
-   - (A) **GMID klasörüne taşınsın** (önerim — her şey tek yerde, disk tasarrufu; NVIDIA'nın kendi galerisinde görünmez).
-   - (B) Yerinde kalsın, GMID sadece göstersin (hiçbir şey taşınmaz ama dosyalar dağınık kalır).
-   - (C) Kopyalansın (iki yerde de görünür, disk iki kat dolar).
-7. **Oyunları genelde hangi ekran modunda oynuyorsun?** (Tam ekran / Çerçevesiz pencere / Pencereli) — Oyun İçi Panel için.
-8. Mikrofon kilidi için hedef seviye %100 mü?
-9. Steam Web API anahtarı almak ister misin? (Ücretsiz, 1 dakika; silinen oyunların sürelerini de getirir.) AFK süresi oyun süresine sayılsın mı?
-10. Video indirmede varsayılan kalite "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi?
-11. Notlar ayrıca **.md dosyası** olarak da dursun mu? (Önerim: evet.)
-12. Format sonrası kurulum listene kesin girecek programlar neler? (Chrome, Steam, Discord, Claude, WinRAR… başka?)
+4. Puanlama soruları (§3.3 ve §3.4) ve yüzdeleri içine sindi mi? Değiştirmek istediğin soru var mı?
+5. Mikrofon kilidi için hedef seviye %100 mü?
+6. Steam Web API anahtarı almak ister misin? (Ücretsiz, 1 dakika; silinen oyunların sürelerini de getirir.) AFK süresi oyun süresine sayılsın mı?
+7. Video indirmede varsayılan kalite "her seferinde sor" mu, "hep en iyisi" mi? Videonun üstüne düğme eklensin mi?
+8. Notlar ayrıca **.md dosyası** olarak da dursun mu? (Önerim: evet.)
+9. Format sonrası kurulum listene kesin girecek programlar neler? (Chrome, Steam, Discord, Claude, WinRAR… başka?)
 
 **Öneriler**
-13. §4'teki öneriler (#2–#11) arasından istediklerin hangileri?
-14. Aklına gelen başka özellik var mı? 🙂
+10. §4'teki öneriler (#2–#14) arasından istediklerin hangileri? Özellikle: **paylaşım dosyası (#12)**, **Butler'ın ağzından bildirimler (#13)**, **Steam Kart Toplayıcı modülü (#14)**.
+11. Aklına gelen başka özellik var mı? 🙂
 
 ---
 
@@ -702,4 +751,5 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.3 | 2026-10-10 | Puanlama 5 kısa soruya çevrildi (oyun ve film); kapsam: önce yerel, sunucu tarihi belirsiz; Galeri taşıma kararı; tam ekran oyunlar için sesli geri bildirim; "gerçek oynama" ve "Steam süresi" ayrımı; GMID evreninin mevcut parçaları (Butler, Music Bot, Card Idler) incelendi; yeni öneriler: paylaşım dosyası, Butler'ın ağzından bildirimler, Steam Kart Toplayıcı |
 | v0.2 | 2026-10-10 | İsim ve hikâye (Game Mansion In Discord); denge kuralı; sade puanlama + otomatik oyun bilgisi + Keşfet ekranı; dizi eklendi; Ses & Mikrofon (seviye kilidi, kısayollar, ekran göstergesi); yeni modüller: Oyun İçi Panel, Galeri; Oyun Modu onaylandı; teknoloji seçimi kesinleşti; Butler entegrasyonu fikri; yol haritası güncellendi |
