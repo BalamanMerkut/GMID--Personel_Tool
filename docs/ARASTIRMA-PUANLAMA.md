@@ -3,6 +3,10 @@
 > Soru: *"Bir oyun değerlendirilirken, puanlama yapılırken nelere bakılmalı ve puanlanmalı; bu puanlama puanın yüzde kaçını etkiliyor?"*
 > Ana doküman: [TASARIM.md](TASARIM.md) §3.3 ve §3.4
 
+> **v0.2 notu:** Karar gereği uygulamadaki puanlama **sade** tutuldu (1–10 puan + tek cümle + notlar).
+> Buradaki ayrıntılı kriterler ve yüzdeler, puanlama kartındaki isteğe bağlı ve varsayılan olarak
+> kapalı **"Detaylı puanla"** bölümünde ve puan rehberinde (1–10 çapaları) kullanılacak.
+
 ## 1. Sektör puanlamayı nasıl yapıyor?
 
 | Sistem | Yöntem | Ağırlıklı kategori var mı? |
