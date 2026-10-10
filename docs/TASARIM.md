@@ -620,7 +620,7 @@ GMID Tool\
 | `games` | id, ad, kaynak (steam/igdb/rawg/manual), kaynak_id, exe_adları, kapak, geliştirici, yayıncı, çıkış_yılı, açıklama, oyun_modları |
 | `tags` / `game_tags` | Türkçe etiket listesi (Roguelike, Co-op…) · oyun↔etiket |
 | `play_sessions` | id, game_id, başlangıç, bitiş, süre_sn, kaynak (canlı/içe aktarma) |
-| `reviews` | id, yazar (people), konu (oyun/film/dizi + id), puan, soru_puanları (JSON: soru→puan veya "yok"), genel_puan, elle_düzeltme, tek_cümle, notlar, durum, tavsiye, tarih |
+| `reviews` | id, yazar (people), konu (oyun/film/dizi + id), soru_puanları (JSON: soru→puan veya "yok"), genel_puan, elle_düzeltme, tek_cümle, notlar, durum, tavsiye, tarih |
 | `titles` | id, tmdb_id, tür (film/dizi), ad, orijinal_ad, yıl, afiş, özet, yönetmen, oyuncular, sezon_sayısı |
 | `captures` | id, game_id, dosya_yolu, tür (klip/ekran görüntüsü), kaynak (nvidia/xbox/steam…), süre, boyut, favori, tarih |
 | `downloads` | id, url, site, başlık, kalite, dosya_yolu, boyut, durum, tarih |
