@@ -5,7 +5,7 @@
   import Icon from "../Icon.svelte";
   import { findScreen, SCREENS } from "../nav";
   import { ago, relative, when } from "../time";
-  import type { NoteSummary, Reminder } from "../types";
+  import type { NoteSummary, Reminder, Server, ServerStatus } from "../types";
 
   let { info, onnavigate }: { info: AppInfo | null; onnavigate: (id: string) => void } = $props();
 
@@ -14,11 +14,11 @@
   const greeting = hour < 6 ? "İyi geceler" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : "İyi akşamlar";
   const today = now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
 
-  const CURRENT_PHASE = 2;
+  const CURRENT_PHASE = 3;
   const PHASES: { n: number; title: string; note?: string; ids?: string[] }[] = [
     { n: 1, title: "İskelet", note: "Tema, açılış, menü, Kontrol Odası, tepsi, yedekler" },
     { n: 2, title: "Günlük araçlar", ids: ["audio", "notes", "reminders", "timer"] },
-    { n: 3, title: "Oyun" },
+    { n: 3, title: "Oyun", ids: ["servers", "library", "sessions", "clips", "archive"] },
     { n: 4, title: "Oyun içi deneyim" },
     { n: 5, title: "Video İndirici" },
     { n: 6, title: "Film & Dizi, Kurulum" },
@@ -29,6 +29,14 @@
 
   let reminders: Reminder[] = $state([]);
   let notes: NoteSummary[] = $state([]);
+  let servers: Server[] = $state([]);
+  let statuses: Record<string, ServerStatus> = $state({});
+  const liveServers = $derived(
+    servers
+      .filter((s) => s.remote || statuses[s.id]?.state === "online")
+      .sort((a, b) => (statuses[b.id]?.info?.players ?? -1) - (statuses[a.id]?.info?.players ?? -1))
+      .slice(0, 4),
+  );
 
   async function load() {
     const [r, n] = await Promise.all([api.reminders.list(), api.notes.list(false)]);
@@ -36,8 +44,19 @@
     notes = n.slice(0, 3);
   }
 
+  async function loadServers() {
+    servers = await api.servers.list();
+    // Topluluk listesi ilk açılışta da gelsin (kısa sürede tekrar indirilmez).
+    servers = (await api.servers.sync(false)).servers;
+    let list = await api.servers.cached();
+    // Sunucular ekranına hiç girilmediyse bir kez sor.
+    if (!list.length && servers.length) list = await api.servers.query();
+    statuses = Object.fromEntries(list.map((s) => [s.id, s]));
+  }
+
   onMount(() => {
     void load();
+    void loadServers().catch(console.error);
     const stops = [on("reminders-changed", load), on("notes-changed", load)];
     return () => stops.forEach((s) => void s.then((f) => f()));
   });
@@ -94,7 +113,7 @@
             <li class:done={p.n < CURRENT_PHASE} class:now={p.n === CURRENT_PHASE}>
               <span class="num tnum">{#if p.n < CURRENT_PHASE}<Icon name="check" size={15} />{:else}{p.n}{/if}</span>
               <div class="body">
-                <b>{p.title}{#if p.n === CURRENT_PHASE}<span class="chip here">Yeni açıldı</span>{/if}</b>
+                <b>{p.title}{#if p.n === CURRENT_PHASE}<span class="chip here">{p.n === 3 ? "Sunucular açıldı" : "Yeni açıldı"}</span>{/if}</b>
                 {#if p.note}
                   <span class="sub small">{p.note}</span>
                 {:else}
@@ -112,6 +131,27 @@
     </div>
 
     <div class="col">
+      {#if servers.length}
+        <section class="panel">
+          <div class="spread">
+            <h3 class="h2"><Icon name="server" />Sunucular</h3>
+            <button class="link" onclick={() => onnavigate("servers")}>Tümü</button>
+          </div>
+          {#each liveServers as s (s.id)}
+            {@const st = statuses[s.id]}
+            <button class="li note" onclick={() => onnavigate("servers")}>
+              <span class="dot {st?.state ?? ''}"></span>
+              <span class="t">{s.name}</span>
+              <span class="m tnum">
+                {#if st?.state === "online" && st.info}{st.info.players}/{st.info.maxPlayers} oyuncu{:else if st?.state === "offline"}kapalı{:else}…{/if}
+              </span>
+            </button>
+          {:else}
+            <p class="sub small">Şu an açık sunucu yok.</p>
+          {/each}
+        </section>
+      {/if}
+
       <section class="panel">
         <h3 class="h2"><Icon name="keyboard" />Her yerden çalışan kısayollar</h3>
         <ul class="keys">
@@ -159,6 +199,9 @@
   .li.note:hover { border-color: var(--gold-dim); }
   .li.hot { border-color: rgba(227, 194, 112, 0.45); background: rgba(227, 194, 112, 0.07); }
   .li .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); align-self: center; flex: none; }
+  .dot.online { background: var(--good); box-shadow: 0 0 8px rgba(92, 192, 138, 0.6); }
+  .dot.offline { background: var(--bad); }
   .li .m { color: var(--muted); font-size: 12px; white-space: nowrap; }
   ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
   ol > li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); }

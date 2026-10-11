@@ -1,6 +1,8 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
-import type { Countdown, Device, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput } from "./types";
+import type {
+  Countdown, Device, GameInfo, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+} from "./types";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
 const now = () => Date.now();
@@ -56,6 +58,55 @@ const countdowns: Countdown[] = [
   { id: "c1", label: "Fırın", totalMs: 20 * 60_000, endsAt: now() + 13 * 60_000, remainingMs: 0, finished: false },
   { id: "c2", label: "Mola", totalMs: 5 * 60_000, endsAt: null, remainingMs: 3 * 60_000 + 12_000, finished: false },
 ];
+
+const COD_HOWTO = "Oyunu aç → Multiplayer → Join Game. Ya da konsolu (~) açıp yaz: /connect {host}:{port}";
+const STEAM_HOWTO = "Bağlan'a basınca Steam oyunu açıp sunucuya sokar. Elle: konsola (~) connect {host}:{port}";
+const games: GameInfo[] = (
+  [
+    ["cod2", "Call of Duty 2", "CoD2", 28960, "exe", "CoD2MP_s.exe", COD_HOWTO],
+    ["cod4", "Call of Duty 4", "CoD4", 28960, "exe", "iw3mp.exe", COD_HOWTO],
+    ["coduo", "Call of Duty: United Offensive", "UO", 28960, "exe", "CoDUOMP.exe", COD_HOWTO],
+    ["cod1", "Call of Duty", "CoD", 28960, "exe", "CoDMP.exe", COD_HOWTO],
+    ["minecraft", "Minecraft (Java)", "MC", 25565, "copy", null, "Minecraft'ı aç → Çok Oyunculu → Sunucu Ekle. Adres: {host}:{port}"],
+    ["minecraft-bedrock", "Minecraft (Bedrock)", "MCB", 19132, "uri", null, "Bağlan'a basınca sunucu Minecraft'taki Sunucular listesine eklenir."],
+    ["cs16", "Counter-Strike 1.6", "CS", 27015, "steam", null, STEAM_HOWTO],
+    ["cs2", "Counter-Strike 2", "CS2", 27015, "steam", null, STEAM_HOWTO],
+    ["source", "Diğer Steam oyunları (TF2, GMod…)", "SRC", 27015, "steam", null, STEAM_HOWTO],
+    ["valheim", "Valheim", "VH", 2456, "copy", null, "Valheim → Oyuna Başla → karakter → Sunucuya Katıl → IP ekle: {host}:{port}"],
+    ["samp", "GTA San Andreas (SA-MP)", "SA", 7777, "uri", null, "Bağlan'a basınca SA-MP açılır. Elle: SA-MP → Add Server → {host}:{port}"],
+    ["mta", "MTA: San Andreas", "MTA", 22003, "uri", null, "Bağlan'a basınca MTA açılır. Elle: Quick Connect → {host}:{port}"],
+    ["other", "Diğer", "?", 0, "copy", null, "Adres: {host}:{port}"],
+  ] as const
+).map(([gid, name, short, defaultPort, join, exe, howTo]) => ({
+  id: gid, name, short, defaultPort, join, exe, queryable: !["mta", "other"].includes(gid), howTo,
+}));
+
+const servers: Server[] = [
+  { id: "r-cod2", name: "GMID · Call of Duty 2", game: "cod2", host: "cod2.gmid.gg", port: 28960, queryPort: null, logo: null,
+    description: "Her akşam 21:00'de TDM. Toujane, Carentan, Dawnville dönüyor.", connectNotes: "Şifre Discord'da #sunucular kanalında.", remote: true, createdAt: 1 },
+  { id: "r-mc", name: "GMID Survival", game: "minecraft", host: "mc.gmid.gg", port: 25565, queryPort: null, logo: null,
+    description: "1.21 hayatta kalma, beyaz liste var. Discord'dan isim yaz, eklensin.", connectNotes: "", remote: true, createdAt: 2 },
+  { id: "r-cs", name: "GMID · CS 1.6 Public", game: "cs16", host: "cs.gmid.gg", port: 27015, queryPort: null, logo: null,
+    description: "Klasik haritalar, 5v5 hafta sonu.", connectNotes: "", remote: true, createdAt: 3 },
+  { id: "l-1", name: "Kuzenlerle Valheim", game: "valheim", host: "88.231.14.7", port: 2456, queryPort: null, logo: null,
+    description: "", connectNotes: "Şifre: kahve", remote: false, createdAt: 4 },
+];
+
+const P = (name: string, score: number, ping: number) => ({ name, score, ping });
+const statuses: Record<string, ServerStatus> = {
+  "r-cod2": { id: "r-cod2", state: "online", error: null, checkedAt: now(), stale: false, info: {
+    name: "GMID CoD2 | TDM 7/24", map: "mp_toujane", mode: "tdm", version: "1.3", players: 14, maxPlayers: 24, bots: 0, password: true,
+    playerList: [P("Merkut", 42, 38), P("Balaman", 37, 41), P("Kaptan", 25, 55), P("Ağaç", 19, 62), P("Fırtına", 12, 47), P("Yıldırım", 9, 33),
+      P("Kartal", 7, 71), P("Şahin", 6, 49), P("Gölge", 4, 58), P("Sis", 3, 44), P("Pars", 2, 39), P("Kurt", 1, 66), P("Tilki", 0, 52), P("Baykuş", 0, 80)],
+    favicon: null, pingMs: 41 } },
+  "r-mc": { id: "r-mc", state: "online", error: null, checkedAt: now(), stale: false, info: {
+    name: "GMID Survival · 1.21", map: "", mode: "", version: "Paper 1.21.1", players: 3, maxPlayers: 20, bots: 0, password: false,
+    playerList: [P("Merkut", 0, 0), P("Balaman", 0, 0), P("Kaptan", 0, 0)].map((p) => ({ ...p, score: null, ping: null })), favicon: null, pingMs: 28 } },
+  "r-cs": { id: "r-cs", state: "offline", error: "Yanıt vermedi", checkedAt: now(), stale: false, info: null },
+  "l-1": { id: "l-1", state: "online", error: null, checkedAt: now(), stale: false, info: {
+    name: "Kuzenler", map: "", mode: "valheim", version: "0.219.14", players: 2, maxPlayers: 10, bots: 0, password: true,
+    playerList: [], favicon: null, pingMs: 63 } },
+};
 
 function preview(body: string) {
   return body.split("\n").map((l) => l.replace(/^[#>\-*+\s]*(\[[ x]\])?\s*/, "").replace(/[*_`]/g, "").trim()).filter(Boolean).join(" · ").slice(0, 140);
@@ -220,6 +271,52 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       };
     case "alerts_fit":
     case "alerts_close":
+      return;
+    case "servers_games":
+      return games;
+    case "servers_list":
+      return servers.map((x) => ({ ...x }));
+    case "servers_sync":
+      await new Promise((r) => setTimeout(r, 300));
+      return {
+        servers: servers.map((x) => ({ ...x })), error: null,
+        url: "https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/HEAD/topluluk/sunucular.json",
+        defaultUrl: "https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/HEAD/topluluk/sunucular.json",
+      };
+    case "servers_cached":
+      return [];
+    case "servers_query":
+      await new Promise((r) => setTimeout(r, 700));
+      return servers.map((x) => statuses[x.id] ?? { id: x.id, state: games.find((g) => g.id === x.game)?.queryable ? "offline" : "unknown",
+        info: null, error: "Yanıt vermedi", checkedAt: now(), stale: false });
+    case "server_save": {
+      const input = a.input as ServerInput;
+      if (!/^[a-z0-9.-]+(:\d+)?$/i.test(input.host.trim())) throw "Adres geçersiz. Örnek: 185.12.34.56 ya da cod2.gmid.gg";
+      const game = games.find((g) => g.id === input.game)!;
+      let [host, port] = input.host.trim().split(":");
+      const srv: Server = {
+        id: input.id ?? id(), name: input.name.trim() || `${game.name} sunucusu`, game: input.game, host: host.toLowerCase(),
+        port: Number(port) || input.port || game.defaultPort, queryPort: input.queryPort, logo: input.logo,
+        description: input.description, connectNotes: input.connectNotes, remote: false, createdAt: now(),
+      };
+      const i = servers.findIndex((x) => x.id === srv.id);
+      if (i >= 0) servers[i] = srv;
+      else servers.push(srv);
+      return srv;
+    }
+    case "server_delete": {
+      const i = servers.findIndex((x) => x.id === a.id);
+      if (i >= 0) servers.splice(i, 1);
+      return;
+    }
+    case "server_join": {
+      const srv = servers.find((x) => x.id === a.id)!;
+      const game = games.find((g) => g.id === srv.game)!;
+      const address = `${srv.host}:${srv.port}`;
+      if (game.join === "exe") throw `EXE_NEEDED:${game.id}`;
+      return { kind: game.join === "copy" ? "copy" : "launched", address };
+    }
+    case "server_set_exe":
       return;
     default:
       throw new Error(`Taklit katmanda tanımsız komut: ${cmd}`);

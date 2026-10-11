@@ -1,7 +1,7 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.5 (taslak)
+## Tasarım Dokümanı · v0.8 (taslak)
 
-> **Durum:** Faz 1 (İskelet) ve Faz 2 (Günlük araçlar) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar) ve Faz 3a (Sunucular) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
 > hepsinin özeti **Bölüm 11**'de.
 
@@ -115,6 +115,7 @@ odaları, sekmeler düz isimli:
                             hatırlatıcılar, son notlar, devam eden indirmeler
 
 🎮 Oyun Salonu
+   ├─ Sunucular          → GMID topluluğunun oyun sunucuları: açık mı, kaç kişi, harita; tek tıkla Bağlan
    ├─ Kütüphanem         → Steam / Epic / EA / elle eklenen oyunlar, kapaklar, oynama süreleri
    ├─ Oturum Geçmişi     → Hangi gün hangi oyunu ne kadar oynadım (grafik)
    ├─ Kliplerim          → Ekran görüntüleri ve klipler (NVIDIA Instant Replay vb.), oyuna göre
@@ -562,6 +563,47 @@ GMID Tool açılır:
   Windows açılışında otomatik başlarken de oynamaz; uygulama sessizce tepsiye yerleşir.
 - Ayar: `Açılış animasyonu: Açık / Kapalı` (Kontrol Odası → Görünüm).
 
+### 3.14 Sunucular ✅ *(Faz 3a — kodlandı)*
+
+GMID topluluğunun eski oyunlar için açtığı sunucular (Call of Duty 2, Minecraft…) tek ekranda:
+
+```
+┌──────────────────────────────────────────────┐
+│ [CoD2]  GMID · Call of Duty 2        ● Açık  │
+│         Call of Duty 2  GMID                 │
+│ Her akşam 21:00'de TDM.                      │
+│ 👥 14 / 24  ████████░░░░░░  🔒               │
+│ Toujane · Takım ölüm maçı · 1.3 · 41 ms      │
+│ cod2.gmid.gg:28960                    [⧉]    │
+│ [▶ Bağlan] [Nasıl bağlanırım?] [👥 14]       │
+└──────────────────────────────────────────────┘
+```
+
+- **Kutucuklar:** logo (yoksa oyunun kısa adıyla renkli rozet; Minecraft'ta sunucunun kendi simgesi),
+  açık/kapalı, oyuncu sayısı ve doluluk çubuğu, harita, oyun modu (CoD için Türkçe: "Takım ölüm maçı",
+  "Arama & İmha"…), sürüm, gecikme (ms), şifreli mi. "Oyuncular" ile içerideki oyuncuların adları ve skorları.
+- **Canlı:** ekran açıkken her 30 saniyede bir sorulur; tek bir kaçırılan yanıt "Kapalı" saydırmaz
+  (bir önceki bilgi soluk gösterilir). Giriş Salonu'nda da küçük bir özet kutusu var.
+- **Bağlan:**
+  | Oyun | Ne olur? |
+  |---|---|
+  | CoD 1 / UO / 2 / 4 | Oyun `+connect adres` ile açılır, doğrudan sunucuya girer. İlk seferde oyunun `.exe`'si Steam klasörlerinde aranır; bulunamazsa bir kez seçtirilir. |
+  | CS 1.6, CS2, diğer Steam oyunları | `steam://connect/…` — Steam oyunu açıp sunucuya sokar. |
+  | Minecraft Bedrock | Sunucu Minecraft'taki Sunucular listesine eklenir. |
+  | SA-MP, MTA | Kendi istemcileri açılır. |
+  | Minecraft Java, Valheim | Doğrudan bağlanma yolu yok → adres panoya kopyalanır, "Nasıl bağlanırım?" adım adım anlatır. |
+- **Topluluk listesi:** GMID sunucuları bu projenin GitHub'daki [`topluluk/sunucular.json`](../topluluk/sunucular.json)
+  dosyasından gelir. Dosya düzenlenince herkesin uygulamasında birkaç dakika içinde güncellenir (nasıl düzenleneceği:
+  [`topluluk/README.md`](../topluluk/README.md)). İnternet yoksa son liste gösterilmeye devam eder. Adres Sunucular
+  ekranının altından değiştirilebilir ya da kapatılabilir.
+- **Kendi sunucuların:** "Sunucu ekle" ile (adres `1.2.3.4:28961` gibi portla da yazılabilir, isteğe bağlı logo,
+  açıklama ve bağlanma notu). Bunlar sadece senin bilgisayarında durur.
+- **Desteklenen sorgular** (hepsi uygulamanın kendi kodu, ek program yok): Quake 3 `getstatus` (Call of Duty ailesi;
+  Türkçe isimler için Windows-1254), Minecraft Java durum sorgusu, Minecraft Bedrock (RakNet), Valve A2S
+  (CS 1.6, CS2, TF2, GMod, Valheim…), SA-MP. MTA ve "Diğer" sadece adres ve bağlanma bilgisi gösterir.
+- **Güvenlik:** listeden gelen adresler sadece harf, rakam, nokta ve tire içerebilir; oyun komut satırına ya da
+  bağlantıya başka bir şey sızamaz. Logolar en fazla 2 MB.
+
 ---
 
 ## 4. Ek özellikler (öneriler)
@@ -708,6 +750,7 @@ GMID Tool\
 ├─ Discord'a Hazır\         ← "Discord'a sığdır" kopyaları (birkaç gün sonra kendiliğinden silinir)
 ├─ Notlar\                  ← Notların .md kopyaları (uygulama olmadan da okunabilir)
 ├─ Arkaplanlar\
+├─ Sunucular\              ← Sunucu logoları (topluluk listesinden indirilen ve elle seçilen)
 ├─ Kapaklar\                ← Oyun/film kapak önbelleği (silinirse yeniden indirilir)
 ├─ Kurulum\                 ← Format sonrası kurulum listeleri + dışa aktarılan .bat
 ├─ Yedekler\                ← Veritabanının otomatik günlük yedekleri (son 7 gün)
@@ -737,6 +780,7 @@ kalır, uygulama sadece listesini tutar (§3.12).
 | `reminders` | id, başlık, zaman, tekrar_kuralı, ertelenen, tamamlandı |
 | `audio_devices` | windows_id, takma_ad, ikon, gizli, sıra, kilit_seviyesi |
 | `install_lists` / `install_items` | liste adı · winget_id, ad, kategori, sıra |
+| `servers` | id, ad, oyun, adres, port, sorgu_portu, logo, logo_adresi, açıklama, bağlanma_notu, topluluk_mu, sıra *(Faz 3a ✅)* |
 | `settings` | anahtar, değer |
 
 Tüm kayıtlar ileride senkronizasyona hazır olacak şekilde benzersiz kimlik + oluşturma/güncelleme zamanı taşır.
@@ -752,6 +796,16 @@ Tüm kayıtlar ileride senkronizasyona hazır olacak şekilde benzersiz kimlik +
 - **VDS'teki küçük sunucu** (WebSocket): arkadaş listesi, "şu an ne oynuyor" durumu, sohbet, ortak oyun listeleri.
 - Yerel veriler her zaman yerelde kalır; neyin paylaşılacağını herkes kendisi seçer.
 - Sunucu gelene kadar arkadaş puanları için **paylaşım dosyası** (öneri #9) kullanılabilir.
+
+### 8.1.1 Sohbet penceresi *(Faz 3c — barındırma kararı bekleniyor)*
+
+Steam'deki arkadaş listesi + sohbet penceresi gibi: kim çevrim içi, kim hangi oyunda (Faz 3b'deki oyun algılamasından),
+özel mesaj ve herkesin konuştuğu bir "Malikâne" odası. Ayrı, küçük bir pencere; tepsiden ve kısayolla açılır,
+oyundayken gelen mesaj sağ altta odak çalmayan küçük bir kartla görünür.
+
+- **Giriş:** Discord hesabıyla (şifre yok, herkes zaten Discord'da). Sadece GMID Discord sunucusunun üyeleri girebilir.
+- **Gerekli olan:** mesajları ileten, sürekli açık küçük bir sunucu (WebSocket). Seçenekler ve maliyetleri sohbette
+  konuşulup buraya yazılacak.
 
 ### 8.2 GMID evreninin diğer parçaları (bilgi için)
 
@@ -781,7 +835,9 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **0 — Tasarım** ✅ | Bu doküman, kararlar, ekran taslakları | Onaylanmış plan |
 | **1 — İskelet** ✅ *kodlandı* | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
 | **2 — Günlük araçlar** ✅ *kodlandı* | Ses & Mikrofon (kilit, kısayollar, ekran göstergesi), Notlar (+ hızlı not, yapışkan not), Hatırlatıcılar, Sayaç | Her gün kullandığın araçlar |
-| **3 — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
+| **3a — Sunucular** ✅ *kodlandı* | Topluluk ve kendi sunucuların, canlı oyuncu sayısı/harita, tek tıkla Bağlan, GitHub'dan güncellenen topluluk listesi | Discord'daki sunucuları uygulamadan görüp girmek |
+| **3b — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
+| **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** | İndirme yöneticisi, Videolar sekmesi, Chrome/Opera eklentisi | IDM benzeri indirici |
 | **6 — Film & Dizi + Kurulum** | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
@@ -852,6 +908,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.8 | 2026-10-11 | Faz 3a kodlandı: Sunucular (§3.14) — CoD/Minecraft/Steam/SA-MP sunucu sorguları, canlı oyuncu sayısı, Bağlan, GitHub'daki topluluk listesi; sohbet penceresi Faz 3c olarak plana eklendi (§8.1.1) |
 | v0.7 | 2026-10-11 | Faz 2 kodlandı: Ses & Mikrofon (Windows Core Audio, olay tabanlı mikrofon kilidi), değiştirilebilir genel kısayollar, odak çalmayan ekran göstergesi, Notlar (TipTap, .md kopyası, çöp kutusu), hızlı not ve yapışkan not pencereleri, hatırlatıcılar (tekrar, erteleme, sağ alt uyarı kartı), kronometre ve geri sayımlar |
 | v0.6 | 2026-10-11 | Faz 1 (İskelet) kodlandı: Tauri 2 + Svelte 5 projesi, açılış animasyonu, Malikâne teması, menü, Kontrol Odası, veri klasörü, SQLite, günlük yedek, tepsi, Windows ile başlatma; GitHub Actions ile otomatik Windows kurulum dosyası |
 | v0.5 | 2026-10-11 | Görsel taslak eklendi; Keşfet sağ filtre paneline taşındı (alışveriş sitesi düzeni); Video İndirici uygulamada görünür hale geldi (kendi sekmesi, menü rozeti, üst çubuk göstergesi, Giriş Salonu kutusu, bağlantı yapıştırma, eklenti önizlemesi) |

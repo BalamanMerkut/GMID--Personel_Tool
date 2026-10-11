@@ -23,6 +23,8 @@ export const ROOMS: Room[] = [
   {
     name: "Oyun Salonu",
     screens: [
+      { id: "servers", label: "Sunucular", icon: "server", phase: null,
+        description: "GMID topluluğunun oyun sunucuları: kim açık, kaç kişi var, hangi harita. Bağlan'a bas, oyun açılıp sunucuya girsin." },
       { id: "library", label: "Kütüphanem", icon: "library", phase: 3,
         description: "Steam, Epic, EA ve elle eklediğin oyunlar; kapakları, türleri ve gerçek oynama süreleriyle. Açtığın oyunlar Discord'daki gibi kendiliğinden yakalanır." },
       { id: "sessions", label: "Oturum Geçmişi", icon: "clock", phase: 3,

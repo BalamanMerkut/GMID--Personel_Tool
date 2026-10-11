@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet) ve Faz 2 (Günlük araçlar) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar) ve Faz 3a (Sunucular) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -18,6 +18,17 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 **Ek bilgi → Yine de çalıştır**.
 
 ## Neler var?
+
+### Faz 3a — Sunucular
+
+- **GMID topluluğunun oyun sunucuları** tek ekranda: logo, açık/kapalı, oyuncu sayısı, harita, oyun modu, gecikme;
+  içerideki oyuncuların adları. Ekran açıkken her 30 saniyede yenilenir.
+- **Bağlan:** Call of Duty 1/UO/2/4 oyunu açıp doğrudan sunucuya sokar (oyunun yeri bir kez sorulur);
+  CS ve diğer Steam oyunları Steam üzerinden, Minecraft Bedrock / SA-MP / MTA kendi istemcileriyle açılır;
+  Minecraft Java ve Valheim için adres kopyalanır ve adım adım anlatılır
+- **Topluluk listesi** bu depodaki [`topluluk/sunucular.json`](topluluk/sunucular.json) dosyasından gelir;
+  dosya GitHub'da düzenlenince herkesin uygulamasında kendiliğinden güncellenir ([nasıl?](topluluk/README.md))
+- **Kendi sunucuların:** arkadaşının sunucusunu adres, logo ve notla ekleyebilirsin
 
 ### Faz 2 — Günlük araçlar
 

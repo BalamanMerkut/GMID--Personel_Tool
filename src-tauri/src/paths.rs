@@ -12,6 +12,7 @@ const SUBFOLDERS: &[&str] = &[
     "Kurulum",
     "Yedekler",
     "Araclar",
+    "Sunucular",
 ];
 
 #[derive(Clone)]
@@ -51,6 +52,11 @@ impl DataDir {
 
     pub fn backgrounds(&self) -> PathBuf {
         self.0.join("Arkaplanlar")
+    }
+
+    /// Sunucu logoları (topluluk listesinden indirilen ve elle seçilen).
+    pub fn servers(&self) -> PathBuf {
+        self.0.join("Sunucular")
     }
 
     /// Ana klasör ya da bilinen alt klasörlerinden biri; bilinmeyen isimler ana klasöre düşer.

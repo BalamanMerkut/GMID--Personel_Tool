@@ -10,6 +10,7 @@
   import Home from "./lib/screens/Home.svelte";
   import Placeholder from "./lib/screens/Placeholder.svelte";
   import Reminders from "./lib/screens/Reminders.svelte";
+  import Servers from "./lib/screens/Servers.svelte";
   import Settings from "./lib/screens/Settings.svelte";
   import Timer from "./lib/screens/Timer.svelte";
   import { effectiveQuality, loadSettings, settings } from "./lib/settings.svelte";
@@ -107,6 +108,8 @@
           <Audio />
         {:else if route === "reminders"}
           <Reminders />
+        {:else if route === "servers"}
+          <Servers />
         {:else if route === "timer"}
           <Timer />
         {:else if route === "notes"}

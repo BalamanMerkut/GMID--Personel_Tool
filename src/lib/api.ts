@@ -28,8 +28,8 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, HotkeyStatus, MicStatus, Note, NoteInput, NoteSummary, OsdMessage, Reminder,
-  ReminderInput, TimersSnapshot,
+  Alerts, AudioState, GameInfo, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
 /** Bir Rust komutunu çağırır; tarayıcıda taklit katmana gider. */
@@ -151,6 +151,45 @@ export const api = {
     add: (label: string, ms: number) => call<TimersSnapshot>("countdown_add", { label, ms }),
     toggle: (id: string) => call<TimersSnapshot>("countdown_toggle", { id }),
     remove: (id: string) => call<TimersSnapshot>("countdown_remove", { id }),
+  },
+
+  servers: {
+    games: () => call<GameInfo[]>("servers_games"),
+    list: () => call<Server[]>("servers_list"),
+    /** Topluluk listesini (gerekiyorsa) indirir; `force` ile hemen. */
+    sync: (force = false) => call<SyncResult>("servers_sync", { force }),
+    cached: () => call<ServerStatus[]>("servers_cached"),
+    /** Boş liste: hepsi. */
+    query: (ids: string[] = []) => call<ServerStatus[]>("servers_query", { ids }),
+    save: (input: ServerInput) => call<Server>("server_save", { input }),
+    remove: (id: string) => call<void>("server_delete", { id }),
+    join: (id: string) => call<JoinResult>("server_join", { id }),
+    setExe: (game: string, path: string) => call<void>("server_set_exe", { game, path }),
+    /** Logo seçtirir ve `Sunucular` klasörüne kopyalar. Vazgeçilirse `null`. */
+    pickLogo: async (): Promise<string | null> => {
+      if (!inTauri) return null;
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        title: "Sunucu logosu seç",
+        filters: [{ name: "Resim", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+      });
+      if (typeof picked !== "string") return null;
+      return invoke<string>("server_import_logo", { source: picked });
+    },
+    /** Oyunun .exe dosyasını seçtirir. */
+    pickExe: async (gameName: string, exe: string): Promise<string | null> => {
+      if (!inTauri) return null;
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        title: `${gameName} · ${exe} dosyasını seç`,
+        filters: [{ name: exe, extensions: ["exe"] }],
+      });
+      return typeof picked === "string" ? picked : null;
+    },
   },
 
   overlay: {

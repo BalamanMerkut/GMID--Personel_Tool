@@ -1,5 +1,6 @@
 //! Arayüzün çağırdığı komutlar.
 
+pub mod servers;
 pub mod sound;
 pub mod tools;
 

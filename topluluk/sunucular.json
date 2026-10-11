@@ -1,0 +1,23 @@
+{
+  "surum": 1,
+  "servers": [],
+  "ornek": [
+    {
+      "id": "cod2",
+      "name": "GMID · Call of Duty 2",
+      "game": "cod2",
+      "host": "185.12.34.56",
+      "port": 28960,
+      "logo": "logolar/cod2.png",
+      "description": "Her akşam 21:00'de TDM.",
+      "connect": "Şifre Discord'da #sunucular kanalında."
+    },
+    {
+      "id": "minecraft",
+      "name": "GMID Survival",
+      "game": "minecraft",
+      "host": "mc.ornek.com",
+      "description": "1.21 hayatta kalma."
+    }
+  ]
+}

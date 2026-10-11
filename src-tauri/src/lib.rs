@@ -8,6 +8,7 @@ mod overlay;
 mod paths;
 mod reminders;
 mod scheduler;
+mod servers;
 mod timers;
 mod tray;
 mod util;
@@ -60,6 +61,8 @@ pub fn run() {
             // Arayüz sadece kendi arka plan klasöründeki dosyaları gösterebilir.
             app.asset_protocol_scope()
                 .allow_directory(dir.backgrounds(), true)?;
+            app.asset_protocol_scope()
+                .allow_directory(dir.servers(), false)?;
 
             // Mikrofon kilidi açılışta da etkin olsun.
             let mic_lock: Option<f32> = db.setting_json("audio.micLock");
@@ -73,6 +76,7 @@ pub fn run() {
             app.manage(timers::Timers::default());
             app.manage(scheduler::Scheduler::default());
             app.manage(hotkeys::Hotkeys::default());
+            app.manage(servers::Servers::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -139,6 +143,16 @@ pub fn run() {
             commands::tools::alerts_list,
             commands::tools::alerts_fit,
             commands::tools::alerts_close,
+            commands::servers::servers_games,
+            commands::servers::servers_list,
+            commands::servers::server_save,
+            commands::servers::server_delete,
+            commands::servers::server_import_logo,
+            commands::servers::servers_sync,
+            commands::servers::servers_cached,
+            commands::servers::servers_query,
+            commands::servers::server_join,
+            commands::servers::server_set_exe,
         ])
         .build(tauri::generate_context!())
         .expect("GMID Tool başlatılamadı")

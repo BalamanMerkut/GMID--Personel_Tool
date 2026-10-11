@@ -112,3 +112,84 @@ export interface OsdMessage {
   icon: string;
   text: string;
 }
+
+export type JoinKind = "steam" | "exe" | "uri" | "copy";
+
+export interface GameInfo {
+  id: string;
+  name: string;
+  short: string;
+  defaultPort: number;
+  join: JoinKind;
+  exe: string | null;
+  queryable: boolean;
+  howTo: string;
+}
+
+export interface Server {
+  id: string;
+  name: string;
+  game: string;
+  host: string;
+  port: number;
+  queryPort: number | null;
+  logo: string | null;
+  description: string;
+  connectNotes: string;
+  /** Topluluk listesinden geldi (düzenlenemez). */
+  remote: boolean;
+  createdAt: number;
+}
+
+export interface ServerInput {
+  id: string | null;
+  name: string;
+  game: string;
+  host: string;
+  port: number | null;
+  queryPort: number | null;
+  logo: string | null;
+  description: string;
+  connectNotes: string;
+}
+
+export interface Player {
+  name: string;
+  score: number | null;
+  ping: number | null;
+}
+
+export interface ServerInfo {
+  name: string;
+  map: string;
+  mode: string;
+  version: string;
+  players: number;
+  maxPlayers: number;
+  bots: number;
+  password: boolean;
+  playerList: Player[];
+  favicon: string | null;
+  pingMs: number;
+}
+
+export interface ServerStatus {
+  id: string;
+  state: "online" | "offline" | "unknown";
+  info: ServerInfo | null;
+  error: string | null;
+  checkedAt: number;
+  stale: boolean;
+}
+
+export interface SyncResult {
+  servers: Server[];
+  error: string | null;
+  url: string;
+  defaultUrl: string;
+}
+
+export interface JoinResult {
+  kind: "launched" | "copy";
+  address: string;
+}

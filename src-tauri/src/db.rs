@@ -40,6 +40,24 @@ const MIGRATIONS: &[&str] = &[
         created_at INTEGER NOT NULL
     );
     CREATE INDEX reminders_due ON reminders (done, notified, due_at);",
+    // 4 — oyun sunucuları
+    "CREATE TABLE servers (
+        id            TEXT PRIMARY KEY,
+        name          TEXT NOT NULL,
+        game          TEXT NOT NULL,
+        host          TEXT NOT NULL,
+        port          INTEGER NOT NULL,
+        query_port    INTEGER,
+        logo          TEXT,
+        -- Topluluk listesindeki logo adresi; değişmediyse logo tekrar indirilmez.
+        logo_url      TEXT,
+        description   TEXT NOT NULL DEFAULT '',
+        connect_notes TEXT NOT NULL DEFAULT '',
+        remote        INTEGER NOT NULL DEFAULT 0,
+        sort          INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+    );",
 ];
 
 pub struct Db(Mutex<Connection>);
