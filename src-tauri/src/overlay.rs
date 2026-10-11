@@ -214,6 +214,16 @@ pub fn prepare_osd(app: &AppHandle) {
 
 /// Zamanı gelen hatırlatıcı/sayaç kartlarını sağ altta gösterir.
 pub fn raise_alerts(app: &AppHandle) {
+    show_alerts(app);
+    play_notification_sound(app);
+}
+
+/// Sessiz: oyundayken "kütüphaneye ekleyeyim mi?" kartı ses çıkarmasın.
+pub fn raise_alerts_quiet(app: &AppHandle) {
+    show_alerts(app);
+}
+
+fn show_alerts(app: &AppHandle) {
     crate::window::on_ui_thread(app, "Uyarı penceresi", |app| {
         let w = match app.get_webview_window(ALERTS) {
             Some(w) => w,
@@ -231,7 +241,6 @@ pub fn raise_alerts(app: &AppHandle) {
         show_no_activate(&w);
         Ok(())
     });
-    play_notification_sound(app);
 }
 
 /// Windows'un kendi bildirimi (bildirim merkezinde de kalır). `setting` ayarı `false` ise gönderilmez

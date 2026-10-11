@@ -106,6 +106,18 @@ export interface TimersSnapshot {
 export interface Alerts {
   reminders: Reminder[];
   timers: Countdown[];
+  /** "Kütüphaneye ekleyeyim mi?" kartları. */
+  games: GameSuggestion[];
+}
+
+/** Kütüphanede olmayan, açıldığı görülen oyun. */
+export interface GameSuggestion {
+  path: string;
+  exe: string;
+  name: string;
+  /** discord: bilinen oyun listesinde; fullscreen: tam ekran çalışan program. */
+  reason: "discord" | "fullscreen";
+  seenAt: number;
 }
 
 export interface OsdMessage {
@@ -405,7 +417,7 @@ export interface UserPlaylist {
 export interface Game {
   id: string;
   name: string;
-  source: "steam" | "epic" | "riot" | "manual" | "archive";
+  source: "steam" | "epic" | "riot" | "xbox" | "other" | "manual" | "archive";
   sourceId: string;
   installDir: string | null;
   exes: string[];
@@ -438,7 +450,7 @@ export interface Game {
 
 /** Taramada bulunan oyun. */
 export interface FoundGame {
-  source: "steam" | "epic" | "riot" | "manual";
+  source: "steam" | "epic" | "riot" | "xbox" | "other" | "manual";
   sourceId: string;
   name: string;
   installDir: string | null;

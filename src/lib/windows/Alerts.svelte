@@ -7,12 +7,12 @@
   import { clock, relative, when } from "../time";
   import type { Alerts } from "../types";
 
-  let alerts: Alerts = $state({ reminders: [], timers: [] });
+  let alerts: Alerts = $state({ reminders: [], timers: [], games: [] });
   let box: HTMLDivElement;
 
   async function refresh() {
     alerts = await api.overlay.alerts();
-    if (!alerts.reminders.length && !alerts.timers.length) {
+    if (!alerts.reminders.length && !alerts.timers.length && !alerts.games.length) {
       await api.overlay.closeAlerts();
       return;
     }
@@ -33,6 +33,17 @@
 </script>
 
 <div class="stack" bind:this={box}>
+  {#each alerts.games as g (g.path)}
+    <div class="card game">
+      <div class="top"><span class="ic"><Icon name="library" size={18} /></span><b>Yeni oyun: {g.name}</b></div>
+      <span class="meta">{g.exe} · Kütüphaneye ekleyeyim mi? Oynadığın süre tutulur.</span>
+      <div class="acts">
+        <button class="ghost" onclick={() => act(api.games.answerSuggestion(g.path, "never"))} title="Bu program için bir daha sorulmaz">Bir daha sorma</button>
+        <button class="ghost" onclick={() => act(api.games.answerSuggestion(g.path, "later"))}>Şimdi değil</button>
+        <button class="ok" onclick={() => act(api.games.answerSuggestion(g.path, "add"))}>Ekle</button>
+      </div>
+    </div>
+  {/each}
   {#each alerts.reminders as r (r.id)}
     <div class="card">
       <div class="top"><span class="ic"><Icon name="bell" size={18} /></span><b>{r.title}</b></div>

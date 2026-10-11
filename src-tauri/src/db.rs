@@ -228,6 +228,19 @@ const MIGRATIONS: &[&str] = &[
     DROP TABLE reviews;
     ALTER TABLE reviews_new RENAME TO reviews;
     UPDATE reviews SET overall = NULL, recommend = NULL WHERE status = 'wishlist';",
+    // 13 — kapağı olmayan Steam dışı oyunlar Wikipedia'dan kapak denesin; yeni oyun önerileri
+    "UPDATE games SET meta_at = NULL WHERE cover IS NULL AND steam_appid IS NULL;
+    CREATE TABLE game_suggestions (
+        -- küçük harfli exe yolu
+        path       TEXT PRIMARY KEY,
+        exe        TEXT NOT NULL,
+        name       TEXT NOT NULL,
+        -- discord (bilinen oyun listesi) | fullscreen (tam ekran çalışan program)
+        reason     TEXT NOT NULL,
+        -- pending | ignored
+        state      TEXT NOT NULL DEFAULT 'pending',
+        seen_at    INTEGER NOT NULL
+    );",
 ];
 
 pub struct Db(Mutex<Connection>);

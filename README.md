@@ -21,9 +21,12 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 
 ### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)
 
-- **Oyunları tara:** Steam, Epic ve Riot'ta (League of Legends, VALORANT) kurulu oyunlar (Steam'in tuttuğu süreyle) bulunur;
+- **Oyunları tara:** Steam, Epic, Riot (League of Legends, VALORANT), Xbox uygulaması ve Minecraft (Java ve Bedrock) oyunları
+  (Steam'in tuttuğu süreyle) bulunur;
   istediklerini seçip eklersin. Kapağı gelmeyen oyunlara oyun penceresinden **Kapak seç** ile kendi resmini koyabilirsin.
   Tanınmayan oyunlar: **Oyun ekle** → çalışan uygulamalardan seç ya da .exe göster.
+- **Yeni oyun açılınca sorar:** kütüphanende olmayan bir oyun açılınca sağ altta "Kütüphaneye ekleyeyim mi?" kartı çıkar
+  (Ekle · Şimdi değil · Bir daha sorma). Steam'de olmayan oyunların kapağı Wikipedia'dan gelir.
 - **Canlı algılama (Discord gibi):** 5 saniyede bir çalışan programlara bakılır; kütüphanedeki bir oyun açılınca
   oturum başlar, kapanınca biter. Oyuna hiçbir şey enjekte edilmez (anti-cheat güvenli). 30 saniyeden kısa açılışlar
   sayılmaz. Kontrol Odası'ndan kapatılabilir.

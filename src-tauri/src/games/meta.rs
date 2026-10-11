@@ -362,6 +362,84 @@ fn search_url(term: &str) -> String {
     url
 }
 
+/// Steam'de olmayan oyunlar (VALORANT, League of Legends, Minecraft…) için yedek kapak: İngilizce Wikipedia'da
+/// "<ad> video game" araması, kısa açıklaması "video game" olan ilk sayfanın kutu resmi (600 px önizleme).
+pub fn wiki_image(name: &str) -> Result<Option<String>, String> {
+    let mut url = String::from(
+        "https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&generator=search\
+         &gsrlimit=5&prop=pageimages%7Cpageprops&piprop=thumbnail&pithumbsize=600&pilicense=any\
+         &ppprop=wikibase-shortdesc&gsrsearch=",
+    );
+    for b in format!("{} video game", name.trim()).bytes() {
+        if b.is_ascii_alphanumeric() {
+            url.push(b as char);
+        } else {
+            url.push_str(&format!("%{b:02X}"));
+        }
+    }
+    let mut r = agent()
+        .get(&url)
+        .header("User-Agent", WIKI_UA)
+        .call()
+        .map_err(|e| e.to_string())?;
+    let body = r
+        .body_mut()
+        .with_config()
+        .limit(2 * 1024 * 1024)
+        .read_to_string()
+        .map_err(|e| e.to_string())?;
+    let json: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    Ok(pick_wiki_image(&json, name))
+}
+
+const WIKI_UA: &str = "GMIDTool/0.1 (https://github.com/BalamanMerkut/GMID--Personel_Tool)";
+
+pub fn pick_wiki_image(json: &serde_json::Value, name: &str) -> Option<String> {
+    let mut pages: Vec<&serde_json::Value> = json["query"]["pages"].as_array()?.iter().collect();
+    pages.sort_by_key(|p| p["index"].as_i64().unwrap_or(99));
+    let want = normalize(name);
+    let is_game = |p: &serde_json::Value| {
+        p["pageprops"]["wikibase-shortdesc"]
+            .as_str()
+            .is_some_and(|d| d.to_lowercase().contains("video game"))
+    };
+    // Önce adı tutan oyun sayfası ("Valorant" ↔ "VALORANT"), yoksa ilk oyun sayfası.
+    let title_ok = |p: &serde_json::Value| {
+        p["title"].as_str().is_some_and(|t| {
+            let t = normalize(t.split(" (").next().unwrap_or(t));
+            t == want || (want.len() >= 4 && (t.contains(&want) || want.contains(&t)))
+        })
+    };
+    pages
+        .iter()
+        .find(|p| is_game(p) && title_ok(p))
+        .or_else(|| pages.iter().find(|p| is_game(p)))
+        .and_then(|p| p["thumbnail"]["source"].as_str())
+        .map(str::to_string)
+}
+
+/// Bir resmi indirip kaydeder (Wikipedia kapağı).
+pub fn download_image(url: &str, dest: &Path) -> Result<(), String> {
+    let mut r = agent()
+        .get(url)
+        .header("User-Agent", WIKI_UA)
+        .call()
+        .map_err(|e| e.to_string())?;
+    let bytes = r
+        .body_mut()
+        .with_config()
+        .limit(10 * 1024 * 1024)
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
+    if bytes.len() < 1024 {
+        return Err("resim çok küçük".into());
+    }
+    if let Some(d) = dest.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    std::fs::write(dest, bytes).map_err(|e| e.to_string())
+}
+
 /// Dikey kapak (600×900). Bulunamazsa yatay başlık resmi.
 pub fn download_cover(appid: i64, header: Option<&str>, dest: &Path) -> Result<(), String> {
     let urls = [
@@ -425,6 +503,26 @@ mod tests {
         assert!(parse_details(1, &fail).is_none());
         assert_eq!(year_of("Oct 17, 2024"), Some(2024));
         assert_eq!(normalize("Hades II™"), "hadesii");
+    }
+
+    #[test]
+    fn wiki_image_prefers_matching_game_page() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{"query":{"pages":[
+              {"title":"Riot Games","index":2,"pageprops":{"wikibase-shortdesc":"American video game developer"},
+               "thumbnail":{"source":"https://x/riot.png"}},
+              {"title":"Valorant","index":1,"pageprops":{"wikibase-shortdesc":"2020 video game"},
+               "thumbnail":{"source":"https://upload.wikimedia.org/valorant.png"}},
+              {"title":"Valorant Champions Tour","index":3,"pageprops":{"wikibase-shortdesc":"Esports league"}}
+            ]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            pick_wiki_image(&json, "VALORANT").as_deref(),
+            Some("https://upload.wikimedia.org/valorant.png")
+        );
+        // "video game developer" de "video game" içeriyor ama adı tutmuyor; adı tutan önce.
+        assert!(pick_wiki_image(&serde_json::json!({}), "x").is_none());
     }
 
     #[test]

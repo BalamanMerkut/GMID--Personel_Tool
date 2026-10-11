@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameSuggestion, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -254,6 +254,11 @@ export const api = {
       });
       return typeof picked === "string" ? picked : null;
     },
+    /** Kütüphanede olmayan, açıldığı görülen oyunlar. */
+    suggestions: () => call<GameSuggestion[]>("games_suggestions"),
+    /** add: kütüphaneye ekle · later: şimdi değil · never: bir daha sorma. */
+    answerSuggestion: (path: string, action: "add" | "later" | "never", name?: string) =>
+      call<void>("games_suggestion_answer", { path, action, name: name ?? null }),
     /** Kapak resmi seçtirip oyuna koyar (Steam'de olmayan oyunlar için). */
     pickCover: async (id: string): Promise<boolean> => {
       if (!inTauri) return false;

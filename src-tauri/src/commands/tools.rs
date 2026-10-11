@@ -232,13 +232,20 @@ pub fn dictation_view_state(overlay: State<'_, Overlay>) -> crate::overlay::Dict
 pub struct Alerts {
     reminders: Vec<Reminder>,
     timers: Vec<Countdown>,
+    /// "Kütüphaneye ekleyeyim mi?" kartları.
+    games: Vec<crate::games::Suggestion>,
 }
 
 #[tauri::command]
-pub fn alerts_list(db: State<'_, Db>, timers: State<'_, Timers>) -> CmdResult<Alerts> {
+pub fn alerts_list(
+    db: State<'_, Db>,
+    timers: State<'_, Timers>,
+    games: State<'_, crate::games::Games>,
+) -> CmdResult<Alerts> {
     Ok(Alerts {
         reminders: reminders::pending_alerts(&db).map_err(err)?,
         timers: timers.finished(),
+        games: games.showing_suggestions(&db),
     })
 }
 

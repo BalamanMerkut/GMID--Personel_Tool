@@ -10,6 +10,7 @@
 pub mod meta;
 pub mod procs;
 pub mod scan;
+pub mod suggest;
 pub mod vdf;
 
 use crate::db::Db;
@@ -88,6 +89,8 @@ struct Matcher {
     /// Küçük harfli kurulum klasörü (sonu ayraçlı).
     dir: Option<String>,
     exes: Vec<String>,
+    /// Pencere başlığıyla tanınanlar: (exe, başlığın başı). Minecraft: `javaw.exe@minecraft`.
+    titled: Vec<(String, String)>,
 }
 
 #[derive(Default)]
@@ -95,6 +98,31 @@ pub struct Games {
     running: Mutex<HashMap<String, Running>>,
     matchers: Mutex<Option<Vec<Matcher>>>,
     meta_busy: AtomicBool,
+    suggest: Mutex<SuggestState>,
+}
+
+/// "Kütüphaneye ekleyeyim mi?" için çalışma anı durumu.
+#[derive(Default)]
+struct SuggestState {
+    list: Option<std::sync::Arc<suggest::DetectList>>,
+    /// Bilinen oyun ilk ne zaman görüldü: yol → (pid, ms).
+    seen: HashMap<String, (u32, i64)>,
+    /// Hangi açılışında soruldu: yol → pid (aynı açılışta bir daha sorulmaz).
+    asked: HashMap<String, u32>,
+    /// Ön plandaki tam ekran program: (pid, başlangıç ms).
+    fullscreen: Option<(u32, i64)>,
+    /// Şu an kartı gösterilen öneriler (yollar).
+    showing: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Suggestion {
+    pub path: String,
+    pub exe: String,
+    pub name: String,
+    pub reason: String,
+    pub seen_at: i64,
 }
 
 fn json_list(s: Option<String>) -> Vec<String> {
@@ -486,7 +514,17 @@ impl Games {
                                     format!("{d}\\")
                                 }
                             }),
-                            exes: json_list(r.get(3)?),
+                            exes: json_list(r.get(3)?)
+                                .into_iter()
+                                .filter(|e: &String| !e.contains('@'))
+                                .collect(),
+                            titled: json_list(r.get(3)?)
+                                .into_iter()
+                                .filter_map(|e: String| {
+                                    e.split_once('@')
+                                        .map(|(x, t)| (x.to_string(), t.to_lowercase()))
+                                })
+                                .collect(),
                         })
                     })
                     .map(|rows| rows.filter_map(Result::ok).collect::<Vec<_>>())
@@ -499,13 +537,27 @@ impl Games {
 
     /// Bir tur: çalışan oyunları bulur, oturumları açar/kapatır.
     fn tick(&self, app: &AppHandle) {
-        if self.step(&app.state::<Db>(), &procs::list()) {
+        let procs = procs::list();
+        // Pencere başlıkları yalnızca başlıkla tanınan bir oyun varsa okunur.
+        let need_titles = self
+            .matchers(&app.state::<Db>())
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .any(|m| !m.titled.is_empty());
+        let titles: HashMap<u32, String> = if need_titles {
+            procs::windowed().into_iter().collect()
+        } else {
+            HashMap::new()
+        };
+        self.suggest_tick(app, &procs, &titles);
+        if self.step(&app.state::<Db>(), &procs, &titles) {
             let _ = app.emit("games-changed", ());
         }
     }
 
     /// Algılamanın kendisi; bir oyun açıldı ya da kapandıysa `true`.
-    fn step(&self, db: &Db, procs: &[procs::Proc]) -> bool {
+    fn step(&self, db: &Db, procs: &[procs::Proc], titles: &HashMap<u32, String>) -> bool {
         let me = std::process::id();
         let now_running: Vec<String> = {
             let guard = self.matchers(db);
@@ -513,7 +565,7 @@ impl Games {
                 .as_deref()
                 .unwrap_or_default()
                 .iter()
-                .filter(|m| procs.iter().any(|p| p.pid != me && matches(m, p)))
+                .filter(|m| procs.iter().any(|p| p.pid != me && matches(m, p, titles)))
                 .map(|m| m.id.clone())
                 .collect()
         };
@@ -560,6 +612,193 @@ impl Games {
             }
         }
         changed
+    }
+
+    /// Kütüphanede olmayan bir oyun açıldıysa sorar (sağ altta kart + Kütüphanem'de liste).
+    fn suggest_tick(&self, app: &AppHandle, procs: &[procs::Proc], titles: &HashMap<u32, String>) {
+        let db = app.state::<Db>();
+        if !db.setting_json::<bool>(suggest::ASK_KEY).unwrap_or(true) {
+            return;
+        }
+        let me = std::process::id();
+        let now = now_ms();
+        let mut st = self.suggest.lock().unwrap_or_else(|e| e.into_inner());
+        let mut candidates: Vec<(&procs::Proc, String, &'static str)> = Vec::new();
+        if let Some(list) = st.list.clone() {
+            for p in procs {
+                if p.path.is_empty() || suggest::system_path(&p.path) {
+                    continue;
+                }
+                if let Some(name) = list.find(p) {
+                    candidates.push((p, name.to_string(), "discord"));
+                }
+            }
+        }
+        match procs::foreground_fullscreen() {
+            Some((pid, title)) => {
+                let since = match st.fullscreen {
+                    Some((p, t)) if p == pid => t,
+                    _ => {
+                        st.fullscreen = Some((pid, now));
+                        now
+                    }
+                };
+                if let Some(p) = procs.iter().find(|p| p.pid == pid) {
+                    if now - since >= suggest::FULLSCREEN_AFTER_MS
+                        && !p.path.is_empty()
+                        && !suggest::not_a_game(p)
+                        && !candidates.iter().any(|(c, _, _)| c.pid == pid)
+                    {
+                        candidates.push((p, suggest::clean_title(&title, &p.path), "fullscreen"));
+                    }
+                }
+            }
+            None => st.fullscreen = None,
+        }
+        // Görülmeyenleri unut.
+        st.seen
+            .retain(|path, _| procs.iter().any(|p| &p.path == path));
+        let mut raised = false;
+        let guard = self.matchers(&db);
+        let matchers = guard.as_deref().unwrap_or_default();
+        for (p, name, reason) in candidates {
+            if p.pid == me || matchers.iter().any(|m| matches(m, p, titles)) {
+                continue;
+            }
+            let key = p.path.clone();
+            if reason == "discord" {
+                let first = match st.seen.get(&key) {
+                    Some((pid, t)) if *pid == p.pid => *t,
+                    _ => {
+                        st.seen.insert(key.clone(), (p.pid, now));
+                        now
+                    }
+                };
+                if now - first < suggest::KNOWN_AFTER_MS {
+                    continue;
+                }
+            }
+            if st.asked.get(&key) == Some(&p.pid) {
+                continue;
+            }
+            st.asked.insert(key.clone(), p.pid);
+            let ignored: bool = db
+                .conn()
+                .query_row(
+                    "SELECT state = 'ignored' FROM game_suggestions WHERE path = ?1",
+                    [&key],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if ignored {
+                continue;
+            }
+            let _ = db.conn().execute(
+                "INSERT INTO game_suggestions (path, exe, name, reason, state, seen_at)
+                 VALUES (?1, ?2, ?3, ?4, 'pending', ?5)
+                 ON CONFLICT(path) DO UPDATE SET seen_at = excluded.seen_at",
+                params![key, p.name, name, reason, now],
+            );
+            if !st.showing.contains(&key) {
+                st.showing.push(key);
+            }
+            raised = true;
+        }
+        drop(guard);
+        drop(st);
+        if raised {
+            crate::overlay::raise_alerts_quiet(app);
+            let _ = app.emit("games-suggestions", ());
+        }
+    }
+
+    fn suggestion_rows(db: &Db, only: Option<&[String]>) -> Vec<Suggestion> {
+        let conn = db.conn();
+        let mut stmt = match conn.prepare(
+            "SELECT path, exe, name, reason, seen_at FROM game_suggestions
+             WHERE state = 'pending' ORDER BY seen_at DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        stmt.query_map([], |r| {
+            Ok(Suggestion {
+                path: r.get(0)?,
+                exe: r.get(1)?,
+                name: r.get(2)?,
+                reason: r.get(3)?,
+                seen_at: r.get(4)?,
+            })
+        })
+        .map(|rows| {
+            rows.filter_map(Result::ok)
+                .filter(|s| match only {
+                    None => true,
+                    Some(o) => o.contains(&s.path),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
+    /// Kütüphanem'de gösterilen, henüz cevaplanmamış öneriler.
+    pub fn suggestions(&self, db: &Db) -> Vec<Suggestion> {
+        Self::suggestion_rows(db, None)
+    }
+
+    /// Sağ altta kartı açık olanlar.
+    pub fn showing_suggestions(&self, db: &Db) -> Vec<Suggestion> {
+        let showing = self
+            .suggest
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .showing
+            .clone();
+        Self::suggestion_rows(db, Some(&showing))
+    }
+
+    /// Cevap: `add` (kütüphaneye ekle), `later` (şimdi değil), `never` (bir daha sorma).
+    pub fn answer_suggestion(
+        &self,
+        app: &AppHandle,
+        path: &str,
+        action: &str,
+        name: Option<String>,
+    ) -> Result<(), String> {
+        let db = app.state::<Db>();
+        self.suggest
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .showing
+            .retain(|p| p != path);
+        match action {
+            "add" => {
+                let row = Self::suggestion_rows(&db, Some(&[path.to_string()]))
+                    .into_iter()
+                    .next()
+                    .ok_or("Öneri bulunamadı")?;
+                let name = name
+                    .map(|n| n.trim().to_string())
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or(row.name);
+                self.add_manual(app, &name, &row.path)?;
+                db.conn()
+                    .execute("DELETE FROM game_suggestions WHERE path = ?1", [path])
+                    .map_err(|e| e.to_string())?;
+            }
+            "never" => {
+                db.conn()
+                    .execute(
+                        "UPDATE game_suggestions SET state = 'ignored' WHERE path = ?1",
+                        [path],
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+            _ => {}
+        }
+        let _ = app.emit_to(crate::overlay::ALERTS, "alerts-changed", ());
+        let _ = app.emit("games-suggestions", ());
+        Ok(())
     }
 
     /// Uygulama kapanırken açık oturumları bitirir.
@@ -630,7 +869,15 @@ pub struct RunningApp {
     pub title: String,
 }
 
-fn matches(m: &Matcher, p: &procs::Proc) -> bool {
+fn matches(m: &Matcher, p: &procs::Proc, titles: &HashMap<u32, String>) -> bool {
+    if m.titled.iter().any(|(exe, prefix)| {
+        *exe == p.name
+            && titles
+                .get(&p.pid)
+                .is_some_and(|t| t.to_lowercase().starts_with(prefix.as_str()))
+    }) {
+        return true;
+    }
     match (&m.dir, p.path.is_empty()) {
         (Some(dir), false) => p.path.starts_with(dir.as_str()),
         // Korumalı süreçlerin yolu okunamaz: exe adıyla.
@@ -664,11 +911,43 @@ fn fill_meta(
         None => meta::search(name)?,
     };
     let Some(appid) = appid else {
-        // Steam'de yok: bir daha sorulmasın (elle "Bilgileri yenile" ile tekrar denenir).
+        // Steam'de yok: kapak Wikipedia'dan (VALORANT, LoL, Minecraft…). Elle seçilen kapağa dokunulmaz.
+        // Bir daha sorulmasın (elle "Bilgileri yenile" ile tekrar denenir).
+        let has_cover: bool = db
+            .conn()
+            .query_row(
+                "SELECT cover IS NOT NULL FROM games WHERE id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        let cover = if has_cover {
+            None
+        } else {
+            match meta::wiki_image(name) {
+                Ok(Some(url)) => {
+                    let ext = if url.to_lowercase().ends_with(".png") {
+                        "png"
+                    } else {
+                        "jpg"
+                    };
+                    let dest = covers.join(format!("wiki-{id}.{ext}"));
+                    meta::download_image(&url, &dest)
+                        .map(|_| dest.to_string_lossy().into_owned())
+                        .map_err(|e| crate::log!("Wikipedia kapağı indirilemedi ({name}): {e}"))
+                        .ok()
+                }
+                Ok(None) => None,
+                Err(e) => {
+                    crate::log!("Wikipedia'ya ulaşılamadı ({name}): {e}");
+                    None
+                }
+            }
+        };
         db.conn()
             .execute(
-                "UPDATE games SET meta_at = ?2 WHERE id = ?1",
-                params![id, now_ms()],
+                "UPDATE games SET meta_at = ?2, cover = COALESCE(?3, cover) WHERE id = ?1",
+                params![id, now_ms(), cover],
             )
             .map_err(|e| e.to_string())?;
         return Ok(());
@@ -718,6 +997,25 @@ pub fn start(app: &AppHandle) {
         );
     }
     app.state::<Games>().fetch_meta(app);
+    // Bilinen oyunlar listesi (Discord) arka planda; gelene kadar yalnızca tam ekran ipucu çalışır.
+    {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            let cache = app
+                .state::<DataDir>()
+                .root()
+                .join("Araclar")
+                .join("oyun-listesi.json");
+            if let Some(list) = suggest::load_list(&cache) {
+                crate::log!("Bilinen oyun listesi hazır ({} exe)", list.len());
+                app.state::<Games>()
+                    .suggest
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .list = Some(std::sync::Arc::new(list));
+            }
+        });
+    }
     let app = app.clone();
     std::thread::Builder::new()
         .name("oyun-algilama".into())
@@ -759,24 +1057,27 @@ mod tests {
             name: "hades2.exe".into(),
             path: r"d:\steam\common\hades ii\hades2.exe".into(),
         };
-        assert!(games.step(&db, std::slice::from_ref(&game)), "oyun açıldı");
         assert!(
-            !games.step(&db, std::slice::from_ref(&game)),
+            games.step(&db, std::slice::from_ref(&game), &HashMap::new()),
+            "oyun açıldı"
+        );
+        assert!(
+            !games.step(&db, std::slice::from_ref(&game), &HashMap::new()),
             "değişiklik yok"
         );
         assert!(games.list(&db).unwrap()[0].running_since.is_some());
         // Kısa oturum (yanlışlıkla açma) kaydedilmez.
-        assert!(games.step(&db, &[]));
+        assert!(games.step(&db, &[], &HashMap::new()));
         assert!(games.sessions(&db, 0).unwrap().is_empty());
         // Uzun oturum: 40 dk önce başlamış gibi.
-        games.step(&db, std::slice::from_ref(&game));
+        games.step(&db, std::slice::from_ref(&game), &HashMap::new());
         games
             .running
             .lock()
             .unwrap()
             .values_mut()
             .for_each(|r| r.started -= 40 * 60_000);
-        games.step(&db, &[]);
+        games.step(&db, &[], &HashMap::new());
         let s = games.sessions(&db, 0).unwrap();
         assert_eq!(s.len(), 1);
         assert!((s[0].seconds - 2400).abs() <= 1, "{:?}", s[0]);
@@ -787,7 +1088,7 @@ mod tests {
             .execute("UPDATE games SET hidden = 1", [])
             .unwrap();
         games.invalidate();
-        assert!(!games.step(&db, std::slice::from_ref(&game)));
+        assert!(!games.step(&db, std::slice::from_ref(&game), &HashMap::new()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -797,37 +1098,51 @@ mod tests {
             id: "a".into(),
             dir: Some(r"d:\steam\steamapps\common\hades ii\".into()),
             exes: vec!["hades2.exe".into()],
+            titled: vec![],
         };
         let manual = Matcher {
             id: "b".into(),
             dir: None,
             exes: vec!["valorant-win64-shipping.exe".into()],
+            titled: vec![],
+        };
+        let mc = Matcher {
+            id: "c".into(),
+            dir: Some(r"c:\users\a\appdata\roaming\.minecraft\".into()),
+            exes: vec![],
+            titled: vec![("javaw.exe".into(), "minecraft".into())],
         };
         let p = |name: &str, path: &str| procs::Proc {
             pid: 10,
             name: name.into(),
             path: path.into(),
         };
-        assert!(matches(
+        let none = HashMap::new();
+        let m = |m: &Matcher, name: &str, path: &str| matches(m, &p(name, path), &none);
+        assert!(m(
             &steam,
-            &p(
-                "hades2.exe",
-                r"d:\steam\steamapps\common\hades ii\bin\hades2.exe"
-            )
+            "hades2.exe",
+            r"d:\steam\steamapps\common\hades ii\bin\hades2.exe"
         ));
-        assert!(matches(
+        assert!(m(
             &steam,
-            &p("eac.exe", r"d:\steam\steamapps\common\hades ii\eac.exe")
+            "eac.exe",
+            r"d:\steam\steamapps\common\hades ii\eac.exe"
         ));
         assert!(
-            !matches(&steam, &p("hades2.exe", r"c:\başka\hades2.exe")),
+            !m(&steam, "hades2.exe", r"c:\başka\hades2.exe"),
             "klasör dışı sayılmaz"
         );
-        assert!(matches(&steam, &p("hades2.exe", "")), "yol okunamazsa ad");
-        assert!(matches(
-            &manual,
-            &p("valorant-win64-shipping.exe", r"c:\riot\x.exe")
-        ));
-        assert!(!matches(&manual, &p("chrome.exe", r"c:\x\chrome.exe")));
+        assert!(m(&steam, "hades2.exe", ""), "yol okunamazsa ad");
+        assert!(m(&manual, "valorant-win64-shipping.exe", r"c:\riot\x.exe"));
+        assert!(!m(&manual, "chrome.exe", r"c:\x\chrome.exe"));
+        // Minecraft: hangi Java ile açılırsa açılsın, penceresi "Minecraft…" olan javaw.
+        let java = p("javaw.exe", r"c:\program files\java\bin\javaw.exe");
+        assert!(!matches(&mc, &java, &none));
+        let titles: HashMap<u32, String> =
+            [(10, "Minecraft* 1.21.4 - Singleplayer".to_string())].into();
+        assert!(matches(&mc, &java, &titles));
+        let other: HashMap<u32, String> = [(10, "IntelliJ IDEA".to_string())].into();
+        assert!(!matches(&mc, &java, &other));
     }
 }

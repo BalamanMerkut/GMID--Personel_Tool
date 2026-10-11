@@ -230,6 +230,12 @@ const reviews: Review[] = (
   createdAt: now() - i * 86_400_000, updatedAt: now() - i * 86_400_000,
 }));
 
+// ---- Algılanan, kütüphanede olmayan oyunlar ----
+const suggestions = [
+  { path: "d:\\games\\gtav\\gta5.exe", exe: "gta5.exe", name: "Grand Theft Auto V", reason: "discord" as const, seenAt: now() - 5 * 60_000 },
+  { path: "c:\\oyunlar\\hollow knight\\hollow_knight.exe", exe: "hollow_knight.exe", name: "Hollow Knight", reason: "fullscreen" as const, seenAt: now() - 3 * 86_400_000 },
+];
+
 // ---- Kliplerim ----
 const clipList: Clip[] = (
   [
@@ -436,6 +442,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return {
         reminders: reminders.filter((r) => r.notified && !r.done),
         timers: [{ id: "c9", label: "Fırın", totalMs: 1_200_000, endsAt: null, remainingMs: 0, finished: true }],
+        games: suggestions.slice(0, 1),
       };
     case "alerts_fit":
     case "alerts_close":
@@ -592,6 +599,20 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "games_launch":
     case "games_reveal":
       if (cmd === "games_set_hidden") libGames.find((g) => g.id === a.id)!.hidden = a.hidden as boolean;
+      return;
+    case "games_suggestions":
+      return suggestions;
+    case "games_suggestion_answer": {
+      const i = suggestions.findIndex((x) => x.path === a.path);
+      if (i >= 0 && a.action !== "later") {
+        if (a.action === "add") libGames.push({ ...libGames[0], id: `g${Date.now()}`, name: String(a.name ?? suggestions[i].name), source: "manual", runningSince: null, cover: thumb("#4a6a4a", "#121417", String(a.name ?? suggestions[i].name).toUpperCase()) });
+        suggestions.splice(i, 1);
+      }
+      emit("games-suggestions");
+      emit("games-changed");
+      return;
+    }
+    case "games_set_cover":
       return;
     case "clips_list":
       return clipList;

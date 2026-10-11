@@ -102,6 +102,7 @@
   let reminderToast = $state(getJson("reminders.toast", true));
   let videosNotify = $state(getJson("videos.notify", true));
   let gamesTrack = $state(getJson("games.track", true));
+  let gamesAsk = $state(getJson("games.ask", true));
 
   let lockTimer: ReturnType<typeof setTimeout> | undefined;
   function setLockLevel(v: number) {
@@ -271,6 +272,16 @@
             </span>
           </div>
           <Switch label="Oyun algılama" checked={gamesTrack} onchange={(v) => toggle("games.track", v, (x) => (gamesTrack = x))} />
+        </div>
+        <div class="line">
+          <div>
+            <b>Yeni oyun açılınca sor</b>
+            <span class="sub small">
+              Kütüphanende olmayan bir oyun açılınca (bilinen oyunlar listesinde varsa ya da bir dakikadan uzun tam ekran
+              çalışırsa) sağ altta "Kütüphaneye ekleyeyim mi?" diye sorar.
+            </span>
+          </div>
+          <Switch label="Yeni oyun açılınca sor" checked={gamesAsk} onchange={(v) => toggle("games.ask", v, (x) => (gamesAsk = x))} />
         </div>
       </section>
       <ClipsSettings />

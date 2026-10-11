@@ -15,6 +15,13 @@ import "./app.css";
 import { mount, type Component } from "svelte";
 import { currentView } from "./lib/api";
 
+// Tarayıcının kendi sağ tık menüsü (videoda "Tüm kontrolleri göster", "Geri", "Yazdır"…) uygulamada
+// görünmesin; yazı alanlarında kopyala/yapıştır menüsü kalsın.
+document.addEventListener("contextmenu", (e) => {
+  const t = e.target as HTMLElement | null;
+  if (!t?.closest("input, textarea, [contenteditable=''], [contenteditable='true']")) e.preventDefault();
+});
+
 // Her pencere sadece kendi arayüzünü yükler (gösterge penceresi notları, notlar Ses ekranını yüklemez).
 const view = currentView();
 document.documentElement.dataset.view = view.kind;

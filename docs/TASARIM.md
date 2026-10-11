@@ -344,6 +344,11 @@ oynadığını kaydetmek.
 - Tanınmayan bir oyun için: "Şu an çalışan uygulamalardan oyun ekle" düğmesi.
 - AFK algılama (isteğe bağlı): 15 dk klavye/fare hareketi yoksa süreyi saymayı durdur.
 
+- ✅ **"Kütüphaneye ekleyeyim mi?" (v0.21):** Kütüphanede olmayan bir program açılınca sorulur: Discord'un herkese açık
+  bilinen oyunlar listesinde varsa 20 sn sonra, listede yoksa 1 dakikadan uzun tam ekran çalışırsa (tarayıcı, video
+  oynatıcı, Windows programları hariç). Sağ altta sessiz kart: **Ekle · Şimdi değil · Bir daha sorma**; cevaplanmayanlar
+  Kütüphanem'in üstünde "Algılanan oyunlar" olarak durur (ad düzeltilip eklenebilir). Ayarlardan kapatılabilir.
+
 **Sonra:** Kütüphaneden oyunu doğrudan başlatma (Playnite gibi), yıllık "GMID Wrapped" özeti.
 
 **İki ayrı süre:** Steam'in tuttuğu süre, kart toplama / süre artırma programlarıyla şişebilir.
@@ -1039,6 +1044,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.21 | 2026-10-11 | Geri bildirim: tam ekran video ekrana tam sığıyor (alt kısmı kesilmiyor, 4:3 yanlarda bantla), fare dururken hiçbir düğme yok, kontroller görüntünün üstüne binmiyor; tarayıcının sağ tık menüsü kapatıldı; Minecraft (Java: pencere başlığıyla, Bedrock) ve Xbox uygulaması oyunları taramada; Steam dışı oyunlara Wikipedia'dan kapak; kütüphanede olmayan oyun açılınca "Kütüphaneye ekleyeyim mi?" (Discord'un bilinen oyunlar listesi + tam ekran ipucu; göç 13) |
 | v0.20 | 2026-10-11 | Geri bildirim: sesle yazma göstergesi takılı kalmıyor (pencere Windows'a doğrudan gizletiliyor + gösterge kendi güvenlik ağı), Riot oyunları (League of Legends, VALORANT) taramada, elle kapak seçme, puan kartında önce durum ("İstiyorum"da puan yok; göç 12), format yedeğine GMID ayarları ve geçmişi (§3.9) |
 | v0.19 | 2026-10-11 | Faz 3b-3 kodlandı (Faz 3b tamam): Kliplerim — NVIDIA/Xbox/AMD/OBS/Steam/Medal klasörleri, oyuna göre gruplama, önizleme, Discord'a sığdır (10 MB, panoya dosya), Geri Dönüşüm Kutusu'na silme, eski klip temizliği |
 | v0.18 | 2026-10-11 | Faz 3b-2 kodlandı: Oyun Arşivi (5 soruluk puan kartı, Yok seçeneği, otomatik genel puan), Türkçe etiketler, Keşfet filtre kutusu, Bana bir oyun seç, arşive Steam'den arayarak ekleme |

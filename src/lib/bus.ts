@@ -23,7 +23,8 @@ export type AppEvent =
   | "games-changed"
   | "reviews-changed"
   | "clips-changed"
-  | "clip-fit";
+  | "clip-fit"
+  | "games-suggestions";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

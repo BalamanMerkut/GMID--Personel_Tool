@@ -125,3 +125,52 @@ pub fn windowed() -> Vec<(u32, String)> {
 pub fn windowed() -> Vec<(u32, String)> {
     Vec::new()
 }
+
+/// Ön plandaki pencere bütün ekranı kaplıyorsa (tam ekran ya da kenarlıksız tam ekran): (pid, başlık).
+#[cfg(windows)]
+pub fn foreground_fullscreen() -> Option<(u32, String)> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId,
+    };
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_invalid() {
+            return None;
+        }
+        // Masaüstünün kendisi de "tam ekran" görünür.
+        let mut cls = [0u16; 64];
+        let n = GetClassNameW(hwnd, &mut cls);
+        let class = String::from_utf16_lossy(&cls[..n.max(0) as usize]);
+        if class == "Progman" || class == "WorkerW" {
+            return None;
+        }
+        let mut r = RECT::default();
+        GetWindowRect(hwnd, &mut r).ok()?;
+        let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(mon, &mut mi).as_bool() {
+            return None;
+        }
+        let m = mi.rcMonitor;
+        if r.left > m.left || r.top > m.top || r.right < m.right || r.bottom < m.bottom {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let mut buf = [0u16; 256];
+        let n = GetWindowTextW(hwnd, &mut buf);
+        Some((pid, String::from_utf16_lossy(&buf[..n.max(0) as usize])))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn foreground_fullscreen() -> Option<(u32, String)> {
+    None
+}

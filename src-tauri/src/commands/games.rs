@@ -210,3 +210,24 @@ pub fn review_delete(app: AppHandle, id: String) -> CmdResult<()> {
     let _ = app.emit("games-changed", ());
     Ok(())
 }
+
+/// Kütüphanede olmayan, açıldığı görülen oyunlar ("Kütüphaneye ekleyeyim mi?").
+#[tauri::command]
+pub fn games_suggestions(
+    games: State<'_, Games>,
+    db: State<'_, Db>,
+) -> Vec<crate::games::Suggestion> {
+    games.suggestions(&db)
+}
+
+/// `action`: add | later | never. `name` ekleme sırasında adı düzeltmek için.
+#[tauri::command]
+pub fn games_suggestion_answer(
+    app: AppHandle,
+    path: String,
+    action: String,
+    name: Option<String>,
+) -> CmdResult<()> {
+    app.state::<Games>()
+        .answer_suggestion(&app, &path, &action, name)
+}

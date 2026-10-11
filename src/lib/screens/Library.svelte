@@ -10,11 +10,11 @@
   import { getJson, setJson } from "../settings.svelte";
   import { ago, playtime } from "../time";
   import { notify } from "../toast.svelte";
-  import type { FoundGame, Game, PlaySession, Review, RunningApp } from "../types";
+  import type { FoundGame, Game, GameSuggestion, PlaySession, Review, RunningApp } from "../types";
 
-  type Source = "all" | "steam" | "epic" | "riot" | "manual";
+  type Source = "all" | "steam" | "epic" | "riot" | "xbox" | "other" | "manual";
   type Sort = "recent" | "played" | "name" | "platform";
-  const SOURCES: [Source, string][] = [["all", "Tümü"], ["steam", "Steam"], ["epic", "Epic"], ["riot", "Riot"], ["manual", "Elle eklenen"]];
+  const SOURCES: [Source, string][] = [["all", "Tümü"], ["steam", "Steam"], ["epic", "Epic"], ["riot", "Riot"], ["xbox", "Xbox"], ["other", "Diğer"], ["manual", "Elle eklenen"]];
   const SORTS: [Sort, string][] = [["recent", "Son oynanan"], ["played", "En çok oynanan"], ["name", "Ada göre"], ["platform", "Steam süresi"]];
 
   let games: Game[] = $state([]);
@@ -38,12 +38,15 @@
   let armedRemove = $state(false);
   let reviews: Review[] = $state([]);
   let rating: Game | null = $state(null);
+  let suggestions: GameSuggestion[] = $state([]);
+  let suggestNames: Record<string, string> = $state({});
 
   async function load() {
     const [g, r] = await Promise.all([api.games.list().catch(() => []), api.reviews.list().catch(() => [])]);
     // Yalnızca arşivde olanlar (puanlanmış ama kurulu değil) burada görünmez.
     games = g.filter((x) => x.inLibrary);
     reviews = r;
+    suggestions = await api.games.suggestions().catch(() => []);
     loadedAt = Date.now();
     loaded = true;
     if (detail) detail = games.find((g) => g.id === detail?.id) ?? null;
@@ -53,11 +56,13 @@
     void load();
     const stop = on("games-changed", () => void load());
     const stopReviews = on("reviews-changed", () => void load());
+    const stopSuggest = on("games-suggestions", () => void load());
     const timer = setInterval(() => (now = Date.now()), 30_000);
     return () => {
       clearInterval(timer);
       void stop.then((f) => f());
       void stopReviews.then((f) => f());
+      void stopSuggest.then((f) => f());
     };
   });
 
@@ -86,6 +91,12 @@
   let loadedAt = Date.now();
   const live = (g: Game) => g.playedSeconds + (g.runningSince ? Math.max(0, (now - loadedAt) / 1000) : 0);
   const sinceText = (ms: number) => playtime((now - ms) / 1000);
+
+  async function answer(sg: GameSuggestion, action: "add" | "never") {
+    const name = suggestNames[sg.path]?.trim() || sg.name;
+    await act(api.games.answerSuggestion(sg.path, action, name), action === "add" ? `${name} kütüphaneye eklendi` : "Bir daha sorulmayacak");
+    await load();
+  }
 
   async function scan() {
     scanning = true;
@@ -165,7 +176,7 @@
     await load();
   }
 
-  const sourceLabel = (s: string) => ({ steam: "Steam", epic: "Epic", riot: "Riot" })[s] ?? "Elle eklendi";
+  const sourceLabel = (s: string) => ({ steam: "Steam", epic: "Epic", riot: "Riot", xbox: "Xbox", other: "Diğer" })[s] ?? "Elle eklendi";
   const fmtDate = (ms: number) =>
     new Date(ms).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 </script>
@@ -182,6 +193,23 @@
       <button class="btn ghost" onclick={() => openDetail(g)}>Ayrıntılar</button>
     </section>
   {/each}
+
+  {#if suggestions.length}
+    <section class="panel sugg">
+      <div>
+        <b>Algılanan oyunlar</b>
+        <span class="sub small">Açtığın ama kütüphanende olmayan programlar. Adını düzeltip ekleyebilirsin; oyun değilse bir daha sorulmaz.</span>
+      </div>
+      {#each suggestions as sg (sg.path)}
+        <div class="sg">
+          <input class="sgname" value={suggestNames[sg.path] ?? sg.name} oninput={(e) => (suggestNames[sg.path] = e.currentTarget.value)} aria-label="Oyunun adı" />
+          <span class="sub small sgpath" title={sg.path}>{sg.exe} · {sg.reason === "discord" ? "bilinen oyun" : "tam ekran çalıştı"} · {ago(sg.seenAt, now)}</span>
+          <button class="btn ghost sm" onclick={() => answer(sg, "never")}>Oyun değil</button>
+          <button class="btn sm" onclick={() => answer(sg, "add")}><Icon name="plus" size={15} />Ekle</button>
+        </div>
+      {/each}
+    </section>
+  {/if}
 
   <section class="panel">
     <div class="spread">
@@ -377,6 +405,11 @@
   .live { display: inline-flex; align-items: center; gap: 6px; color: var(--good); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px rgba(92, 192, 138, 0.8); animation: blink 1.4s ease-in-out infinite; }
   @keyframes blink { 50% { opacity: 0.4; } }
+  .sugg { border-color: rgba(53, 160, 162, 0.5); background: linear-gradient(90deg, rgba(53, 160, 162, 0.08), transparent); gap: 10px; }
+  .sugg > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+  .sg { display: grid; grid-template-columns: minmax(160px, 260px) minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+  .sgname { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 9px; padding: 6px 10px; color: var(--text); font-weight: 600; }
+  .sgpath { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg .n { color: var(--dim); margin-left: 3px; }
   .search { background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; width: 200px; color: var(--text); }
   select { background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; color: var(--text); }

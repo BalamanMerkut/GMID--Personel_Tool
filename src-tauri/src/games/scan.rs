@@ -433,10 +433,156 @@ pub fn split_command(s: &str) -> (String, Vec<String>) {
     (s.to_string(), Vec::new())
 }
 
+/// Minecraft: Java sürümü `javaw.exe` ile çalışır (hangi başlatıcıyla açılırsa açılsın), bu yüzden
+/// "pencere başlığı Minecraft ile başlayan javaw.exe" olarak tanınır (`javaw.exe@minecraft`).
+/// Bedrock (Microsoft Store) `Minecraft.Windows.exe`.
+pub fn minecraft(appdata: &Path, local: &Path, launchers: &[PathBuf]) -> Vec<Found> {
+    let mut out = Vec::new();
+    let java_dir = appdata.join(".minecraft");
+    let launcher = launchers.iter().find(|p| p.is_file());
+    if java_dir.is_dir() || launcher.is_some() {
+        out.push(Found {
+            source: "other".into(),
+            source_id: "minecraft-java".into(),
+            name: "Minecraft".into(),
+            install_dir: java_dir
+                .is_dir()
+                .then(|| java_dir.to_string_lossy().into_owned()),
+            exes: vec!["javaw.exe@minecraft".into()],
+            launch: Some(match launcher {
+                Some(l) => l.to_string_lossy().into_owned(),
+                // Microsoft Store'dan kurulan başlatıcı.
+                None => r#""explorer.exe" shell:AppsFolder\Microsoft.4297127D64EC6_8wekyb3d8bbwe!Minecraft"#
+                    .into(),
+            }),
+            steam_appid: None,
+            platform_minutes: 0,
+            last_played: None,
+            already: false,
+        });
+    }
+    if local
+        .join("Packages")
+        .join("Microsoft.MinecraftUWP_8wekyb3d8bbwe")
+        .is_dir()
+    {
+        out.push(Found {
+            source: "xbox".into(),
+            source_id: "minecraft-bedrock".into(),
+            name: "Minecraft for Windows".into(),
+            install_dir: None,
+            exes: vec!["minecraft.windows.exe".into()],
+            launch: Some("minecraft://".into()),
+            steam_appid: None,
+            platform_minutes: 0,
+            last_played: None,
+            already: false,
+        });
+    }
+    out
+}
+
+/// `<sürücü>:\XboxGames\<Oyun>\Content\MicrosoftGame.config` (Xbox uygulaması / Game Pass).
+pub fn xbox(roots: &[PathBuf]) -> Vec<Found> {
+    let mut out: Vec<Found> = Vec::new();
+    for root in roots {
+        let Ok(rd) = std::fs::read_dir(root) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let content = e.path().join("Content");
+            let Ok(xml) = std::fs::read_to_string(content.join("MicrosoftGame.config")) else {
+                continue;
+            };
+            let folder = e.file_name().to_string_lossy().into_owned();
+            // Minecraft başlatıcısı ayrıca ele alınıyor.
+            if folder.eq_ignore_ascii_case("Minecraft Launcher") {
+                continue;
+            }
+            let name = xml_attr(&xml, "ShellVisuals", "DefaultDisplayName")
+                .filter(|n| !n.starts_with("ms-resource"))
+                .unwrap_or_else(|| folder.clone());
+            let id = xml_attr(&xml, "Identity", "Name").unwrap_or_else(|| folder.clone());
+            let exe = xml_attr(&xml, "Executable", "Name");
+            if out.iter().any(|f| f.source_id == id) {
+                continue;
+            }
+            let mut exes = game_exes(&content);
+            if let Some(main) = exe
+                .as_deref()
+                .and_then(|x| Path::new(x).file_name())
+                .map(|n| n.to_string_lossy().to_lowercase())
+            {
+                if !exes.contains(&main) {
+                    exes.insert(0, main);
+                }
+            }
+            out.push(Found {
+                source: "xbox".into(),
+                source_id: id,
+                name,
+                install_dir: Some(content.to_string_lossy().into_owned()),
+                exes,
+                launch: exe.map(|x| content.join(x).to_string_lossy().into_owned()),
+                steam_appid: None,
+                platform_minutes: 0,
+                last_played: None,
+                already: false,
+            });
+        }
+    }
+    out
+}
+
+/// `<Tag ... Attr="değer"` → değer (basit; bu dosyalar için yeterli).
+fn xml_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {
+    // "<Executable" ararken "<ExecutableList>" eşleşmesin: etiket adından sonra boşluk gelmeli.
+    let open = format!("<{tag}");
+    let start = xml.match_indices(&open).map(|(i, _)| i).find(|&i| {
+        xml[i + open.len()..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
+    })?;
+    let rest = &xml[start..];
+    let end = rest.find('>').unwrap_or(rest.len());
+    let head = &rest[..end];
+    let key = format!("{attr}=\"");
+    let i = head.find(&key)? + key.len();
+    let v = &head[i..];
+    Some(v[..v.find('"')?].to_string()).filter(|s| !s.is_empty())
+}
+
+fn env_dir(key: &str) -> Option<PathBuf> {
+    std::env::var_os(key).map(PathBuf::from)
+}
+
 pub fn all() -> Vec<Found> {
     let mut out = steam_dir().map(|d| steam(&d)).unwrap_or_default();
     out.extend(epic_dir().map(|d| epic(&d)).unwrap_or_default());
     out.extend(riot_dir().map(|d| riot(&d)).unwrap_or_default());
+    if let (Some(appdata), Some(local)) = (env_dir("APPDATA"), env_dir("LOCALAPPDATA")) {
+        let mut launchers: Vec<PathBuf> = Vec::new();
+        for key in ["ProgramFiles(x86)", "ProgramFiles"] {
+            if let Some(p) = env_dir(key) {
+                launchers.push(p.join("Minecraft Launcher").join("MinecraftLauncher.exe"));
+            }
+        }
+        for letter in b'C'..=b'Z' {
+            launchers.push(PathBuf::from(format!(
+                "{}:\\XboxGames\\Minecraft Launcher\\Content\\Minecraft.exe",
+                letter as char
+            )));
+        }
+        out.extend(minecraft(&appdata, &local, &launchers));
+    }
+    if cfg!(windows) {
+        let roots: Vec<PathBuf> = (b'C'..=b'Z')
+            .map(|l| PathBuf::from(format!("{}:\\XboxGames", l as char)))
+            .filter(|p| p.is_dir())
+            .collect();
+        out.extend(xbox(&roots));
+    }
     out.sort_by_key(|f| f.name.to_lowercase());
     out
 }
@@ -444,6 +590,56 @@ pub fn all() -> Vec<Found> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minecraft_and_xbox_are_found() {
+        let root = std::env::temp_dir().join(format!("gmid-mc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let appdata = root.join("Roaming");
+        let local = root.join("Local");
+        std::fs::create_dir_all(appdata.join(".minecraft")).unwrap();
+        std::fs::create_dir_all(local.join("Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe"))
+            .unwrap();
+        let found = minecraft(&appdata, &local, &[root.join("yok.exe")]);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].exes, ["javaw.exe@minecraft"]);
+        assert!(found[0]
+            .launch
+            .as_deref()
+            .unwrap()
+            .contains("shell:AppsFolder"));
+        assert_eq!(found[1].launch.as_deref(), Some("minecraft://"));
+
+        let xg = root.join("XboxGames");
+        let fh = xg.join("Forza Horizon 5/Content");
+        std::fs::create_dir_all(&fh).unwrap();
+        std::fs::write(fh.join("ForzaHorizon5.exe"), "").unwrap();
+        std::fs::write(
+            fh.join("MicrosoftGame.config"),
+            r#"<Game configVersion="1"><Identity Name="Microsoft.624F8B84B80" Publisher="CN=x" Version="1"/>
+            <ExecutableList><Executable Name="ForzaHorizon5.exe" Id="Game"/></ExecutableList>
+            <ShellVisuals DefaultDisplayName="Forza Horizon 5" PublisherDisplayName="Xbox"/></Game>"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(xg.join("Minecraft Launcher/Content")).unwrap();
+        std::fs::write(
+            xg.join("Minecraft Launcher/Content/MicrosoftGame.config"),
+            "<Game/>",
+        )
+        .unwrap();
+        let x = xbox(&[xg]);
+        assert_eq!(x.len(), 1, "{x:?}");
+        assert_eq!(
+            (x[0].name.as_str(), x[0].source_id.as_str()),
+            ("Forza Horizon 5", "Microsoft.624F8B84B80")
+        );
+        assert!(x[0].exes.contains(&"forzahorizon5.exe".to_string()));
+        assert!(x[0]
+            .launch
+            .as_deref()
+            .unwrap()
+            .ends_with("ForzaHorizon5.exe"));
+    }
 
     #[test]
     fn riot_games_are_found() {

@@ -378,6 +378,8 @@
   }
   /** Fare alt çubuğun üstündeyken gizlenmez. */
   let overControls = $state(false);
+  /** Tam ekranda alt şeridin yüksekliği: görüntü tam olarak şeridin bittiği yerde biter. */
+  let ctlH = $state(0);
   function onWindowMove(e: PointerEvent) {
     if (!full) return;
     // Bazı sistemler fare kıpırdamadan da olay gönderir; gerçekten hareket edince uyan.
@@ -540,6 +542,7 @@
   class:idle
   class:mini
   class:isvideo={!item.audioOnly}
+  style:--ctlh={`${full && !idle ? ctlH : 0}px`}
   role={mini ? "region" : "dialog"}
   aria-label="Oynatıcı"
   tabindex="-1"
@@ -606,6 +609,9 @@
               {src}
               autoplay
               playsinline
+              disablepictureinpicture
+              controlslist="nodownload noplaybackrate noremoteplayback nofullscreen"
+              oncontextmenu={(e) => e.preventDefault()}
               onclick={toggle}
               ondblclick={toggleFull}
               {onplay}
@@ -745,7 +751,7 @@
     <!-- Kontroller gizliyken alt kenara gelen fare onları geri getirir. -->
     <div class="hot" role="presentation" onpointermove={wake} onpointerenter={wake}></div>
   {/if}
-  <footer class="ctl" onpointerenter={() => (overControls = true)} onpointerleave={() => (overControls = false)}>
+  <footer class="ctl" bind:offsetHeight={ctlH} onpointerenter={() => (overControls = true)} onpointerleave={() => (overControls = false)}>
     <div class="playing-now">
       <button class="nthumb" title={mini ? "Oynatıcıyı aç" : playing ? "Duraklat" : "Oynat"} onclick={() => (mini ? onexpand() : toggle())}>
         {#if item.thumbnail}<img src={thumb(item)} alt="" />{:else}<Icon name={item.audioOnly ? "headphones" : "film"} size={20} />{/if}
@@ -1007,16 +1013,16 @@
   .full .ctl { transition: opacity 0.3s; }
   .full.idle .ctl { opacity: 0; }
   .full.idle { cursor: none; }
-  /* Filmde tam ekran: görüntü bütün ekranı kaplar; kontroller altta ayrı bir şeritte (görüntünün
-     üstüne binmez, bazı ekran kartlarında görüntünün altında kalıp görünmüyordu). Fare durunca şerit
-     kalkar, görüntü bütün ekrana yayılır; fare kıpırdayınca ya da alta gelince geri gelir. */
-  .full.isvideo { grid-template-rows: minmax(0, 1fr) auto; background: #000; }
-  .full.isvideo .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "stage"; }
+  /* Filmde tam ekran: fare dururken görüntü bütün ekranı kaplar, hiçbir düğme görünmez. Fare kıpırdayınca
+     kontroller altta ayrı bir şeritte gelir ve görüntü şeridin bittiği yerde biter: hiçbir şey görüntünün üstüne
+     binmez (WebView2 bazı ekran kartlarında videonun üstündeki öğelerin arka planını siliyor, düğmeler yarı
+     saydam görünüyordu). Fare şeridin üstündeyken şerit kapanmaz. */
+  .full.isvideo { background: #000; }
   .full.isvideo .text { display: none; }
-  .full.isvideo .stage { padding: 0; }
-  .full.isvideo .vwrap { width: 100%; height: 100%; }
-  .full.isvideo video { width: 100%; height: 100%; max-height: none; object-fit: contain; border-radius: 0; }
-  .full.isvideo .ctl { border-top: 1px solid rgba(255, 255, 255, 0.08); background: #0b0c0e; }
+  .full.isvideo .vwrap { position: fixed; left: 0; right: 0; top: 0; bottom: var(--ctlh, 0px); width: auto; height: auto; z-index: 1; display: block; background: #000; }
+  /* Kutu ekranın kendisi; görüntü oranı bozulmadan sığar (4:3 film yanlarda siyah bantla, hiçbir yeri kesilmez). */
+  .full.isvideo video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: contain; border-radius: 0; }
+  .full.isvideo .ctl { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; border-top: 1px solid rgba(255, 255, 255, 0.08); background: #0b0c0e; }
   .full.isvideo.idle .ctl { display: none; }
   .hot { position: fixed; left: 0; right: 0; bottom: 0; height: 140px; z-index: 40; }
 
