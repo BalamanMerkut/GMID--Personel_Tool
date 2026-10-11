@@ -235,6 +235,16 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >   bir "uyandırma bölgesi" var. Mini videoda sağ üst kapat, sağ alt büyüt. Sesle yazmada yazılı OSD yerine
 >   ekranın alt ortasında yazısız gösterge (`dikte` penceresi): dinlerken mikrofon seviyesiyle oynayan dalga ve
 >   süre, yazıya dökerken üç nokta; zamanlayıcıyla değil durumla kapanır.
+> - **v0.17 — Faz 3b-1 (Kütüphanem + Oturum Geçmişi):** göç 9: `games` (kaynak + kaynak kimliği tekil; kurulum
+>   klasörü, exe listesi, başlatma adresi, Steam appid, kapak, bilgiler, platform süresi) ve `play_sessions`.
+>   "Oyunları tara": Steam (`libraryfolders.vdf`, `appmanifest_*.acf`, `localconfig.vdf` süreleri) ve Epic
+>   (`Manifests/*.item`) okunur, istediklerini seçip içe aktarırsın. Elle ekleme: çalışan pencereli
+>   uygulamalardan ya da .exe seçerek. Canlı algılama 5 sn'de bir süreç listesine bakar (kurulum klasörü ya da exe
+>   adı eşleşmesi; hiçbir şey enjekte edilmez); 30 sn'den kısa oturumlar silinir, açık oturum dakikada bir kaydedilir,
+>   uygulama çökerse açılışta kapatılır. Bilgi ve kapak: Steam mağazası (Türkçe açıklama, tür, geliştirici, yıl;
+>   `library_600x900` kapak `Kapaklar/Oyunlar/`). Kütüphanem: kapak ızgarası, kaynak süzgeci, arama, sıralama,
+>   "Şu an oynuyorsun" şeridi, ayrıntı penceresinde Oyna / Klasör / **Gerçek oynama** ve **Steam'deki süre** ayrı.
+>   Oturum Geçmişi: 7/30 gün, günlük yığılmış çubuk grafik (ilk 5 oyun renkli, gerisi "Diğer"), gün gün oturumlar.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -921,7 +931,7 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **1 — İskelet** ✅ *kodlandı* | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
 | **2 — Günlük araçlar** ✅ *kodlandı* | Ses & Mikrofon (kilit, kısayollar, ekran göstergesi), Notlar (+ hızlı not, yapışkan not), Hatırlatıcılar, Sayaç | Her gün kullandığın araçlar |
 | **3a — Sunucular** ✅ *kodlandı* | Topluluk ve kendi sunucuların, canlı oyuncu sayısı/harita, tek tıkla Bağlan, GitHub'dan güncellenen topluluk listesi | Discord'daki sunucuları uygulamadan görüp girmek |
-| **3b — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
+| **3b — Oyun** 🔨 *sürüyor (3b-1 kodlandı)* | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
@@ -996,6 +1006,9 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.17 | 2026-10-11 | Faz 3b-1 kodlandı: Kütüphanem (Steam/Epic tarama, elle ekleme, otomatik bilgi ve kapak, oyunu başlatma), canlı oyun algılama ve Oturum Geçmişi (grafik) |
+| v0.16 | 2026-10-11 | Kendi çalma listeleri, tam ekran kontrol şeridi, mini videoda kapat/büyüt, sesle yazmada alt ortada yazısız gösterge |
+| v0.15 | 2026-10-11 | Medya: Müzik ve Videolar sekmeleri, eski şarkılarda düz sözlerin hizalanması, sesle yazmada geri bildirim sesi ve hızlı açılış |
 | v0.14 | 2026-10-11 | Sesle yazma (Ctrl+Alt basılı tut): klavye kancası (AltGr ayrımı), WASAPI kayıt, whisper-server (NVIDIA CUDA ya da işlemci), yerel toparlama (Gemma 3 4B / llama.cpp), pano ile yapıştırma; Kontrol Odası → Sesle yazma |
 | v0.13 | 2026-10-11 | Medya Oynatıcı ayrı ekran ve arka planda çalma (mini oynatıcı), film tam ekranı düzeltildi, dublaj/altyazı seçimi (indirme, eklenti, oynatıcıda CC), MP3 sabit bit hızı; sesle yazma (Wispr Flow benzeri) araştırıldı |
 | v0.12 | 2026-10-11 | Geri bildirim turu: indirmelerde kendiliğinden yeniden deneme ve doğru hata mesajları, eklentide gizli HLS yakalama + iframe Referer + X/Instagram akışı, şarkı sözü veritabanı (LRCLIB), Whisper uydurma süzgeci ve dil tespiti, oynatıcı yeniden yazıldı (özel kontroller, liste görünümü, alt çalma çubuğu) |

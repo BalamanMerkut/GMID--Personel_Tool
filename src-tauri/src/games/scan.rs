@@ -1,0 +1,412 @@
+//! Kurulu oyunları bulur:
+//! - **Steam:** `libraryfolders.vdf` → her kütüphanedeki `appmanifest_<appid>.acf`; oynama süresi ve son
+//!   oynama `userdata/<hesap>/config/localconfig.vdf` içinden (API anahtarı gerekmez).
+//! - **Epic:** `C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests\*.item` (JSON). Epic süre tutmaz;
+//!   süre GMID'in kendi takibinden gelir.
+
+use super::vdf::{self, Vdf};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+/// Taramada bulunan (henüz kütüphaneye eklenmemiş olabilir) oyun.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Found {
+    pub source: String,
+    pub source_id: String,
+    pub name: String,
+    pub install_dir: Option<String>,
+    pub exes: Vec<String>,
+    pub launch: Option<String>,
+    pub steam_appid: Option<i64>,
+    /// Platformun tuttuğu süre (dakika).
+    pub platform_minutes: i64,
+    /// Platformun bildiği son oynama (ms).
+    pub last_played: Option<i64>,
+    /// Kütüphanede zaten var mı?
+    #[serde(default)]
+    pub already: bool,
+}
+
+/// Oyun olmayan Steam kayıtları (çalışma ortamları, sürücüler, araçlar).
+fn steam_skip(appid: &str, name: &str) -> bool {
+    const SKIP_IDS: &[&str] = &[
+        "228980", "1070560", "1391110", "1628350", "1493710", "250820",
+    ];
+    let n = name.to_lowercase();
+    SKIP_IDS.contains(&appid)
+        || n.contains("redistributable")
+        || n.starts_with("proton ")
+        || n.starts_with("steam linux runtime")
+        || n.starts_with("steamvr")
+        || n.contains("dedicated server")
+        || n.ends_with(" sdk")
+}
+
+/// Oyun klasöründeki .exe adları (kurulum, çökme bildirici, yükleyici gibi yardımcılar hariç).
+pub fn game_exes(dir: &Path) -> Vec<String> {
+    fn walk(dir: &Path, depth: usize, out: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let path = e.path();
+            let name = e.file_name().to_string_lossy().to_lowercase();
+            if path.is_dir() {
+                // Ön koşul kurulumları ve araç klasörleri atlanır.
+                if depth < 3
+                    && ![
+                        "_commonredist",
+                        "redist",
+                        "redistributables",
+                        "directx",
+                        "vcredist",
+                        "support",
+                        "__installer",
+                        "installers",
+                    ]
+                    .contains(&name.as_str())
+                {
+                    walk(&path, depth + 1, out);
+                }
+            } else if name.ends_with(".exe")
+                && ![
+                    "unins",
+                    "uninstall",
+                    "setup",
+                    "crash",
+                    "report",
+                    "redist",
+                    "vc_",
+                    "dxsetup",
+                    "dotnet",
+                    "ue4prereq",
+                    "installer",
+                    "updater",
+                    "cefsharp",
+                    "unitycrashhandler",
+                ]
+                .iter()
+                .any(|bad| name.contains(bad))
+                && !out.contains(&name)
+            {
+                out.push(name);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, 0, &mut out);
+    out.truncate(40);
+    out
+}
+
+fn read(path: &Path) -> Option<Vdf> {
+    std::fs::read_to_string(path).ok().map(|s| vdf::parse(&s))
+}
+
+/// Steam kütüphane klasörleri (ana klasör dahil).
+fn steam_libraries(steam: &Path) -> Vec<PathBuf> {
+    let mut libs = vec![steam.to_path_buf()];
+    if let Some(v) = read(&steam.join("steamapps").join("libraryfolders.vdf")) {
+        if let Some(m) = v.get("libraryfolders").and_then(Vdf::map) {
+            for (k, entry) in m {
+                if !k.chars().all(|c| c.is_ascii_digit()) {
+                    continue;
+                }
+                // Yeni biçim: { "path" "…" }, eski biçim: "1" "D:\\SteamLibrary"
+                let p = entry.get_str("path").or_else(|| entry.str());
+                if let Some(p) = p {
+                    let p = PathBuf::from(p);
+                    if !libs.iter().any(|l| {
+                        l.to_string_lossy()
+                            .eq_ignore_ascii_case(&p.to_string_lossy())
+                    }) {
+                        libs.push(p);
+                    }
+                }
+            }
+        }
+    }
+    libs
+}
+
+/// Bütün Steam hesaplarındaki oynama süreleri: appid → (dakika, son oynama ms).
+fn steam_playtimes(steam: &Path) -> HashMap<String, (i64, Option<i64>)> {
+    let mut out: HashMap<String, (i64, Option<i64>)> = HashMap::new();
+    let Ok(users) = std::fs::read_dir(steam.join("userdata")) else {
+        return out;
+    };
+    for u in users.flatten() {
+        let Some(v) = read(&u.path().join("config").join("localconfig.vdf")) else {
+            continue;
+        };
+        let Some(apps) = v
+            .path(&["UserLocalConfigStore", "Software", "Valve", "Steam", "apps"])
+            .and_then(Vdf::map)
+        else {
+            continue;
+        };
+        for (appid, a) in apps {
+            let minutes = a
+                .get_str("Playtime")
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let last = a
+                .get_str("LastPlayed")
+                .and_then(|s| s.parse::<i64>().ok())
+                .filter(|t| *t > 0)
+                .map(|t| t * 1000);
+            let e = out.entry(appid.clone()).or_insert((0, None));
+            e.0 = e.0.max(minutes);
+            e.1 = e.1.max(last);
+        }
+    }
+    out
+}
+
+pub fn steam(steam: &Path) -> Vec<Found> {
+    let times = steam_playtimes(steam);
+    let mut out: Vec<Found> = Vec::new();
+    for lib in steam_libraries(steam) {
+        let apps = lib.join("steamapps");
+        let Ok(rd) = std::fs::read_dir(&apps) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if !name.starts_with("appmanifest_") || !name.ends_with(".acf") {
+                continue;
+            }
+            let Some(v) = read(&e.path()) else {
+                continue;
+            };
+            let Some(st) = v.get("AppState") else {
+                continue;
+            };
+            let (Some(appid), Some(title)) = (st.get_str("appid"), st.get_str("name")) else {
+                continue;
+            };
+            if steam_skip(appid, title) || out.iter().any(|f| f.source_id == appid) {
+                continue;
+            }
+            let dir = st
+                .get_str("installdir")
+                .map(|d| apps.join("common").join(d))
+                .filter(|d| d.is_dir());
+            let (minutes, last) = times.get(appid).copied().unwrap_or((0, None));
+            out.push(Found {
+                source: "steam".into(),
+                source_id: appid.to_string(),
+                name: title.to_string(),
+                exes: dir.as_deref().map(game_exes).unwrap_or_default(),
+                install_dir: dir.map(|d| d.to_string_lossy().into_owned()),
+                launch: Some(format!("steam://rungameid/{appid}")),
+                steam_appid: appid.parse().ok(),
+                platform_minutes: minutes,
+                last_played: last,
+                already: false,
+            });
+        }
+    }
+    out
+}
+
+pub fn epic(manifests: &Path) -> Vec<Found> {
+    let mut out: Vec<Found> = Vec::new();
+    let Ok(rd) = std::fs::read_dir(manifests) else {
+        return out;
+    };
+    for e in rd.flatten() {
+        if e.path().extension().and_then(|x| x.to_str()) != Some("item") {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(e.path()) else {
+            continue;
+        };
+        let Ok(j) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let s = |k: &str| j[k].as_str().unwrap_or_default().to_string();
+        let (app, name, dir) = (s("AppName"), s("DisplayName"), s("InstallLocation"));
+        let incomplete = j["bIsIncompleteInstall"].as_bool().unwrap_or(false);
+        let is_game = j["AppCategories"]
+            .as_array()
+            .map_or(true, |c| c.iter().any(|x| x.as_str() == Some("games")));
+        if app.is_empty()
+            || name.is_empty()
+            || incomplete
+            || !is_game
+            || app.starts_with("UE_")
+            || out.iter().any(|f| f.source_id == app)
+        {
+            continue;
+        }
+        let dir_path = PathBuf::from(&dir);
+        let mut exes = if dir_path.is_dir() {
+            game_exes(&dir_path)
+        } else {
+            Vec::new()
+        };
+        if let Some(main) = Path::new(&s("LaunchExecutable"))
+            .file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+        {
+            if !exes.contains(&main) {
+                exes.insert(0, main);
+            }
+        }
+        out.push(Found {
+            source: "epic".into(),
+            launch: Some(format!(
+                "com.epicgames.launcher://apps/{app}?action=launch&silent=true"
+            )),
+            source_id: app,
+            name,
+            install_dir: (!dir.is_empty()).then_some(dir),
+            exes,
+            steam_appid: None,
+            platform_minutes: 0,
+            last_played: None,
+            already: false,
+        });
+    }
+    out
+}
+
+/// Bu bilgisayardaki Steam klasörü.
+pub fn steam_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        if let Some(p) = registry_string(r"Software\Valve\Steam", "SteamPath") {
+            let p = PathBuf::from(p.replace('/', "\\"));
+            if p.is_dir() {
+                return Some(p);
+            }
+        }
+        let p = PathBuf::from(r"C:\Program Files (x86)\Steam");
+        p.is_dir().then_some(p)
+    }
+    #[cfg(not(windows))]
+    {
+        let p = PathBuf::from(std::env::var_os("HOME")?).join(".steam/steam");
+        p.is_dir().then_some(p)
+    }
+}
+
+pub fn epic_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("ProgramData")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"));
+    let p = base.join(r"Epic\EpicGamesLauncher\Data\Manifests");
+    p.is_dir().then_some(p)
+}
+
+#[cfg(windows)]
+fn registry_string(key: &str, value: &str) -> Option<String> {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+    let mut buf = vec![0u16; 1024];
+    let mut len = (buf.len() * 2) as u32;
+    let r = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(key),
+            &HSTRING::from(value),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr() as *mut _),
+            Some(&mut len),
+        )
+    };
+    if r.is_err() {
+        return None;
+    }
+    let n = (len as usize / 2).saturating_sub(1);
+    Some(String::from_utf16_lossy(&buf[..n.min(buf.len())]))
+}
+
+/// Bütün kaynakları tarar.
+pub fn all() -> Vec<Found> {
+    let mut out = steam_dir().map(|d| steam(&d)).unwrap_or_default();
+    out.extend(epic_dir().map(|d| epic(&d)).unwrap_or_default());
+    out.sort_by_key(|f| f.name.to_lowercase());
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn steam_and_epic_are_found() {
+        let root = std::env::temp_dir().join(format!("gmid-scan-{}", std::process::id()));
+        let steam_root = root.join("Steam");
+        let lib2 = root.join("Lib2");
+        let apps = steam_root.join("steamapps");
+        std::fs::create_dir_all(apps.join("common/Hades II/bin")).unwrap();
+        std::fs::create_dir_all(lib2.join("steamapps/common/dota 2 beta")).unwrap();
+        std::fs::write(apps.join("common/Hades II/bin/Hades2.exe"), "").unwrap();
+        std::fs::write(apps.join("common/Hades II/unins000.exe"), "").unwrap();
+        std::fs::write(
+            apps.join("libraryfolders.vdf"),
+            format!(
+                "\"libraryfolders\" {{ \"0\" {{ \"path\" \"{}\" }} \"1\" {{ \"path\" \"{}\" }} }}",
+                steam_root.display(),
+                lib2.display()
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            apps.join("appmanifest_1145350.acf"),
+            "\"AppState\" { \"appid\" \"1145350\" \"name\" \"Hades II\" \"installdir\" \"Hades II\" }",
+        )
+        .unwrap();
+        std::fs::write(
+            apps.join("appmanifest_228980.acf"),
+            "\"AppState\" { \"appid\" \"228980\" \"name\" \"Steamworks Common Redistributables\" \"installdir\" \"x\" }",
+        )
+        .unwrap();
+        std::fs::write(
+            lib2.join("steamapps/appmanifest_570.acf"),
+            "\"AppState\" { \"appid\" \"570\" \"name\" \"Dota 2\" \"installdir\" \"dota 2 beta\" }",
+        )
+        .unwrap();
+        let cfg = steam_root.join("userdata/123/config");
+        std::fs::create_dir_all(&cfg).unwrap();
+        std::fs::write(
+            cfg.join("localconfig.vdf"),
+            "\"UserLocalConfigStore\" { \"Software\" { \"valve\" { \"Steam\" { \"apps\" { \"570\" { \"Playtime\" \"600\" \"LastPlayed\" \"1700000000\" } } } } } }",
+        )
+        .unwrap();
+
+        let mut found = steam(&steam_root);
+        found.sort_by_key(|f| f.name.clone());
+        assert_eq!(found.len(), 2, "çalışma ortamı atlanır");
+        assert_eq!(found[0].name, "Dota 2");
+        assert_eq!(found[0].platform_minutes, 600);
+        assert_eq!(found[0].last_played, Some(1_700_000_000_000));
+        assert_eq!(found[1].exes, ["hades2.exe"]);
+        assert_eq!(
+            found[1].launch.as_deref(),
+            Some("steam://rungameid/1145350")
+        );
+
+        let man = root.join("Manifests");
+        std::fs::create_dir_all(&man).unwrap();
+        std::fs::write(
+            man.join("a.item"),
+            r#"{"AppName":"Fortnite","DisplayName":"Fortnite","InstallLocation":"","LaunchExecutable":"FortniteGame/Binaries/Win64/FortniteLauncher.exe","AppCategories":["public","games"]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            man.join("b.item"),
+            r#"{"AppName":"UE_5.3","DisplayName":"Unreal Engine","InstallLocation":"","AppCategories":["engines"]}"#,
+        )
+        .unwrap();
+        let e = epic(&man);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].exes, ["fortnitelauncher.exe"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

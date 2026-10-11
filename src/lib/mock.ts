@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, DictationStatus, Download, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Countdown, Device, DictationStatus, Download, Game, PlaySession, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
@@ -154,6 +154,47 @@ const probeResult: Probe = {
   audioLangs: [{ code: "tur", label: "Türkçe" }, { code: "eng", label: "İngilizce" }],
   subtitles: [{ code: "tr", label: "Türkçe" }, { code: "en", label: "İngilizce" }, { code: "de", label: "Almanca" }],
 };
+
+// ---- Oyunlar ----
+const gameNames: [string, string, string, number, string[], number][] = [
+  // ad, kaynak, renk, Steam dakikası, türler, yıl
+  ["Hades II", "steam", "#7848a8", 2950, ["Aksiyon", "Bağımsız", "RPG"], 2025],
+  ["Counter-Strike 2", "steam", "#c9a35a", 41230, ["Aksiyon", "Ücretsiz Oyna"], 2023],
+  ["Elden Ring", "steam", "#8a7646", 9380, ["Aksiyon", "RPG"], 2022],
+  ["Stardew Valley", "steam", "#5cc08a", 4410, ["Bağımsız", "RPG", "Simülasyon"], 2016],
+  ["Fortnite", "epic", "#35a0a2", 0, ["Aksiyon"], 2017],
+  ["Valorant", "manual", "#e06a6a", 0, ["Aksiyon"], 2020],
+  ["Minecraft", "manual", "#5c8a3a", 0, ["Macera"], 2011],
+];
+const libGames: Game[] = gameNames.map(([name, source, color, minutes, genres, year], i) => ({
+  id: `g${i}`, name, source: source as Game["source"], sourceId: String(1000 + i), installDir: null, exes: [], launch: null,
+  steamAppid: source === "steam" ? 1000 + i : null, cover: thumb(color, "#121417", name.toUpperCase()), header: null,
+  developer: ["Supergiant Games", "Valve", "FromSoftware", "ConcernedApe", "Epic Games", "Riot Games", "Mojang"][i],
+  publisher: null, year, description: "Kısa oyun açıklaması Steam mağazasından Türkçe gelir.", genres, categories: ["Tek oyunculu"],
+  platformMinutes: minutes, platformLastPlayed: null, hidden: false, addedAt: now() - 9 * 86_400_000,
+  playedSeconds: 0, sessions: 0, lastPlayed: null, runningSince: null,
+}));
+const playSessions: PlaySession[] = [];
+{
+  const weights = [5, 4, 2, 2, 1, 2, 1];
+  let k = 0;
+  for (let day = 20; day >= 0; day--) {
+    const n = (day * 7 + 3) % 4;
+    for (let j = 0; j < n; j++) {
+      const gi = (day * 3 + j * 5) % libGames.length;
+      const secs = Math.round((25 + ((day * 37 + j * 53) % 140)) * 60 * (weights[gi] / 3 + 0.4));
+      const start = now() - day * 86_400_000 - (j + 1) * 4 * 3_600_000;
+      playSessions.push({ id: `s${k++}`, gameId: libGames[gi].id, startedAt: start, endedAt: start + secs * 1000, seconds: secs });
+    }
+  }
+  for (const g of libGames) {
+    const mine = playSessions.filter((s) => s.gameId === g.id);
+    g.playedSeconds = mine.reduce((t, s) => t + s.seconds, 0);
+    g.sessions = mine.length;
+    g.lastPlayed = mine.length ? Math.max(...mine.map((s) => s.endedAt ?? s.startedAt)) : null;
+  }
+  libGames[0].runningSince = now() - 47 * 60_000;
+}
 
 // ---- Kendi çalma listeleri ----
 const userPlaylists: UserPlaylist[] = [];
@@ -476,6 +517,30 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         : ["This world belongs to all of us.", "We have to protect it.", "Look, the seas are crying.", "And what are we doing?"];
       return Array.from({ length: 40 }, (_, i) => ({ start: 1 + i * 3, end: 3.6 + i * 3, text: lines[i % 4] }));
     }
+    case "games_list":
+      return libGames;
+    case "games_scan":
+      await new Promise((r) => setTimeout(r, 900));
+      return [
+        ...libGames.filter((g) => g.source !== "manual").map((g) => ({ source: g.source, sourceId: g.sourceId, name: g.name, installDir: null, exes: [], launch: null, steamAppid: g.steamAppid, platformMinutes: g.platformMinutes, lastPlayed: null, already: true })),
+        { source: "steam", sourceId: "413150", name: "Baldur's Gate 3", installDir: "D:\\SteamLibrary\\steamapps\\common\\Baldurs Gate 3", exes: ["bg3.exe"], launch: null, steamAppid: 1086940, platformMinutes: 6120, lastPlayed: now() - 20 * 86_400_000, already: false },
+        { source: "epic", sourceId: "Kinglet", name: "Rocket League", installDir: null, exes: [], launch: null, steamAppid: null, platformMinutes: 0, lastPlayed: null, already: false },
+      ];
+    case "games_import":
+      return (a.found as unknown[]).length;
+    case "games_running_apps":
+      return [{ name: "riotclientux.exe", path: "c:\\riot games\\riot client\\riotclientux.exe", title: "Riot Client" }];
+    case "games_add_manual":
+    case "games_set_hidden":
+    case "games_rename":
+    case "games_remove":
+    case "games_refresh_meta":
+    case "games_launch":
+    case "games_reveal":
+      if (cmd === "games_set_hidden") libGames.find((g) => g.id === a.id)!.hidden = a.hidden as boolean;
+      return;
+    case "games_sessions":
+      return playSessions.filter((s) => (s.endedAt ?? s.startedAt) >= (a.since as number));
     case "playlists_list":
       return userPlaylists;
     case "playlist_save": {

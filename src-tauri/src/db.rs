@@ -111,6 +111,46 @@ const MIGRATIONS: &[&str] = &[
         position    INTEGER NOT NULL,
         PRIMARY KEY (playlist_id, download_id)
     );",
+    // 9 — oyun kütüphanesi ve oynama oturumları (Faz 3b)
+    "CREATE TABLE games (
+        id                   TEXT PRIMARY KEY,
+        name                 TEXT NOT NULL,
+        -- steam | epic | manual
+        source               TEXT NOT NULL,
+        -- Steam appid, Epic AppName ya da (elle) exe yolu
+        source_id            TEXT NOT NULL,
+        install_dir          TEXT,
+        -- küçük harfli exe adları (JSON)
+        exes                 TEXT NOT NULL DEFAULT '[]',
+        -- başlatma: steam://…, com.epicgames.launcher://… ya da exe yolu
+        launch               TEXT,
+        -- bilgi ve kapak için Steam mağaza kimliği (Epic/elle eklenende de bulunabilir)
+        steam_appid          INTEGER,
+        cover                TEXT,
+        header               TEXT,
+        developer            TEXT,
+        publisher            TEXT,
+        year                 INTEGER,
+        description          TEXT,
+        genres               TEXT NOT NULL DEFAULT '[]',
+        categories           TEXT NOT NULL DEFAULT '[]',
+        -- platformun kendi tuttuğu süre (Steam, dakika) ve son oynama
+        platform_minutes     INTEGER NOT NULL DEFAULT 0,
+        platform_last_played INTEGER,
+        hidden               INTEGER NOT NULL DEFAULT 0,
+        meta_at              INTEGER,
+        added_at             INTEGER NOT NULL,
+        UNIQUE (source, source_id)
+    );
+    CREATE TABLE play_sessions (
+        id         TEXT PRIMARY KEY,
+        game_id    TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+        started_at INTEGER NOT NULL,
+        ended_at   INTEGER,
+        seconds    INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX play_sessions_game ON play_sessions (game_id, started_at);
+    CREATE INDEX play_sessions_time ON play_sessions (started_at);",
 ];
 
 pub struct Db(Mutex<Connection>);

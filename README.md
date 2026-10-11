@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı; Faz 3b (Oyun) sürüyor — Kütüphanem ve Oturum Geçmişi hazır. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -18,6 +18,17 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 **Ek bilgi → Yine de çalıştır**.
 
 ## Neler var?
+
+### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)
+
+- **Oyunları tara:** Steam ve Epic'te kurulu oyunlar (Steam'in tuttuğu süreyle) bulunur; istediklerini seçip eklersin.
+  Tanınmayan oyunlar: **Oyun ekle** → çalışan uygulamalardan seç ya da .exe göster.
+- **Canlı algılama (Discord gibi):** 5 saniyede bir çalışan programlara bakılır; kütüphanedeki bir oyun açılınca
+  oturum başlar, kapanınca biter. Oyuna hiçbir şey enjekte edilmez (anti-cheat güvenli). 30 saniyeden kısa açılışlar
+  sayılmaz. Kontrol Odası'ndan kapatılabilir.
+- **Kütüphanem:** kapak ızgarası (kapak ve bilgiler Steam mağazasından kendiliğinden, Türkçe), arama, kaynak süzgeci,
+  sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
+- **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
 
 ### Faz 5 — Video İndirici
 

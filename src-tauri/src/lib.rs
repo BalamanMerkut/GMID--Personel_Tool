@@ -4,6 +4,7 @@ mod commands;
 mod db;
 mod dictation;
 mod downloader;
+mod games;
 mod hotkeys;
 mod log;
 mod net;
@@ -97,6 +98,7 @@ pub fn run() {
             app.manage(downloader::bridge::Bridge::default());
             app.manage(transcript::Transcriber::default());
             app.manage(dictation::Dictation::default());
+            app.manage(games::Games::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -108,6 +110,7 @@ pub fn run() {
             scheduler::start(handle.clone());
             downloader::bridge::start(handle.clone());
             dictation::apply(handle);
+            games::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -218,6 +221,18 @@ pub fn run() {
             commands::transcripts::whisper_status,
             commands::transcripts::whisper_install,
             commands::dictation::dictation_status,
+            commands::games::games_list,
+            commands::games::games_scan,
+            commands::games::games_import,
+            commands::games::games_add_manual,
+            commands::games::games_running_apps,
+            commands::games::games_set_hidden,
+            commands::games::games_rename,
+            commands::games::games_remove,
+            commands::games::games_refresh_meta,
+            commands::games::games_sessions,
+            commands::games::games_launch,
+            commands::games::games_reveal,
             commands::dictation::dictation_apply,
             commands::dictation::dictation_install,
             commands::dictation::dictation_warm_up,
@@ -238,6 +253,11 @@ pub fn run() {
                     }
                     if let Some(d) = app.try_state::<dictation::Dictation>() {
                         d.engine.shutdown();
+                    }
+                    if let (Some(g), Some(db)) =
+                        (app.try_state::<games::Games>(), app.try_state::<db::Db>())
+                    {
+                        g.shutdown(&db);
                     }
                 }
                 _ => {}

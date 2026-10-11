@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, FoundGame, Game, PlaySession, RunningApp, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -226,6 +226,34 @@ export const api = {
     pair: () => call<string>("bridge_pair"),
     unpair: () => call<void>("bridge_unpair"),
     installExtension: () => call<string>("extension_install"),
+  },
+
+  games: {
+    list: () => call<Game[]>("games_list"),
+    /** Steam ve Epic'te kurulu oyunlar (eklemez). */
+    scan: () => call<FoundGame[]>("games_scan"),
+    import: (found: FoundGame[]) => call<number>("games_import", { found }),
+    addManual: (name: string, exe: string) => call<void>("games_add_manual", { name, exe }),
+    runningApps: () => call<RunningApp[]>("games_running_apps"),
+    setHidden: (id: string, hidden: boolean) => call<void>("games_set_hidden", { id, hidden }),
+    rename: (id: string, name: string) => call<void>("games_rename", { id, name }),
+    remove: (id: string) => call<void>("games_remove", { id }),
+    refreshMeta: (id: string) => call<void>("games_refresh_meta", { id }),
+    sessions: (since: number) => call<PlaySession[]>("games_sessions", { since }),
+    launch: (id: string) => call<void>("games_launch", { id }),
+    reveal: (id: string) => call<void>("games_reveal", { id }),
+    /** Oyunun .exe dosyasını seçtirir. */
+    pickExe: async (): Promise<string | null> => {
+      if (!inTauri) return "C:\\Oyunlar\\Deneme\\Deneme.exe";
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        title: "Oyunun .exe dosyasını seç",
+        filters: [{ name: "Oyun", extensions: ["exe"] }],
+      });
+      return typeof picked === "string" ? picked : null;
+    },
   },
 
   dictation: {

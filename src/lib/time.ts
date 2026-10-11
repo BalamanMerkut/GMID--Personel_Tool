@@ -66,3 +66,13 @@ export function fromInputs(date: string, time: string): number | null {
   if (![y, mo, d, h, mi].every(Number.isFinite)) return null;
   return new Date(y, mo - 1, d, h, mi, 0, 0).getTime();
 }
+
+/** Oynama süresi: 45 sn → "1 dk", 3 sa 12 dk → "3 sa 12 dk", 120 sa → "120 sa". */
+export function playtime(seconds: number): string {
+  const m = Math.round(seconds / 60);
+  if (m < 1) return seconds > 0 ? "1 dk" : "0 dk";
+  if (m < 60) return `${m} dk`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return h >= 20 || rest === 0 ? `${h} sa` : `${h} sa ${rest} dk`;
+}

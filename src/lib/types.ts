@@ -400,3 +400,62 @@ export interface UserPlaylist {
   /** Sıralı indirme kimlikleri. */
   items: string[];
 }
+
+/** Kütüphanedeki oyun. */
+export interface Game {
+  id: string;
+  name: string;
+  source: "steam" | "epic" | "manual";
+  sourceId: string;
+  installDir: string | null;
+  exes: string[];
+  launch: string | null;
+  steamAppid: number | null;
+  cover: string | null;
+  header: string | null;
+  developer: string | null;
+  publisher: string | null;
+  year: number | null;
+  description: string | null;
+  genres: string[];
+  categories: string[];
+  /** Platformun (Steam) tuttuğu süre, dakika. */
+  platformMinutes: number;
+  platformLastPlayed: number | null;
+  hidden: boolean;
+  addedAt: number;
+  /** GMID'in ölçtüğü gerçek oynama (saniye). */
+  playedSeconds: number;
+  sessions: number;
+  lastPlayed: number | null;
+  /** Şu an açıksa başlangıcı (ms). */
+  runningSince: number | null;
+}
+
+/** Taramada bulunan oyun. */
+export interface FoundGame {
+  source: "steam" | "epic" | "manual";
+  sourceId: string;
+  name: string;
+  installDir: string | null;
+  exes: string[];
+  launch: string | null;
+  steamAppid: number | null;
+  platformMinutes: number;
+  lastPlayed: number | null;
+  already: boolean;
+}
+
+export interface PlaySession {
+  id: string;
+  gameId: string;
+  startedAt: number;
+  endedAt: number | null;
+  seconds: number;
+}
+
+export interface RunningApp {
+  name: string;
+  path: string;
+  title: string;
+}
