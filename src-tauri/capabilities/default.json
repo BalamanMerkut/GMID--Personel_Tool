@@ -8,7 +8,8 @@
     "sticky-*",
     "osd",
     "dikte",
-    "alerts"
+    "alerts",
+    "panel"
   ],
   "permissions": [
     "core:default",

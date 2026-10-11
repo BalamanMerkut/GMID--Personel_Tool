@@ -17,6 +17,7 @@
   import Sessions from "./lib/screens/Sessions.svelte";
   import Archive from "./lib/screens/Archive.svelte";
   import Clips from "./lib/screens/Clips.svelte";
+  import GameMode from "./lib/screens/GameMode.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
@@ -149,6 +150,8 @@
           <Media onnavigate={navigate} />
         {:else if route === "library"}
           <Library />
+        {:else if route === "gamemode"}
+          <GameMode />
         {:else if route === "clips"}
           <Clips onnavigate={navigate} />
         {:else if route === "archive"}

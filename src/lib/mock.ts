@@ -236,6 +236,9 @@ const suggestions = [
   { path: "c:\\oyunlar\\hollow knight\\hollow_knight.exe", exe: "hollow_knight.exe", name: "Hollow Knight", reason: "fullscreen" as const, seenAt: now() - 3 * 86_400_000 },
 ];
 
+// ---- Oyun Modu ----
+let gameMode = { active: false, reason: null as "manual" | "auto" | null, since: null as number | null, quiet: true, stopBackground: true };
+
 // ---- Kliplerim ----
 const clipList: Clip[] = (
   [
@@ -613,6 +616,14 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return;
     }
     case "games_set_cover":
+      return;
+    case "gamemode_status":
+      return gameMode;
+    case "gamemode_set":
+      gameMode = a.on ? { ...gameMode, active: true, reason: "manual", since: now() } : { ...gameMode, active: false, reason: null, since: null };
+      emit("gamemode", gameMode);
+      return gameMode;
+    case "panel_hide":
       return;
     case "clips_list":
       return clipList;

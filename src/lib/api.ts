@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameSuggestion, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -303,6 +303,17 @@ export const api = {
     },
   },
 
+  gamemode: {
+    status: () => call<GameModeStatus>("gamemode_status"),
+    /** Açar/kapatır; kapatınca değiştirilenler geri alınır. */
+    set: (on: boolean) => call<GameModeStatus>("gamemode_set", { on }),
+  },
+
+  panel: {
+    /** Oyun İçi Panel'i kapatır, odak oyuna döner. */
+    hide: () => call<void>("panel_hide"),
+  },
+
   reviews: {
     list: () => call<Review[]>("reviews_list"),
     save: (input: ReviewInput) => call<Review>("review_save", { input }),
@@ -336,7 +347,7 @@ export const api = {
 };
 
 /** Bu pencerenin görevi: ana pencere, gösterge, uyarılar, hızlı not ya da yapışkan not. */
-export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" | "sticky" | "dikte"; id?: string } {
+export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" | "sticky" | "dikte" | "panel"; id?: string } {
   let label = "main";
   if (inTauri) {
     const meta = (window as unknown as { __TAURI_INTERNALS__: { metadata?: { currentWindow?: { label?: string } } } })
@@ -346,7 +357,7 @@ export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" |
     label = new URLSearchParams(location.search).get("view") ?? "main";
   }
   if (label.startsWith("sticky-")) return { kind: "sticky", id: label.slice(7) };
-  if (label === "osd" || label === "alerts" || label === "quicknote" || label === "dikte") return { kind: label };
+  if (label === "osd" || label === "alerts" || label === "quicknote" || label === "dikte" || label === "panel") return { kind: label };
   return { kind: "main" };
 }
 

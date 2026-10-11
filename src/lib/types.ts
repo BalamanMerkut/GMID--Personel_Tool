@@ -551,3 +551,24 @@ export interface ClipRoot {
   custom: boolean;
   exists: boolean;
 }
+
+/** Oyun Modu ayarları (`gamemode.profile`). */
+export interface GameModeProfile {
+  /** Kütüphanedeki bir oyun açılınca kendiliğinden. */
+  auto: boolean;
+  power: boolean;
+  /** Geçilecek ses çıkışı; null değiştirme. */
+  output: string | null;
+  micLock: boolean;
+  quiet: boolean;
+  stopBackground: boolean;
+  closeApps: string[];
+}
+
+export interface GameModeStatus {
+  active: boolean;
+  reason: "manual" | "auto" | null;
+  since: number | null;
+  quiet: boolean;
+  stopBackground: boolean;
+}

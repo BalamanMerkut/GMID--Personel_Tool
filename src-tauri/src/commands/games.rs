@@ -231,3 +231,31 @@ pub fn games_suggestion_answer(
     app.state::<Games>()
         .answer_suggestion(&app, &path, &action, name)
 }
+
+// ---- Oyun Modu ----
+
+#[tauri::command]
+pub fn gamemode_status(gm: State<'_, crate::gamemode::GameMode>) -> crate::gamemode::Status {
+    gm.status()
+}
+
+/// Elle açar/kapatır; kapatınca her şey geri alınır.
+#[tauri::command]
+pub async fn gamemode_set(app: AppHandle, on: bool) -> CmdResult<crate::gamemode::Status> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let gm = app.state::<crate::gamemode::GameMode>();
+        if on {
+            gm.enable(&app, "manual")
+        } else {
+            gm.disable(&app)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Oyun İçi Panel'i kapatır, odağı oyuna geri verir.
+#[tauri::command]
+pub fn panel_hide(app: AppHandle) {
+    crate::panel::hide(&app);
+}

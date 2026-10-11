@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { api, isVideo } from "../api";
+  import { on } from "../bus";
+  import type { GameModeStatus } from "../types";
   import { settings } from "../settings.svelte";
 
   /**
@@ -16,7 +19,14 @@
 
   const src = $derived(settings.bgKind === "file" && settings.bgPath ? api.fileSrc(settings.bgPath) : "");
   const kind = $derived(!src ? "none" : isVideo(settings.bgPath) ? "video" : /\.gif$/i.test(settings.bgPath) ? "gif" : "image");
-  const moving = $derived(active && quality === "high");
+  // Oyun Modu "hareketli arka planı durdur" derse durur.
+  let gm = $state<GameModeStatus | null>(null);
+  onMount(() => {
+    void api.gamemode.status().then((s) => (gm = s)).catch(() => {});
+    const stop = on<GameModeStatus>("gamemode", (s) => (gm = s));
+    return () => void stop.then((f) => f());
+  });
+  const moving = $derived(active && quality === "high" && !(gm?.active && gm.stopBackground));
   const blur = $derived(quality === "high" ? settings.bgBlur : 0);
   const pos = $derived(FOCUS[settings.bgFocus]);
 

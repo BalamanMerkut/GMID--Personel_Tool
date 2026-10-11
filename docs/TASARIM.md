@@ -971,7 +971,7 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **3a — Sunucular** ✅ *kodlandı* | Topluluk ve kendi sunucuların, canlı oyuncu sayısı/harita, tek tıkla Bağlan, GitHub'dan güncellenen topluluk listesi | Discord'daki sunucuları uygulamadan görüp girmek |
 | **3b — Oyun** ✅ *kodlandı* | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
-| **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
+| **4 — Oyun içi deneyim** ✅ *kodlandı* | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
 | **6 — Film & Dizi + Kurulum** | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
 | **7 — Öneriler** | Onaylanan ek özellikler (ücretsiz oyunlar, Wrapped, Rich Presence…) | v1.x |
@@ -1044,6 +1044,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.23 | 2026-10-11 | Faz 4 kodlandı: **Oyun Modu** (güç planı yüksek performans, seçilen ses çıkışı, mikrofon kilidi, sessiz, hareketli arka plan durur, seçilen uygulamalar kapanır; elle, Ctrl+Alt+O ya da oyun açılınca kendiliğinden; kapanınca ve uygulama kapanırken geri alınır) ve **Oyun İçi Panel** (Ctrl+Shift+G, oyunun bulunduğu ekranın üstünde yarı saydam: ses, mikrofon, Oyun Modu, sayaç, oyuna not, son klip ve Discord'a sığdır, hatırlatıcılar; Esc ile kapanır, odak oyuna döner) |
 | v0.22 | 2026-10-11 | Geri bildirim: video küçük resimleri kaybolmuyor (aynı videonun iki indirmesi ortak resmi silmiyordu → kontrol; eksik/bozuk resimler açılışta ve kartta onarılır: siteden ya da videodan kare, müzikte gömülü kapak), Kliplerim kartında sil (ilk tık "Sil?"), sesle yazma göstergesi inceltildi (34 px), Steam dışı oyunlara Microsoft Store'un dikey posteri (Minecraft; yoksa Wikipedia; göç 14), oyun tam ekranken görünmeyen "Kütüphaneye ekleyeyim mi?" kartı oyun kapanınca yeniden gösterilir |
 | v0.21 | 2026-10-11 | Geri bildirim: tam ekran video ekrana tam sığıyor (alt kısmı kesilmiyor, 4:3 yanlarda bantla), fare dururken hiçbir düğme yok, kontroller görüntünün üstüne binmiyor; tarayıcının sağ tık menüsü kapatıldı; Minecraft (Java: pencere başlığıyla, Bedrock) ve Xbox uygulaması oyunları taramada; Steam dışı oyunlara Wikipedia'dan kapak; kütüphanede olmayan oyun açılınca "Kütüphaneye ekleyeyim mi?" (Discord'un bilinen oyunlar listesi + tam ekran ipucu; göç 13) |
 | v0.20 | 2026-10-11 | Geri bildirim: sesle yazma göstergesi takılı kalmıyor (pencere Windows'a doğrudan gizletiliyor + gösterge kendi güvenlik ağı), Riot oyunları (League of Legends, VALORANT) taramada, elle kapak seçme, puan kartında önce durum ("İstiyorum"da puan yok; göç 12), format yedeğine GMID ayarları ve geçmişi (§3.9) |

@@ -250,7 +250,8 @@ pub fn system_notification(app: &AppHandle, setting: &str, title: &str, body: &s
     let enabled = app
         .state::<crate::db::Db>()
         .setting_json::<bool>(setting)
-        .unwrap_or(true);
+        .unwrap_or(true)
+        && !app.state::<crate::gamemode::GameMode>().is_quiet();
     if !enabled {
         return;
     }
@@ -397,10 +398,12 @@ fn show_no_activate(w: &WebviewWindow) {
 
 /// Windows'un kendi bildirim sesi (ayarlardan kapatılabilir).
 fn play_notification_sound(app: &AppHandle) {
+    // Oyun Modu "sessiz" ise çalmaz.
     let enabled = app
         .state::<crate::db::Db>()
         .setting_json::<bool>("reminders.sound")
-        .unwrap_or(true);
+        .unwrap_or(true)
+        && !app.state::<crate::gamemode::GameMode>().is_quiet();
     #[cfg(windows)]
     if enabled {
         unsafe {

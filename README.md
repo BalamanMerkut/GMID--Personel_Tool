@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular), Faz 3b (Oyun: Kütüphanem, Oturum Geçmişi, Oyun Arşivi, Kliplerim) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular), Faz 3b (Oyun: Kütüphanem, Oturum Geçmişi, Oyun Arşivi, Kliplerim), Faz 4 (Oyun Modu, Oyun İçi Panel) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -33,6 +33,17 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 - **Kütüphanem:** kapak ızgarası (kapak ve bilgiler Steam mağazasından kendiliğinden, Türkçe), arama, kaynak süzgeci,
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
+
+### Faz 4 — Oyun içi deneyim
+
+- **Oyun Modu** (Oyun Salonu → Oyun Modu, kısayol **Ctrl+Alt+O**): güç planı yüksek performansa geçer, seçtiğin ses
+  çıkışına (ör. kulaklık) geçilir, mikrofon seviyesi kilitlenir, GMID'in sesleri ve Windows bildirimleri susar, hareketli
+  arka plan durur, seçtiğin uygulamalar (ör. tarayıcı) kapanır. İstersen kütüphanendeki bir oyun açılınca kendiliğinden
+  açılır, son oyun kapanınca kapanır. Kapanınca (uygulama kapanırken de) her şey eski haline döner.
+- **Oyun İçi Panel** (**Ctrl+Shift+G**): oyunun bulunduğu ekranın üstünde yarı saydam panel — ses çıkışı ve seviyesi,
+  mikrofon (seviye, sessize alma, kilit), Oyun Modu, sayaç (5/15/30 dk mola), o oyuna not (Notlar'da da görünür), son
+  klip (Discord'a sığdır), yaklaşan hatırlatıcılar. Esc ya da aynı tuşla kapanır, oyuna geri dönersin. Oyuna hiçbir şey
+  eklenmez; çerçevesiz ya da pencereli oyunlarda görünür.
 
 ### Faz 3b — Oyun (3. bölüm: Kliplerim)
 

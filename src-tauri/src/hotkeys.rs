@@ -67,6 +67,18 @@ pub const ACTIONS: &[Action] = &[
         default: "Ctrl+Alt+G",
     },
     Action {
+        id: "gamemode.toggle",
+        group: "Oyun",
+        label: "Oyun Modu'nu aç / kapat",
+        default: "Ctrl+Alt+O",
+    },
+    Action {
+        id: "panel.toggle",
+        group: "Oyun",
+        label: "Oyun İçi Panel'i aç / kapat",
+        default: "Ctrl+Shift+G",
+    },
+    Action {
         id: "videos.clipboard",
         group: "Video İndirici",
         label: "Panodaki bağlantıyı indir (önerilen kalite)",
@@ -222,6 +234,10 @@ fn run(app: &AppHandle, action: &str) {
         "note.quick" => window::open_quick_note(app),
         "app.show" => window::show_main(app),
         "videos.clipboard" => download_clipboard(app),
+        "gamemode.toggle" => {
+            app.state::<crate::gamemode::GameMode>().toggle(app);
+        }
+        "panel.toggle" => crate::panel::toggle(app),
         _ => {}
     }
 }

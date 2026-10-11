@@ -5,12 +5,14 @@ mod commands;
 mod db;
 mod dictation;
 mod downloader;
+mod gamemode;
 mod games;
 mod hotkeys;
 mod log;
 mod net;
 mod notes;
 mod overlay;
+mod panel;
 mod paths;
 mod playlists;
 mod reminders;
@@ -101,6 +103,8 @@ pub fn run() {
             app.manage(transcript::Transcriber::default());
             app.manage(dictation::Dictation::default());
             app.manage(games::Games::default());
+            app.manage(gamemode::GameMode::default());
+            app.manage(panel::Panel::default());
             app.manage(clips::Clips::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
@@ -246,6 +250,9 @@ pub fn run() {
             commands::games::games_set_cover,
             commands::games::games_suggestions,
             commands::games::games_suggestion_answer,
+            commands::games::gamemode_status,
+            commands::games::gamemode_set,
+            commands::games::panel_hide,
             commands::games::games_store_search,
             commands::games::games_add_archive,
             commands::games::reviews_list,
@@ -286,6 +293,10 @@ pub fn run() {
                         (app.try_state::<games::Games>(), app.try_state::<db::Db>())
                     {
                         g.shutdown(&db);
+                    }
+                    // Oyun Modu açıksa güç planı, ses çıkışı ve kilit geri alınsın.
+                    if let Some(gm) = app.try_state::<gamemode::GameMode>() {
+                        gm.restore(app, false);
                     }
                 }
                 _ => {}

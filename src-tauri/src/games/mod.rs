@@ -557,6 +557,9 @@ impl Games {
         if self.step(&app.state::<Db>(), &procs, &titles) {
             let _ = app.emit("games-changed", ());
         }
+        let any = !self.running_ids().is_empty();
+        app.state::<crate::gamemode::GameMode>()
+            .follow_games(app, any);
     }
 
     /// Algılamanın kendisi; bir oyun açıldı ya da kapandıysa `true`.
