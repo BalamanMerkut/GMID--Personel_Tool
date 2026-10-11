@@ -221,7 +221,7 @@ fn write_mirror(db: &Db, dir: &Path, note: &Note) {
         format!("# {}\n\n{}\n", note.title.trim(), note.body.trim_end())
     };
     if let Err(e) = std::fs::write(dir.join(&name), content) {
-        eprintln!("Not dosyası yazılamadı: {e}");
+        crate::log!("Not dosyası yazılamadı: {e}");
         return;
     }
     let old: Option<String> = db

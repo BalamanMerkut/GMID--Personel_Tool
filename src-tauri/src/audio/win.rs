@@ -153,7 +153,7 @@ pub(super) fn spawn(app: AppHandle, lock: Option<f32>) -> Sender<Cmd> {
                 }
                 Err(e) => {
                     let msg = format!("Ses servisi başlatılamadı: {e}");
-                    eprintln!("{msg}");
+                    crate::log!("{msg}");
                     for cmd in rx {
                         reply_error(cmd, &msg);
                     }

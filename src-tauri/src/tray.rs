@@ -41,9 +41,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" => {
-                let _ = window::show_main(app);
-            }
+            "open" => window::show_main(app),
             "settings" => navigate(app, "settings"),
             "folder" => {
                 let dir = app.state::<DataDir>();
@@ -51,9 +49,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                     .opener()
                     .open_path(dir.root().to_string_lossy(), None::<&str>);
             }
-            "note" => {
-                let _ = window::open_quick_note(app);
-            }
+            "note" => window::open_quick_note(app),
             "mute" => {
                 let app = app.clone();
                 std::thread::spawn(move || hotkeys::mic(&app, MicOp::ToggleMute));
@@ -87,7 +83,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                let _ = window::show_main(tray.app_handle());
+                window::show_main(tray.app_handle());
             }
         });
     if let Some(icon) = app.default_window_icon() {
@@ -103,7 +99,5 @@ fn navigate(app: &AppHandle, route: &str) {
     if let Ok(mut pending) = app.state::<Launch>().pending_route.lock() {
         *pending = Some(route.to_owned());
     }
-    if let Ok(w) = window::show_main(app) {
-        let _ = w.emit("navigate", route);
-    }
+    window::show_main_at(app, route.to_owned());
 }

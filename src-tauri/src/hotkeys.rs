@@ -196,9 +196,7 @@ fn run(app: &AppHandle, action: &str) {
         "mic.up" => mic(app, MicOp::Step(0.05)),
         "mic.down" => mic(app, MicOp::Step(-0.05)),
         "mic.max" => mic(app, MicOp::Max),
-        "note.quick" => {
-            let _ = window::open_quick_note(app);
-        }
+        "note.quick" => window::open_quick_note(app),
         _ => {}
     }
 }

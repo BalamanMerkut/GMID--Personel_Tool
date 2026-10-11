@@ -2,11 +2,46 @@
 //! tepsiden açılınca yeniden oluşturulur.
 
 use crate::db::Db;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const MAIN: &str = "main";
 
-pub fn show_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
+/// Pencereler sırayla oluşturulsun (aynı pencere iki kez açılmaya çalışılmasın).
+static UI_LOCK: Mutex<()> = Mutex::new(());
+
+/// Pencere işini ayrı bir iş parçacığında yapar. Windows'ta pencereyi ana iş parçacığında
+/// (eşzamanlı komutlar, tepsi menüsü, olay işleyicileri) oluşturmak uygulamayı kilitler;
+/// bu yüzden pencere açan her şey buradan geçer.
+pub fn on_ui_thread(
+    app: &AppHandle,
+    what: &'static str,
+    f: impl FnOnce(&AppHandle) -> tauri::Result<()> + Send + 'static,
+) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _guard = UI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = f(&app) {
+            crate::log!("{what} açılamadı: {e}");
+        }
+    });
+}
+
+/// Ana pencereyi açar (kapatıldıysa yeniden oluşturur) ve öne getirir.
+pub fn show_main(app: &AppHandle) {
+    on_ui_thread(app, "Ana pencere", |app| show_main_now(app).map(|_| ()));
+}
+
+/// Ana pencereyi açar ve bir ekrana götürür.
+pub fn show_main_at(app: &AppHandle, route: String) {
+    on_ui_thread(app, "Ana pencere", move |app| {
+        let w = show_main_now(app)?;
+        let _ = w.emit("navigate", route);
+        Ok(())
+    });
+}
+
+fn show_main_now(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = app.get_webview_window(MAIN) {
         if w.is_minimized().unwrap_or(false) {
             w.unminimize()?;
@@ -55,7 +90,11 @@ const STICKY_PREFIX: &str = "sticky-";
 const STICKIES_SETTING: &str = "notes.stickies";
 
 /// Her yerden açılan küçük hızlı not penceresi.
-pub fn open_quick_note(app: &AppHandle) -> tauri::Result<()> {
+pub fn open_quick_note(app: &AppHandle) {
+    on_ui_thread(app, "Hızlı not", open_quick_note_now);
+}
+
+fn open_quick_note_now(app: &AppHandle) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window(QUICK_NOTE) {
         w.show()?;
         w.set_focus()?;
@@ -91,7 +130,12 @@ fn save_stickies(app: &AppHandle, ids: &[String]) {
 }
 
 /// Notu masaüstünde "her zaman üstte" küçük bir yapışkan not olarak açar.
-pub fn open_sticky(app: &AppHandle, id: &str) -> tauri::Result<()> {
+pub fn open_sticky(app: &AppHandle, id: &str) {
+    let id = id.to_string();
+    on_ui_thread(app, "Yapışkan not", move |app| open_sticky_now(app, &id));
+}
+
+fn open_sticky_now(app: &AppHandle, id: &str) -> tauri::Result<()> {
     let label = sticky_label(id);
     if let Some(w) = app.get_webview_window(&label) {
         w.show()?;
@@ -136,6 +180,6 @@ pub fn restore_stickies(app: &AppHandle) {
         .collect();
     save_stickies(app, &alive);
     for id in alive {
-        let _ = open_sticky(app, &id);
+        open_sticky(app, &id);
     }
 }

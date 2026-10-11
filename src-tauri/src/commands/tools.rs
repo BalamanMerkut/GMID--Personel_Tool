@@ -84,13 +84,13 @@ pub fn note_delete(
 }
 
 #[tauri::command]
-pub fn open_quick_note(app: AppHandle) -> CmdResult<()> {
-    window::open_quick_note(&app).map_err(err)
+pub fn open_quick_note(app: AppHandle) {
+    window::open_quick_note(&app);
 }
 
 #[tauri::command]
-pub fn open_sticky(app: AppHandle, id: String) -> CmdResult<()> {
-    window::open_sticky(&app, &id).map_err(err)
+pub fn open_sticky(app: AppHandle, id: String) {
+    window::open_sticky(&app, &id);
 }
 
 #[tauri::command]

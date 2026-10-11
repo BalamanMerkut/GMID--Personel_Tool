@@ -3,6 +3,7 @@ mod backup;
 mod commands;
 mod db;
 mod hotkeys;
+mod log;
 mod notes;
 mod overlay;
 mod paths;
@@ -37,7 +38,7 @@ pub fn run() {
     tauri::Builder::default()
         // İkinci kez çalıştırılırsa yeni kopya açılmaz, mevcut pencere öne gelir.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let _ = window::show_main(app);
+            window::show_main(app);
         }))
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -53,10 +54,12 @@ pub fn run() {
         .plugin(hotkeys::plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             let handle = app.handle();
             let dir = paths::DataDir::resolve(handle)?;
             dir.ensure()?;
+            log::init(dir.root().join("gmid.log"));
             let db = db::Db::open(&dir.db()).map_err(|e| format!("Veritabanı açılamadı: {e}"))?;
             // Arayüz sadece kendi arka plan klasöründeki dosyaları gösterebilir.
             app.asset_protocol_scope()
@@ -67,7 +70,7 @@ pub fn run() {
             // Mikrofon kilidi açılışta da etkin olsun.
             let mic_lock: Option<f32> = db.setting_json("audio.micLock");
             if let Err(e) = notes::purge_trash(&db) {
-                eprintln!("Çöp kutusu temizlenemedi: {e}");
+                log!("Çöp kutusu temizlenemedi: {e}");
             }
 
             app.manage(db);
@@ -93,12 +96,12 @@ pub fn run() {
             std::thread::spawn(move || {
                 let (db, dir) = (h.state::<db::Db>(), h.state::<paths::DataDir>());
                 if let Err(e) = backup::daily_if_needed(&db, &dir.backups()) {
-                    eprintln!("{e}");
+                    log!("{e}");
                 }
             });
 
             if !minimized {
-                window::show_main(handle)?;
+                window::show_main(handle);
             }
             Ok(())
         })

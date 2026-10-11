@@ -21,6 +21,7 @@
   let list: Reminder[] = $state([]);
   let now = $state(Date.now());
   let sound = $state(getJson("reminders.sound", true));
+  let toast = $state(getJson("reminders.toast", true));
   let showDone = $state(false);
 
   // form
@@ -103,6 +104,17 @@
     }
   }
 
+  /** Gerçek yoldan geçen bir deneme: şu an için hatırlatıcı kurar, birkaç saniyede çalar. */
+  async function testAlert() {
+    try {
+      await api.reminders.save({ id: null, title: "Deneme uyarısı", note: "Bunu görüyorsan uyarılar çalışıyor 🎉", dueAt: Date.now(), repeat: "none" });
+      notify("Birkaç saniye içinde sağ altta kart ve Windows bildirimi çıkmalı", "bell");
+      await refresh();
+    } catch (err) {
+      notify(String(err), "info");
+    }
+  }
+
   async function act(fn: () => Promise<void>, msg: string, icon: "check" | "bell" | "trash") {
     try {
       await fn();
@@ -157,6 +169,11 @@
       <Switch label="Uyarıda ses çal" checked={sound} onchange={(v) => { sound = v; void setJson("reminders.sound", v); }} />
       <span class="small">Uyarıda Windows bildirim sesi çal</span>
     </label>
+    <label class="row">
+      <Switch label="Windows bildirimi" checked={toast} onchange={(v) => { toast = v; void setJson("reminders.toast", v); }} />
+      <span class="small">Windows bildirimi de gönder (bildirim merkezinde kalır)</span>
+    </label>
+    <button class="btn ghost sm" type="button" onclick={testAlert}><Icon name="bell" size={16} />Uyarıyı dene</button>
   </form>
 
   <div class="lists">

@@ -72,22 +72,19 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
         *last = Some(msg.clone());
     }
 
-    let w = match app.get_webview_window(OSD) {
-        Some(w) => w,
-        None => match tool_window(app, OSD, OSD_SIZE) {
-            Ok(w) => w,
-            Err(e) => {
-                eprintln!("Gösterge açılamadı: {e}");
-                return;
-            }
-        },
-    };
-    let _ = app.emit_to(OSD, "osd", &msg);
-    place(&w, OSD_SIZE, Corner::TopRight);
-    show_no_activate(&w);
-    // Tıklamalar alttaki oyuna/pencereye geçsin. Pencere ekrana çıktıktan sonra yapılmalı
-    // (bazı sistemlerde gizli pencerede bu işlem başarısız olur).
-    let _ = w.set_ignore_cursor_events(true);
+    crate::window::on_ui_thread(app, "Gösterge", move |app| {
+        let w = match app.get_webview_window(OSD) {
+            Some(w) => w,
+            None => tool_window(app, OSD, OSD_SIZE)?,
+        };
+        let _ = app.emit_to(OSD, "osd", &msg);
+        place(&w, OSD_SIZE, Corner::TopRight);
+        show_no_activate(&w);
+        // Tıklamalar alttaki oyuna/pencereye geçsin. Pencere ekrana çıktıktan sonra yapılmalı
+        // (bazı sistemlerde gizli pencerede bu işlem başarısız olur).
+        let _ = w.set_ignore_cursor_events(true);
+        Ok(())
+    });
 
     let app = app.clone();
     std::thread::spawn(move || {
@@ -110,27 +107,40 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
 
 /// Zamanı gelen hatırlatıcı/sayaç kartlarını sağ altta gösterir.
 pub fn raise_alerts(app: &AppHandle) {
-    let w = match app.get_webview_window(ALERTS) {
-        Some(w) => w,
-        None => match tool_window(app, ALERTS, (ALERTS_WIDTH, 160.0)) {
-            Ok(w) => w,
-            Err(e) => {
-                eprintln!("Uyarı penceresi açılamadı: {e}");
-                return;
-            }
-        },
-    };
-    let _ = app.emit_to(ALERTS, "alerts-changed", ());
-    let height = app
-        .state::<Overlay>()
-        .alerts_height
-        .lock()
-        .ok()
-        .and_then(|h| *h)
-        .unwrap_or(160.0);
-    place(&w, (ALERTS_WIDTH, height), Corner::BottomRight);
-    show_no_activate(&w);
+    crate::window::on_ui_thread(app, "Uyarı penceresi", |app| {
+        let w = match app.get_webview_window(ALERTS) {
+            Some(w) => w,
+            None => tool_window(app, ALERTS, (ALERTS_WIDTH, 160.0))?,
+        };
+        let _ = app.emit_to(ALERTS, "alerts-changed", ());
+        let height = app
+            .state::<Overlay>()
+            .alerts_height
+            .lock()
+            .ok()
+            .and_then(|h| *h)
+            .unwrap_or(160.0);
+        place(&w, (ALERTS_WIDTH, height), Corner::BottomRight);
+        show_no_activate(&w);
+        Ok(())
+    });
     play_notification_sound(app);
+}
+
+/// Windows'un kendi bildirimi (bildirim merkezinde de kalır). Uyarı kartına ek olarak gönderilir;
+/// ayarlardan kapatılabilir (`reminders.toast`).
+pub fn system_notification(app: &AppHandle, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let enabled = app
+        .state::<crate::db::Db>()
+        .setting_json::<bool>("reminders.toast")
+        .unwrap_or(true);
+    if !enabled {
+        return;
+    }
+    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+        crate::log!("Windows bildirimi gönderilemedi: {e}");
+    }
 }
 
 /// Uyarı penceresini içeriğin yüksekliğine göre boyutlandırır.
@@ -144,13 +154,26 @@ pub fn fit_alerts(app: &AppHandle, height: f64) {
         let _ = w.set_resizable(true);
         let _ = w.set_size(LogicalSize::new(ALERTS_WIDTH, height));
         let _ = w.set_resizable(false);
-        place(&w, (ALERTS_WIDTH, height), Corner::BottomRight);
+        // Bazı sistemler boyutu hemen ya da tam uygulamaz; yerleşimi gerçek boyuta göre yap.
+        let actual = w
+            .outer_size()
+            .ok()
+            .zip(w.scale_factor().ok())
+            .map(|(s, f)| s.height as f64 / f)
+            .filter(|h| *h > 0.0)
+            .unwrap_or(height);
+        place(&w, (ALERTS_WIDTH, actual), Corner::BottomRight);
     }
 }
 
 pub fn close_alerts(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(ALERTS) {
-        let _ = w.destroy();
+        // Pencere kendi düğmesinden kapatılıyor; işi bitsin diye önce gizle, sonra kapat.
+        let _ = w.hide();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            let _ = w.destroy();
+        });
     }
 }
 
@@ -189,9 +212,9 @@ fn place(w: &WebviewWindow, size: (f64, f64), corner: Corner) {
 #[cfg(windows)]
 fn show_no_activate(w: &WebviewWindow) {
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
-        WS_EX_TOOLWINDOW,
+        GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+        GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_SHOWNOACTIVATE,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
     };
     let Ok(hwnd) = w.hwnd() else {
         let _ = w.show();
@@ -214,6 +237,11 @@ fn show_no_activate(w: &WebviewWindow) {
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
+        // Bir sebeple görünmediyse Tauri'nin kendi yolunu dene (odak alsa da kart görünsün).
+        if !IsWindowVisible(hwnd).as_bool() {
+            crate::log!("Pencere odaksız gösterilemedi, normal gösteriliyor");
+            let _ = w.show();
+        }
     }
 }
 

@@ -50,6 +50,25 @@ fn run(app: AppHandle) {
         }
         if !due.is_empty() || !finished.is_empty() {
             overlay::raise_alerts(&app);
+            for r in &due {
+                overlay::system_notification(
+                    &app,
+                    &format!("⏰ {}", r.title),
+                    if r.note.is_empty() {
+                        "Hatırlatıcının zamanı geldi"
+                    } else {
+                        &r.note
+                    },
+                );
+            }
+            for t in &finished {
+                overlay::system_notification(
+                    &app,
+                    &format!("⏱ Süre doldu: {}", t.label),
+                    "Geri sayım bitti",
+                );
+            }
+            crate::log!("Uyarı: {} hatırlatıcı, {} sayaç", due.len(), finished.len());
         }
 
         let next = [reminders::next_due(&db), timers.next_end()]
