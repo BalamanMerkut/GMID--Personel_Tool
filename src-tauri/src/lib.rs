@@ -8,6 +8,7 @@ mod downloader;
 mod gamemode;
 mod games;
 mod hotkeys;
+mod install;
 mod log;
 mod net;
 mod notes;
@@ -16,6 +17,7 @@ mod panel;
 mod paths;
 mod playlists;
 mod reminders;
+mod restore;
 mod reviews;
 mod scheduler;
 mod servers;
@@ -72,7 +74,17 @@ pub fn run() {
             let dir = paths::DataDir::resolve(handle)?;
             dir.ensure()?;
             log::init(dir.root().join("gmid.log"));
+            // Kontrol Odası'ndan seçilen yedek, veritabanı açılmadan yerine konur.
+            match restore::apply_pending(dir.root()) {
+                Ok(true) => log!("Bekleyen yedek yerine kondu"),
+                Ok(false) => {}
+                Err(e) => log!("Yedek geri yüklenemedi: {e}"),
+            }
             let db = db::Db::open(&dir.db()).map_err(|e| format!("Veritabanı açılamadı: {e}"))?;
+            // Yedekten açıldıysa (Format Kiti ya da Kontrol Odası) yollar bu bilgisayara çevrilir.
+            if let Ok(home) = app.path().home_dir() {
+                restore::finish(&db, dir.root(), &home);
+            }
             // Arayüz sadece kendi arka plan klasöründeki dosyaları gösterebilir.
             app.asset_protocol_scope()
                 .allow_directory(dir.backgrounds(), true)?;
@@ -107,6 +119,7 @@ pub fn run() {
             app.manage(gamemode::GameMode::default());
             app.manage(panel::Panel::default());
             app.manage(clips::Clips::default());
+            app.manage(install::Installer::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -164,6 +177,21 @@ pub fn run() {
             commands::open_log,
             commands::backup_now,
             commands::import_background,
+            commands::install::install_catalog,
+            commands::install::install_list,
+            commands::install::install_save_list,
+            commands::install::install_state,
+            commands::install::install_run,
+            commands::install::install_stop,
+            commands::install::install_installed,
+            commands::install::install_search,
+            commands::install::install_find_setup,
+            commands::install::install_backup_size,
+            commands::install::install_export,
+            commands::install::install_open_kit,
+            commands::install::backup_restore_stage,
+            commands::install::backup_restore_cancel,
+            commands::install::backup_restore_apply,
             commands::sound::audio_state,
             commands::sound::audio_set_default,
             commands::sound::audio_set_volume,

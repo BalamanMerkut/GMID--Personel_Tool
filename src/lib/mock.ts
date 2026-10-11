@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Clip, Countdown, Device, Title, TitleHit, DictationStatus, Download, Game, PlaySession, Review, ReviewExtra, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Clip, Countdown, InstallItem, InstallRun, Device, Title, TitleHit, DictationStatus, Download, Game, PlaySession, Review, ReviewExtra, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 import { overallOf } from "./review";
 
@@ -328,6 +328,26 @@ function snapshot() {
     countdowns: countdowns.map((c) => ({ ...c })),
   };
 }
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const cat = (category: string, list: [string, string, string?][], source: InstallItem["source"] = "winget"): InstallItem[] =>
+  list.map(([id, name, note]) => ({ id, name, category, source, note: note ?? null, url: null }));
+const installCatalog: InstallItem[] = [
+  ...cat("Tarayıcılar", [["Google.Chrome", "Google Chrome"], ["Mozilla.Firefox", "Firefox"], ["Brave.Brave", "Brave"], ["Opera.OperaGX", "Opera GX"]]),
+  ...cat("Oyun platformları", [["Valve.Steam", "Steam"], ["EpicGames.EpicGamesLauncher", "Epic Games"], ["ElectronicArts.EADesktop", "EA app"], ["Ubisoft.Connect", "Ubisoft Connect"], ["Blizzard.BattleNet", "Battle.net"], ["RiotGames.Valorant.EU", "VALORANT", "Riot Client ile gelir"]]),
+  ...cat("İletişim", [["Discord.Discord", "Discord"], ["Telegram.TelegramDesktop", "Telegram"]]),
+  { id: "9NKSQGP7F2NH", name: "WhatsApp", category: "İletişim", source: "msstore", note: "Microsoft Store'dan", url: null },
+  ...cat("Araçlar", [["Anthropic.Claude", "Claude"], ["RARLab.WinRAR", "WinRAR"], ["7zip.7zip", "7-Zip"], ["Notepad++.Notepad++", "Notepad++"], ["Microsoft.PowerToys", "PowerToys"], ["voidtools.Everything", "Everything", "Anında dosya arama"]]),
+  ...cat("Medya", [["VideoLAN.VLC", "VLC"], ["Spotify.Spotify", "Spotify"], ["OBSProject.OBSStudio", "OBS Studio"]]),
+  { id: "nvidia-app", name: "NVIDIA App", category: "Donanım", source: "web", url: "https://www.nvidia.com/tr-tr/software/nvidia-app/", note: "winget'te yok: indirme sayfası açılır" },
+  ...cat("Donanım", [["Guru3D.Afterburner", "MSI Afterburner"], ["Logitech.GHUB", "Logitech G HUB"], ["CPUID.CPU-Z", "CPU-Z"]]),
+  ...cat("Oyun bileşenleri", [["Microsoft.VCRedist.2015+.x64", "Visual C++ (2015-2022)", "Çoğu oyun ister"], ["Microsoft.DirectX", "DirectX (eski oyunlar)"]]),
+];
+let installList: InstallItem[] = ["Google.Chrome", "Valve.Steam", "Discord.Discord", "Anthropic.Claude", "RARLab.WinRAR", "EpicGames.EpicGamesLauncher", "nvidia-app", "VideoLAN.VLC", "7zip.7zip"]
+  .map((i) => installCatalog.find((c) => c.id === i)!)
+  .filter(Boolean);
+let installRun: InstallRun = { running: false, stopping: false, steps: [], started: null, finished: null };
+let installStop = false;
 
 export async function handle(cmd: string, a: Record<string, unknown>): Promise<unknown> {
   switch (cmd) {
@@ -828,6 +848,80 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return;
     case "extension_install":
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Eklenti";
+    case "install_catalog":
+      return installCatalog;
+    case "install_list":
+      return installList;
+    case "install_save_list":
+      installList = a.items as InstallItem[];
+      return;
+    case "install_state":
+      return installRun;
+    case "install_installed":
+      await wait(900);
+      return ["google.chrome", "valve.steam", "discord.discord"];
+    case "install_search": {
+      await wait(700);
+      const q = String(a.query).toLowerCase();
+      return [
+        { id: "Ookla.Speedtest.Desktop", name: "Speedtest by Ookla", version: "1.17.188.1" },
+        { id: "WinSCP.WinSCP", name: "WinSCP", version: "6.5.3" },
+        { id: "Rufus.Rufus", name: "Rufus", version: "4.15" },
+      ].filter((h) => q.length < 2 || h.name.toLowerCase().includes(q) || q === "test");
+    }
+    case "install_run": {
+      const items = a.items as InstallItem[];
+      installStop = false;
+      installRun = {
+        running: true, stopping: false, started: now(), finished: null,
+        steps: items.map((i) => ({ id: i.id, name: i.name, state: "waiting", progress: null, message: null })),
+      };
+      emit("install", installRun);
+      void (async () => {
+        for (const [k, item] of items.entries()) {
+          const st = installRun.steps[k];
+          if (installStop) { st.state = "skipped"; st.message = "Durduruldu"; emit("install", { ...installRun }); continue; }
+          st.state = "running";
+          if (item.source === "web") { st.state = "opened"; st.message = "İndirme sayfası tarayıcıda açıldı"; emit("install", { ...installRun }); continue; }
+          for (let p = 0; p <= 1; p += 0.2) { st.progress = p; emit("install", { ...installRun }); await wait(250); }
+          st.progress = null; st.message = "Paket yüklemesi başlatılıyor..."; emit("install", { ...installRun }); await wait(500);
+          if (item.id === "Discord.Discord") { st.state = "already"; st.message = "Zaten kurulu"; }
+          else if (item.id === "Anthropic.Claude") { st.state = "failed"; st.message = "kod 0x80070005: Erişim engellendi"; }
+          else { st.state = "done"; st.message = null; }
+          emit("install", { ...installRun });
+        }
+        installRun = { ...installRun, running: false, stopping: false, finished: now() };
+        emit("install", installRun);
+      })();
+      return installRun;
+    }
+    case "install_stop":
+      installStop = true;
+      installRun = { ...installRun, stopping: true };
+      emit("install", installRun);
+      return;
+    case "install_find_setup":
+      return "C:\\Users\\Sen\\Downloads\\GMID Tool_0.1.0_x64-setup.exe";
+    case "install_backup_size": {
+      const o = a.options as { videos: boolean; tools: boolean };
+      return 38_400_000 + (o.videos ? 4_200_000_000 : 0) + (o.tools ? 2_100_000_000 : 0);
+    }
+    case "install_export": {
+      const r = a.request as { dir: string; items: InstallItem[]; setup: string | null; backup: boolean };
+      emit("install-kit", { stage: "script", done: 0, total: 1 });
+      await wait(300);
+      if (r.backup) for (let d = 0; d <= 10; d++) { emit("install-kit", { stage: "backup", done: d * 3_840_000, total: 38_400_000 }); await wait(150); }
+      emit("install-kit", { stage: "done", done: 1, total: 1 });
+      return { path: `${r.dir.replace(/\\$/, "")}\\GMID Format Kiti`, programs: r.items.length, setup: !!r.setup, backupSize: r.backup ? 31_200_000 : null };
+    }
+    case "install_open_kit":
+      return;
+    case "backup_restore_stage":
+      await wait(600);
+      return { app: "GMID Tool", version: "0.1.0", created: now() - 3 * 86_400_000, root: "C:\\Users\\Sen\\Documents\\GMID Tool", home: "C:\\Users\\Sen", folders: ["Notlar", "Arkaplanlar", "Kapaklar", "Sunucular", "Eklenti"] };
+    case "backup_restore_cancel":
+    case "backup_restore_apply":
+      return;
     default:
       throw new Error(`Taklit katmanda tanımsız komut: ${cmd}`);
   }

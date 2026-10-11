@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BackupManifest, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -312,6 +312,52 @@ export const api = {
   panel: {
     /** Oyun İçi Panel'i kapatır, odak oyuna döner. */
     hide: () => call<void>("panel_hide"),
+  },
+
+  install: {
+    catalog: () => call<InstallItem[]>("install_catalog"),
+    list: () => call<InstallItem[]>("install_list"),
+    saveList: (items: InstallItem[]) => call<void>("install_save_list", { items }),
+    state: () => call<InstallRun>("install_state"),
+    /** Sırayla sessiz kurulum; ilerleme "install" olayıyla. */
+    run: (items: InstallItem[]) => call<InstallRun>("install_run", { items }),
+    /** Şu an kurulan bitince durur. */
+    stop: () => call<void>("install_stop"),
+    /** Kurulu programların winget kimlikleri (küçük harf). */
+    installed: (refresh = false) => call<string[]>("install_installed", { refresh }),
+    search: (query: string) => call<InstallHit[]>("install_search", { query }),
+    /** GMID'in kurulum dosyası İndirilenler/Masaüstü'nde varsa yolu. */
+    findSetup: () => call<string | null>("install_find_setup"),
+    backupSize: (options: { videos: boolean; tools: boolean }) => call<number>("install_backup_size", { options }),
+    /** Format Kiti'ni oluşturur; ilerleme "install-kit" olayıyla. */
+    exportKit: (request: KitRequest) => call<KitResult>("install_export", { request }),
+    openKit: (path: string) => call<void>("install_open_kit", { path }),
+    pickFolder: async (): Promise<string | null> => {
+      if (!inTauri) return "E:\\";
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ directory: true, multiple: false, title: "Format Kiti nereye konsun? (ör. USB bellek)" });
+      return typeof picked === "string" ? picked : null;
+    },
+    pickSetup: async (): Promise<string | null> => {
+      if (!inTauri) return "C:\\Users\\Sen\\Downloads\\GMID Tool_0.1.0_x64-setup.exe";
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ multiple: false, title: "GMID Tool kurulum dosyası", filters: [{ name: "Kurulum dosyası", extensions: ["exe"] }] });
+      return typeof picked === "string" ? picked : null;
+    },
+  },
+
+  restore: {
+    pick: async (): Promise<string | null> => {
+      if (!inTauri) return "E:\\GMID Format Kiti\\GMID-Yedek.zip";
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ multiple: false, title: "GMID yedeğini seç", filters: [{ name: "GMID yedeği", extensions: ["zip"] }] });
+      return typeof picked === "string" ? picked : null;
+    },
+    /** Yedeği doğrular ve hazırlar; henüz hiçbir şey değişmez. */
+    stage: (path: string) => call<BackupManifest>("backup_restore_stage", { path }),
+    cancel: () => call<void>("backup_restore_cancel"),
+    /** Uygulama yeniden başlar ve yedek yerine konur. */
+    apply: () => call<void>("backup_restore_apply"),
   },
 
   titles: {

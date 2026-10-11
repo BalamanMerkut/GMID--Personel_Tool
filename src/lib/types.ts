@@ -610,3 +610,72 @@ export interface TitleHit {
   kind: "movie" | "series";
   year: number | null;
 }
+
+/** Format Sonrası Kurulum: katalogdaki ya da listedeki bir program. */
+export interface InstallItem {
+  /** winget / Mağaza kimliği; web için kısa ad. */
+  id: string;
+  name: string;
+  /** winget · msstore (Microsoft Store) · web (indirme sayfası açılır) */
+  source: "winget" | "msstore" | "web";
+  category?: string | null;
+  url?: string | null;
+  note?: string | null;
+}
+
+export type InstallStepState = "waiting" | "running" | "done" | "already" | "opened" | "failed" | "skipped";
+
+export interface InstallStep {
+  id: string;
+  name: string;
+  state: InstallStepState;
+  /** 0..1, indirilirken. */
+  progress: number | null;
+  message: string | null;
+}
+
+export interface InstallRun {
+  running: boolean;
+  stopping: boolean;
+  steps: InstallStep[];
+  started: number | null;
+  finished: number | null;
+}
+
+/** winget araması sonucu. */
+export interface InstallHit {
+  id: string;
+  name: string;
+  version: string;
+}
+
+export interface KitRequest {
+  dir: string;
+  items: InstallItem[];
+  setup: string | null;
+  backup: boolean;
+  backupOptions: { videos: boolean; tools: boolean };
+}
+
+export interface KitResult {
+  path: string;
+  programs: number;
+  setup: boolean;
+  backupSize: number | null;
+}
+
+export interface KitProgress {
+  stage: "script" | "setup" | "backup" | "done";
+  done: number;
+  total: number;
+}
+
+/** GMID-Yedek.zip içindeki bilgi. */
+export interface BackupManifest {
+  app: string;
+  version: string;
+  created: number;
+  root: string;
+  home: string;
+  folders: string[];
+}

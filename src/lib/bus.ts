@@ -27,7 +27,9 @@ export type AppEvent =
   | "games-suggestions"
   | "gamemode"
   | "panel-open"
-  | "titles-changed";
+  | "titles-changed"
+  | "install"
+  | "install-kit";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

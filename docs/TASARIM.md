@@ -583,6 +583,28 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 
 **Teknik not:** Windows 10/11'de yerleşik **winget** (Microsoft'un resmî paket yöneticisi). Paket kimlikleri: [Ek B](ARASTIRMA-TEKNIK.md) §5.
 
+✅ **Kodlandı (Faz 6b, v0.25):**
+- **Katalog** (~60 program, 9 kategori): kimlikler Microsoft'un `winget-pkgs` deposunda tek tek doğrulandı (2026-10).
+  WhatsApp Microsoft Store'dan (`msstore`); winget'te olmayan **NVIDIA App** ve **AMD Adrenalin** için resmî indirme
+  sayfası açılır. Katalogda olmayanlar için **Tüm depoda ara** (`winget search`). Liste tek; sıra yukarı/aşağı ile.
+  Çoklu liste ("Oyun PC'si", "Minimal") şimdilik yok — tek liste yeterli göründü.
+- **Kurulu olanlar** `winget export` ile bulunur (Kurulu rozeti; "Şimdi kur" yalnız eksikleri kurar).
+- **Şimdi kur:** sırayla, sessiz (`--silent --disable-interactivity`), her biri için indirme yüzdesi ve ✅/❌; "zaten
+  kurulu" ve "yeniden başlatma gerekebilir" winget çıkış kodlarından ayrılır. **Durdur** o anki kurulumu yarıda
+  kesmez (program yarım kalmasın), sıradakilere geçmez. Kurulamayanlar tek tıkla yeniden denenir.
+- **Format Kiti** (seçilen klasörde, ör. USB): `Kur.bat` + `kurulum.ps1` + `GMID-Tool-Kurulum.exe` (İndirilenler'de
+  bulunursa kendiliğinden) + `GMID-Yedek.zip` + `BENİOKU.txt`. Betik: winget hazır değilse kaydeder ya da Store'daki
+  "Uygulama Yükleyicisi" sayfasını açar; programları kurar; GMID kapalıyken yedeği `Belgeler\GMID Tool`'a açar (orada
+  eski veri varsa "GMID Tool (önceki …)" olarak kenara alır); GMID'i sessiz kurup açar; indirme sayfalarını açar; sonunda
+  özet. PowerShell 5.1 Türkçe harfleri bozmasın diye UTF-8 BOM'lu.
+- **Yedek:** veritabanı (tutarlı kopya, `VACUUM INTO`), Notlar, Arkaplanlar, Kapaklar, Sunucular, Eklenti; isteğe bağlı
+  Videolar ve Araclar (modeller). Zip içindeki `gmid-yedek.json` eski veri klasörü ve kullanıcı klasörünü tutar; ilk
+  açılışta veritabanındaki bütün yollar (düz ve JSON içindeki) yeni bilgisayara çevrilir — kullanıcı adı değişse de
+  videolar, kapaklar, arka plan bozulmaz.
+- **Kontrol Odası → Veri → Yedekten geri yükle:** zip doğrulanır (bildirge + SQLite başlığı; yalnız bilinen klasörler
+  açılır, zip dışına yazamaz), onaylanınca uygulama yeniden başlar; veritabanı kapalıyken mevcut olan
+  `Yedekler\geri-yukleme-oncesi-….db` olarak saklanır, yedek yerine konur.
+
 ❓ Listene kesin girecek programlar (soru 6)
 
 ---
@@ -884,7 +906,7 @@ GMID Tool\
 ├─ Sunucular\              ← Sunucu logoları (topluluk listesinden indirilen ve elle seçilen)
 ├─ Eklenti\                ← Chrome/Opera eklentisi (tarayıcıda "Paketlenmemiş öğe yükle" ile bu klasör seçilir)
 ├─ Kapaklar\                ← Oyun/film kapak önbelleği ve video küçük resimleri (Videolar\)
-├─ Kurulum\                 ← Format sonrası kurulum listeleri + dışa aktarılan .bat
+├─ Kurulum\                 ← (ayrılmış) Format Kiti istenen yere, ör. USB'ye çıkarılır
 ├─ Yedekler\                ← Veritabanının otomatik günlük yedekleri (son 7 gün)
 ├─ Araclar\                 ← yt-dlp, ffmpeg, deno (ilk kullanımda iner, uygulama kendisi günceller)
 └─ gmid.log                 ← Sorun olursa ne olduğunu gösteren küçük günlük dosyası
@@ -912,7 +934,7 @@ kalır, uygulama sadece listesini tutar (§3.12).
 | `notes` | id, başlık, içerik, renk, yazı_tipi, sabit, klasör, etiketler, bağlı_oyun, güncellenme |
 | `reminders` | id, başlık, zaman, tekrar_kuralı, ertelenen, tamamlandı |
 | `audio_devices` | windows_id, takma_ad, ikon, gizli, sıra, kilit_seviyesi |
-| `install_lists` / `install_items` | liste adı · winget_id, ad, kategori, sıra |
+| `settings: install.list` | Format Sonrası Kurulum listesi (JSON: kimlik, ad, kaynak winget/msstore/web, kategori, sıra) *(Faz 6b ✅; ayrı tablo gerekmedi)* |
 | `servers` | id, ad, oyun, adres, port, sorgu_portu, logo, logo_adresi, açıklama, bağlanma_notu, topluluk_mu, sıra *(Faz 3a ✅)* |
 | `settings` | anahtar, değer |
 
@@ -973,7 +995,7 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
 | **4 — Oyun içi deneyim** ✅ *kodlandı* | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
-| **6 — Film & Dizi + Kurulum** 🔨 *sürüyor (6a Film & Dizi kodlandı)* | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
+| **6 — Film & Dizi + Kurulum** ✅ *kodlandı* | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
 | **7 — Öneriler** | Onaylanan ek özellikler (ücretsiz oyunlar, Wrapped, Rich Presence…) | v1.x |
 | **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet | v2.0 |
 
@@ -1044,6 +1066,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.25 | 2026-10-11 | Faz 6b kodlandı: **Format Sonrası Kurulum** (doğrulanmış winget kataloğu, depoda arama, kurulu olanları bulma, sırayla sessiz kurulum ve ilerleme) ve **Format Kiti** (Kur.bat + kurulum.ps1 + GMID kurulumu + GMID-Yedek.zip); Kontrol Odası'ndan yedekten geri yükleme, yolların yeni bilgisayara çevrilmesi (§3.9). Kritik düzeltme: "Discord'a Hazır" temizliği yanlış klasöre bakıp veri klasörünün kökündeki eski dosyaları silebilirdi |
 | v0.24 | 2026-10-11 | Faz 6a kodlandı: **Film & Dizi Arşivi** — bilgiler anahtar gerektirmeyen kaynaklardan (Wikipedia arama + Wikidata: Türkçe ad, yıl, süre, sezon/bölüm, yönetmen/yaratıcı, oyuncular, tür; Türkçe Vikipedi özeti; afiş), 5 film sorusu (hikâye %25, oyunculuk %20, yönetmenlik %20, tempo %15, keyif %20), durumlar (İzliyorum · İzledim · Yarıda bıraktım · İzlenecek — puansız), dizide "nerede kaldın" (S·B), nerede/kiminle izlendi; Keşfet süzgeçleri (film/dizi, tür, yönetmen, puan, durum, tavsiye), "Bana bir film seç"; göç 15 (`titles`, `reviews.extra`). TMDB yerine Wikipedia/Wikidata: kullanıcıdan anahtar istenmesin diye |
 | v0.23 | 2026-10-11 | Faz 4 kodlandı: **Oyun Modu** (güç planı yüksek performans, seçilen ses çıkışı, mikrofon kilidi, sessiz, hareketli arka plan durur, seçilen uygulamalar kapanır; elle, Ctrl+Alt+O ya da oyun açılınca kendiliğinden; kapanınca ve uygulama kapanırken geri alınır) ve **Oyun İçi Panel** (Ctrl+Shift+G, oyunun bulunduğu ekranın üstünde yarı saydam: ses, mikrofon, Oyun Modu, sayaç, oyuna not, son klip ve Discord'a sığdır, hatırlatıcılar; Esc ile kapanır, odak oyuna döner) |
 | v0.22 | 2026-10-11 | Geri bildirim: video küçük resimleri kaybolmuyor (aynı videonun iki indirmesi ortak resmi silmiyordu → kontrol; eksik/bozuk resimler açılışta ve kartta onarılır: siteden ya da videodan kare, müzikte gömülü kapak), Kliplerim kartında sil (ilk tık "Sil?"), sesle yazma göstergesi inceltildi (34 px), Steam dışı oyunlara Microsoft Store'un dikey posteri (Minecraft; yoksa Wikipedia; göç 14), oyun tam ekranken görünmeyen "Kütüphaneye ekleyeyim mi?" kartı oyun kapanınca yeniden gösterilir |

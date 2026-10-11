@@ -19,6 +19,7 @@
   import Clips from "./lib/screens/Clips.svelte";
   import GameMode from "./lib/screens/GameMode.svelte";
   import Films from "./lib/screens/Films.svelte";
+  import Install from "./lib/screens/Install.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
@@ -153,6 +154,8 @@
           <Library />
         {:else if route === "films"}
           <Films />
+        {:else if route === "install"}
+          <Install />
         {:else if route === "gamemode"}
           <GameMode />
         {:else if route === "clips"}

@@ -2,6 +2,7 @@
   import { api, formatSize, type AppInfo, type BackupInfo } from "../api";
   import Icon from "../Icon.svelte";
   import { notify } from "../toast.svelte";
+  import type { BackupManifest } from "../types";
 
   let { info, refreshInfo }: { info: AppInfo | null; refreshInfo: () => Promise<void> } = $props();
 
@@ -23,6 +24,41 @@
       busy = false;
     }
   }
+
+  // Tam yedekten (GMID-Yedek.zip) geri yükleme: önce doğrulanır, onaylanınca uygulama yeniden başlar.
+  let staged = $state<BackupManifest | null>(null);
+  let restoring = $state(false);
+
+  async function pickRestore() {
+    const path = await api.restore.pick();
+    if (!path) return;
+    restoring = true;
+    try {
+      staged = await api.restore.stage(path);
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      restoring = false;
+    }
+  }
+
+  async function cancelRestore() {
+    staged = null;
+    await api.restore.cancel().catch(() => {});
+  }
+
+  async function applyRestore() {
+    restoring = true;
+    try {
+      await api.restore.apply();
+    } catch (e) {
+      restoring = false;
+      notify(String(e), "info");
+    }
+  }
+
+  const fmtDate = (ms: number) =>
+    new Date(ms).toLocaleString("tr-TR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   async function openLog() {
     try {
@@ -60,6 +96,29 @@
       </div>
     </div>
     <div class="field">
+      <span class="label">Tam yedek <span class="sub small">· formattan önce ya da başka bilgisayara geçerken</span></span>
+      {#if staged}
+        <div class="restore">
+          <span>
+            <b>{fmtDate(staged.created)}</b> tarihli yedek hazır{staged.version ? ` (GMID ${staged.version})` : ""}.
+            Uygulama yeniden başlayacak; şu anki verilerin <code>Yedekler</code> klasörüne saklanır, sonra yedek yerine konur.
+          </span>
+          <div class="row">
+            <button class="btn" disabled={restoring} onclick={applyRestore}><Icon name="restore" />Geri yükle ve yeniden başlat</button>
+            <button class="btn ghost" disabled={restoring} onclick={cancelRestore}>Vazgeç</button>
+          </div>
+        </div>
+      {:else}
+        <span class="sub small">
+          Ayarlar, notlar, kütüphane, geçmiş ve kapaklarla birlikte tek dosya: <b>Format Sonrası Kurulum → Format Kiti</b>
+          ile oluşturulur (<code>GMID-Yedek.zip</code>). Buradan geri yükleyebilirsin.
+        </span>
+        <div class="row">
+          <button class="btn ghost" disabled={restoring} onclick={pickRestore}><Icon name="restore" />{restoring ? "Yedek okunuyor…" : "Yedekten geri yükle"}</button>
+        </div>
+      {/if}
+    </div>
+    <div class="field">
       <span class="label">Sorun giderme</span>
       <span class="sub small">Bir şey ters giderse ne olduğu <code>gmid.log</code> dosyasına yazılır. Bana sorun bildirirken bu dosyanın içeriği çok işe yarar.</span>
       <div class="row">
@@ -75,4 +134,5 @@
   .backups { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   .backups li { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); }
   code { padding: 1px 6px; }
+  .restore { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.06); }
 </style>

@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular), Faz 3b (Oyun: Kütüphanem, Oturum Geçmişi, Oyun Arşivi, Kliplerim), Faz 4 (Oyun Modu, Oyun İçi Panel) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular), Faz 3b (Oyun: Kütüphanem, Oturum Geçmişi, Oyun Arşivi, Kliplerim), Faz 4 (Oyun Modu, Oyun İçi Panel), Faz 5 (Video İndirici) ve Faz 6 (Film & Dizi Arşivi, Format Sonrası Kurulum) kodlandı. Sonrası için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -33,6 +33,18 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 - **Kütüphanem:** kapak ızgarası (kapak ve bilgiler Steam mağazasından kendiliğinden, Türkçe), arama, kaynak süzgeci,
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
+
+### Faz 6 — Format Sonrası Kurulum
+
+- **Katalog** (Çalışma Odası → Format Sonrası Kurulum): tarayıcılar, oyun platformları, iletişim, araçlar, medya,
+  donanım, oyun bileşenleri… Tıkla, listene girsin. Katalogda yoksa **Tüm depoda ara** (Microsoft'un paket deposu).
+  Bilgisayarında kurulu olanlar "Kurulu" diye işaretlenir.
+- **Şimdi kur:** listendeki eksik programlar sırayla ve sessizce kurulur (winget); her biri için ilerleme ve ✅/❌.
+- **Format Kiti:** USB'ye ya da bulut klasörüne bir klasör çıkarır. Formattan sonra **Kur.bat**'a çift tıkla:
+  programlar kurulur, **GMID'in yedeği** (ayarlar, kısayollar, notlar, hatırlatıcılar, kütüphane, oturum geçmişi,
+  puanlar, çalma listeleri, kapaklar, arka planlar; istersen videolar ve modeller) yerine konur, GMID kurulur ve
+  formattan önceki haliyle açılır. Kullanıcı adın değişse bile dosya yolları yeni bilgisayara göre düzeltilir.
+- Yedeği uygulamanın içinden de geri yükleyebilirsin: **Kontrol Odası → Veri ve yedekler → Yedekten geri yükle**.
 
 ### Faz 6 — Film & Dizi Arşivi
 

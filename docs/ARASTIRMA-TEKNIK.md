@@ -79,14 +79,14 @@ Kaynaklar: https://github.com/Belphemur/SoundSwitch · https://github.com/frgnca
 
 - **winget:** `winget install --id <ID> -e --silent --accept-package-agreements --accept-source-agreements`. Toplu: `winget export -o apps.json` / `winget import -i apps.json`.
 - **Tuzak:** Yeni kurulmuş Windows'ta "Uygulama Yükleyicisi" (winget) ilk dakikalarda hazır olmayabilir. Betik önce `winget --version` kontrol eder; yoksa Microsoft Store'daki App Installer sayfasını açar.
-- **Paket kimlikleri** (kurmadan önce `winget search` ile doğrulanacak):
+- **Paket kimlikleri** (2026-10'da microsoft/winget-pkgs deposunda doğrulandı; tam katalog `src-tauri/src/install/mod.rs`):
 
   | Uygulama | winget ID |
   |---|---|
   | Chrome | `Google.Chrome` |
   | Steam | `Valve.Steam` |
   | Discord | `Discord.Discord` |
-  | Claude (masaüstü) | `Anthropic.Claude` **(doğrulanmalı)** |
+  | Claude (masaüstü) | `Anthropic.Claude` ✅ |
   | WinRAR | `RARLab.WinRAR` |
   | 7-Zip | `7zip.7zip` |
   | VLC | `VideoLAN.VLC` |
@@ -94,7 +94,7 @@ Kaynaklar: https://github.com/Belphemur/SoundSwitch · https://github.com/frgnca
   | EA app | `ElectronicArts.EADesktop` |
   | OBS Studio | `OBSProject.OBSStudio` |
   | Spotify | `Spotify.Spotify` (yönetici olarak kurulmayı reddeder; normal kullanıcıyla kurulmalı) |
-  | NVIDIA App | **(doğrulanmalı)** |
+  | NVIDIA App | winget'te **yok** (GeForce Experience de kaldırıldı) → resmî indirme sayfası açılır |
 
 - **Tasarım:** Uygulama listeyi JSON olarak tutar; "Dışa aktar" düğmesi bundan **bağımsız çalışan** bir `kurulum.ps1` (+ çift tıklanabilir `.bat` sarmalayıcı) ve winget import JSON'u üretir. Format sonrası GMID kurulu değilken de çalışır; GMID'in kendisi de listeye eklenebilir.
 - Alternatifler: Chocolatey (ayrıca kurulum gerektirir), Ninite (kapalı, sınırlı liste). winget Windows'ta yerleşik olduğu için tercih edildi.

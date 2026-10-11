@@ -47,7 +47,7 @@
     { id: "indirici", label: "Video İndirici", icon: "download", keys: "video indirme yt-dlp ffmpeg deno araç güncelle eklenti chrome opera aynı anda klasör" },
     { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü discord" },
     { id: "sunucular", label: "Sunucular", icon: "server", keys: "sunucu topluluk liste adres github" },
-    { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun" },
+    { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun geri yükle format zip" },
     { id: "hakkinda", label: "Hakkında", icon: "info", keys: "sürüm hakkında merkut gmid" },
   ];
 
