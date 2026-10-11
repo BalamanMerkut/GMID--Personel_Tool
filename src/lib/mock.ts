@@ -127,6 +127,7 @@ const downloadsList: Download[] = [
   dl({ title: "Lofi oyun müzikleri · 1 saat", uploader: "Chill Malikâne", quality: "MP3", audioOnly: true, duration: 3600, size: 86_000_000, thumbnail: thumb("#35a0a2", "#121417", "LOFI"), finishedAt: now() - 86_400_000, playlist: "GMID Lofi" }),
   dl({ title: "Gece Sürüşü", uploader: "Chill Malikâne", quality: "MP3", audioOnly: true, duration: 186, size: 7_400_000, thumbnail: thumb("#7848a8", "#121417", "2"), finishedAt: now() - 86_400_000, playlist: "GMID Lofi" }),
   dl({ title: "Minecraft sunucumuzun turu", uploader: "@gmid", site: "Instagram", quality: "1080p", duration: 45, size: 22_000_000, thumbnail: thumb("#e06a6a", "#7848a8", "REELS"), finishedAt: now() - 2 * 86_400_000 }),
+  dl({ title: "Yeryüzü Şarkısı (2026)", uploader: "", site: "Generic", quality: "1080p", duration: 7116, filePath: "ornek/film.mp4", size: 2_100_000_000, thumbnail: thumb("#0b203e", "#e3c270", "FİLM"), finishedAt: now() - 7_200_000 }),
   dl({ title: "Stardew Valley ortak çiftlik planı", uploader: "Çiftçi Abi", quality: "1440p", duration: 1260, size: 640_000_000, thumbnail: thumb("#5cc08a", "#0b203e", "STARDEW"), finishedAt: now() - 3 * 86_400_000 }),
 ];
 const liveMap: Record<string, Live> = {};
@@ -150,6 +151,8 @@ const probeResult: Probe = {
     { id: "480", label: "480p", detail: "MP4", size: 31_000_000, audioOnly: false, recommended: false },
     { id: "mp3", label: "Sadece ses", detail: "MP3", size: 3_400_000, audioOnly: true, recommended: false },
   ],
+  audioLangs: [{ code: "tur", label: "Türkçe" }, { code: "eng", label: "İngilizce" }],
+  subtitles: [{ code: "tr", label: "Türkçe" }, { code: "en", label: "İngilizce" }, { code: "de", label: "Almanca" }],
 };
 
 // ---- Yazılar ----
@@ -447,6 +450,19 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "transcript_delete":
       delete transcripts[a.id as string];
       return;
+    case "media_tracks": {
+      const d = downloadsList.find((x) => x.id === a.id);
+      return d && !d.audioOnly
+        ? [{ file: "a.tr.vtt", lang: "tr", label: "Türkçe" }, { file: "a.en.vtt", lang: "en", label: "İngilizce" }]
+        : [];
+    }
+    case "media_track": {
+      const tr = String(a.file).includes(".tr.");
+      const lines = tr
+        ? ["Bu dünya hepimizin.", "Onu korumak zorundayız.", "Bak, denizler ağlıyor.", "Peki ya biz ne yapıyoruz?"]
+        : ["This world belongs to all of us.", "We have to protect it.", "Look, the seas are crying.", "And what are we doing?"];
+      return Array.from({ length: 40 }, (_, i) => ({ start: 1 + i * 3, end: 3.6 + i * 3, text: lines[i % 4] }));
+    }
     case "whisper_status":
       return { program: false, ready: false, selected: "turbo", models: [
         { id: "turbo", label: "Dengeli (önerilen)", detail: "large-v3-turbo · en iyi doğruluğa çok yakın, hızlı", sizeMb: 550, installed: false },

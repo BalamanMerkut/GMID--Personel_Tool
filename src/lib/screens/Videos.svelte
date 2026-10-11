@@ -1,18 +1,45 @@
 <script lang="ts">
+  // Video İndirici: bağlantı → kalite (dublaj, altyazı) → indir. Bitenler Medya Oynatıcı'da.
   import { onMount } from "svelte";
   import { api, formatSize, inTauri } from "../api";
   import { on } from "../bus";
   import Switch from "../components/Switch.svelte";
   import { downloads, formatDuration, formatEta, formatSpeed, isActive, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
-  import Player from "../components/Player.svelte";
+  import { play } from "../player.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
   import type { BridgeStatus, Download, PlaylistProbe, Probe, QualityOption, ToolProgress, ToolsState } from "../types";
 
-  type Tab = "all" | "YouTube" | "X" | "Instagram" | "audio" | "other";
-  const TABS: [Tab, string][] = [["all", "Tümü"], ["YouTube", "YouTube"], ["X", "X"], ["Instagram", "Instagram"], ["audio", "Sesler"], ["other", "Diğer"]];
+  let { onnavigate }: { onnavigate: (id: string) => void } = $props();
+
+  /** Seçilen dublaj (ses dili) ve altyazılar; ayarlardaki tercihle önceden işaretlenir. */
+  let audioSel: string | null = $state(null);
+  let subSel: string[] = $state([]);
+  let allSubs = $state(false);
+  const langBase = (code: string) => {
+    const b = code.toLowerCase().split(/[-_]/)[0];
+    return ({ tur: "tr", eng: "en" } as Record<string, string>)[b] ?? b;
+  };
+  const sortedSubs = $derived.by(() => {
+    const p = probe as Probe | null;
+    if (!p) return [];
+    const rank = (c: string) => (langBase(c) === "tr" ? 0 : langBase(c) === "en" ? 1 : 2);
+    return [...p.subtitles].sort((a, b) => rank(a.code) - rank(b.code));
+  });
+  function presetLangs(p: Probe) {
+    const audioPref = getJson<string>("videos.audioLang", "tr");
+    const subPref = getJson<string>("videos.subLangs", "tr");
+    audioSel = audioPref === "orig" ? null : (p.audioLangs.find((t) => langBase(t.code) === audioPref)?.code ?? null);
+    const wanted = subPref === "none" ? [] : subPref.split(",");
+    subSel = wanted.flatMap((b) => p.subtitles.find((t) => langBase(t.code) === b)?.code ?? []);
+    allSubs = false;
+  }
+  function toggleSub(code: string) {
+    subSel = subSel.includes(code) ? subSel.filter((c) => c !== code) : [...subSel, code];
+  }
+
 
   let url = $state("");
   let probing = $state(false);
@@ -22,7 +49,6 @@
   let selected: string[] = $state([]);
   let plQuality = $state("1080");
   let plBusy = $state(false);
-  let plFilter: string | null = $state(null);
   const PL_QUALITIES: [string, string][] = [["1080", "1080p"], ["720", "720p"], ["480", "480p"], ["mp3", "MP3 (sadece ses)"]];
   /** Video bağlantısı bir çalma listesinin içinden mi açılmış? */
   const inList = $derived(!!probe && /[?&]list=/.test(url));
@@ -37,35 +63,18 @@
   let pairCode: string | null = $state(null);
   let extPath: string | null = $state(null);
   let showSteps = $state(false);
-  let tab: Tab = $state("all");
-  let search = $state("");
-  let armed: string | null = $state(null);
-  /** Uygulama içi oynatıcıda açık olan. */
-  let playing: Download | null = $state(null);
-  let hovering: string | null = $state(null);
   let parallel = $state(getJson("videos.parallel", 2));
   let notifyDone = $state(getJson("videos.notify", true));
   let updating = $state(false);
 
   const queue = $derived(downloads.list.filter((d) => d.status !== "done"));
-  const library = $derived(downloads.list.filter((d) => d.status === "done"));
-  const tabOf = (d: Download): Tab => {
-    if (d.audioOnly) return "audio";
-    const s = siteLabel(d.site);
-    return s === "YouTube" || s === "X" || s === "Instagram" ? s : "other";
-  };
-  const counts = $derived(Object.fromEntries(TABS.map(([t]) => [t, t === "all" ? library.length : library.filter((d) => tabOf(d) === t).length])));
-  const shown = $derived.by(() => {
-    const q = search.trim().toLocaleLowerCase("tr-TR");
-    return library.filter(
-      (d) =>
-        (tab === "all" || tabOf(d) === tab) &&
-        (!plFilter || d.playlist === plFilter) &&
-        (!q || `${d.title} ${d.uploader} ${d.playlist ?? ""}`.toLocaleLowerCase("tr-TR").includes(q)),
-    );
-  });
-  const playlists = $derived([...new Set(library.map((d) => d.playlist).filter((p): p is string => !!p))]);
-  const totalSize = $derived(library.reduce((s, d) => s + (d.size ?? 0), 0));
+  /** Son biten beş indirme (hepsi Medya Oynatıcı'da). */
+  const recent = $derived(
+    downloads.list
+      .filter((d) => d.status === "done")
+      .sort((x, y) => (y.finishedAt ?? 0) - (x.finishedAt ?? 0))
+      .slice(0, 5),
+  );
 
   async function loadTools() {
     tools = await api.videos.tools();
@@ -115,6 +124,7 @@
         selected = r.entries.map((e) => e.id);
       } else {
         probe = r;
+        presetLangs(r);
       }
     } catch (e) {
       const msg = String(e);
@@ -147,7 +157,7 @@
   async function start(o: QualityOption) {
     if (!probe) return;
     try {
-      await api.videos.download(probe.url, o.id);
+      await api.videos.download(probe.url, o.id, { audio: audioSel, subs: o.audioOnly ? [] : subSel });
       notify(`Sıraya eklendi · ${o.audioOnly ? "MP3" : o.label}`, "download");
       probe = null;
       url = "";
@@ -214,16 +224,6 @@
     }
   }
 
-  function remove(d: Download) {
-    if (armed !== d.id) {
-      armed = d.id;
-      setTimeout(() => armed === d.id && (armed = null), 3000);
-      return;
-    }
-    armed = null;
-    void act(api.videos.remove(d.id, true).then(() => notify("Video silindi", "trash")));
-  }
-
   function statusText(d: Download): string {
     const l = downloads.live[d.id];
     switch (d.status) {
@@ -243,7 +243,6 @@
 
   const progressOf = (d: Download) => downloads.live[d.id]?.progress ?? d.progress;
   const thumbSrc = (t: string | null) => (!t ? null : /^(https?:|data:)/.test(t) ? t : api.fileSrc(t));
-  const previewable = (d: Download) => !!d.filePath && /\.(mp4|webm)$/i.test(d.filePath);
 
   // ---- eklenti ----
 
@@ -304,6 +303,33 @@
         <div class="pinfo">
           <b class="ptitle">{probe.title}</b>
           <span class="sub small">{[probe.uploader, siteLabel(probe.site)].filter(Boolean).join(" · ")}</span>
+          {#if probe.audioLangs.length}
+            <div class="langrow">
+              <span class="lbl">Ses / dublaj</span>
+              <div class="seg">
+                <button aria-pressed={audioSel === null} onclick={() => (audioSel = null)}>Varsayılan</button>
+                {#each probe.audioLangs as t (t.code)}
+                  <button aria-pressed={audioSel === t.code} onclick={() => (audioSel = t.code)}>{t.label}</button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+          {#if sortedSubs.length}
+            <div class="langrow">
+              <span class="lbl">Altyazı</span>
+              <div class="subs">
+                {#each allSubs ? sortedSubs : sortedSubs.slice(0, 6) as t (t.code)}
+                  <button class="chipbtn" aria-pressed={subSel.includes(t.code)} onclick={() => toggleSub(t.code)}>
+                    {#if subSel.includes(t.code)}<Icon name="check" size={13} />{/if}{t.label}
+                  </button>
+                {/each}
+                {#if sortedSubs.length > 6 && !allSubs}
+                  <button class="link small" onclick={() => (allSubs = true)}>+{sortedSubs.length - 6} dil daha</button>
+                {/if}
+              </div>
+            </div>
+            <span class="sub small">Seçilen altyazılar videonun yanına iner; oynatıcıda <b>CC</b> düğmesinden açılır (MP3'te inmez).</span>
+          {/if}
           <div class="qgrid">
             {#each probe.options as o (o.id)}
               <button class="q" class:rec={o.recommended} class:audio={o.audioOnly} onclick={() => start(o)}>
@@ -433,74 +459,29 @@
         </section>
       {/if}
 
-      <section class="panel lib">
+      <section class="panel">
         <div class="spread">
-          <h3 class="h2"><Icon name="film" />Videolarım <span class="sub small tnum">{library.length} video · {formatSize(totalSize)}</span></h3>
-          <div class="row">
-            <input class="search" type="search" placeholder="Ara…" bind:value={search} aria-label="Videolarda ara" />
-            <button class="btn ghost sm" onclick={() => api.openDataFolder("Videolar")}><Icon name="folder" size={16} />Klasör</button>
-          </div>
+          <h3 class="h2"><Icon name="check" />Son indirilenler</h3>
+          <button class="link" onclick={() => onnavigate("media")}>Hepsi Medya Oynatıcı'da →</button>
         </div>
-        <div class="seg" role="tablist">
-          {#each TABS as [t, label] (t)}
-            {#if t === "all" || counts[t]}
-              <button aria-pressed={tab === t} onclick={() => (tab = t)}>{label} <span class="n">{counts[t]}</span></button>
-            {/if}
-          {/each}
-        </div>
-        {#if playlists.length}
-          <div class="lists">
-            <span class="sub small">Listeler:</span>
-            <button class="chipbtn" aria-pressed={!plFilter} onclick={() => (plFilter = null)}>Hepsi</button>
-            {#each playlists as p (p)}
-              <button class="chipbtn" aria-pressed={plFilter === p} onclick={() => (plFilter = plFilter === p ? null : p)}><Icon name="list" size={13} />{p}</button>
-            {/each}
-          </div>
-        {/if}
-        <div class="grid">
-          {#each shown as d (d.id)}
-            <article
-              class="card"
-              ondblclick={() => (playing = d)}
-              onmouseenter={() => (hovering = d.id)}
-              onmouseleave={() => hovering === d.id && (hovering = null)}
-              title="Çift tıkla: oynat (yazılarıyla)"
-            >
-              <div class="cthumb">
-                {#if hovering === d.id && previewable(d) && inTauri}
-                  <!-- svelte-ignore a11y_media_has_caption -->
-                  <video src={api.fileSrc(d.filePath ?? "")} autoplay muted loop playsinline></video>
-                {:else if thumbSrc(d.thumbnail)}
-                  <img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />
-                {:else}
-                  <span class="ph"><Icon name={d.audioOnly ? "speaker" : "film"} size={30} /></span>
-                {/if}
-                <span class="qual">{d.quality}</span>
-                {#if d.duration}<span class="dur tnum">{formatDuration(d.duration)}</span>{/if}
-                <div class="hover">
-                  <button class="round" title="Oynat (yazılarıyla)" onclick={() => (playing = d)}><Icon name="play" size={20} /></button>
-                </div>
+        {#each recent as d (d.id)}
+          <div class="job">
+            <div class="jthumb">{#if thumbSrc(d.thumbnail)}<img src={thumbSrc(d.thumbnail)} alt="" />{/if}</div>
+            <div class="jbody">
+              <div class="spread nowrap">
+                <b class="jtitle" title={d.title}>{d.title}</b>
+                <span class="chip">{d.quality}</span>
               </div>
-              <div class="cbody">
-                <b class="ctitle" title={d.title}>{d.title}</b>
-                <span class="sub small">{[d.uploader, siteLabel(d.site)].filter(Boolean).join(" · ")}</span>
-                <div class="spread">
-                  <span class="sub small tnum">{d.size ? formatSize(d.size) : ""}{d.finishedAt ? ` · ${ago(d.finishedAt)}` : ""}</span>
-                  <span class="cacts">
-                    <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={16} /></button>
-                    <button class="mini" class:armed={armed === d.id} title="Videoyu sil" onclick={() => remove(d)}>
-                      <Icon name="trash" size={16} />{#if armed === d.id}<span>Sil?</span>{/if}
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </article>
-          {:else}
-            <p class="sub empty">
-              {library.length ? "Bu süzgeçte video yok." : "Henüz indirilen video yok. Yukarıya bir bağlantı yapıştırarak başla."}
-            </p>
-          {/each}
-        </div>
+              <span class="sub small tnum">{[siteLabel(d.site), d.size ? formatSize(d.size) : "", d.finishedAt ? ago(d.finishedAt) : ""].filter(Boolean).join(" · ")}</span>
+            </div>
+            <div class="jacts">
+              <button class="mini" title="Oynat" onclick={() => play(d, recent)}><Icon name="play" size={17} /></button>
+              <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={17} /></button>
+            </div>
+          </div>
+        {:else}
+          <p class="sub small">Henüz indirilen yok. Yukarıya bir bağlantı yapıştırarak başla; bitenler <b>Medya Oynatıcı</b>'da toplanır.</p>
+        {/each}
       </section>
     </div>
 
@@ -592,9 +573,6 @@
   </div>
 </div>
 
-{#if playing}
-  <Player item={playing} queue={shown} onclose={() => (playing = null)} onpick={(d) => (playing = d)} />
-{/if}
 
 <style>
   .vd { display: flex; flex-direction: column; gap: 16px; max-width: 1500px; margin: 0 auto; }
@@ -609,8 +587,8 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .probe { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: 18px; align-items: start; }
-  .pthumb, .jthumb, .cthumb { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: var(--coal-2); }
-  .pthumb img, .jthumb img, .cthumb img, .cthumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pthumb, .jthumb { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: var(--coal-2); }
+  .pthumb img, .jthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .dur { position: absolute; right: 6px; bottom: 6px; background: rgba(0, 0, 0, 0.75); font-size: 11.5px; font-weight: 600; padding: 1px 6px; border-radius: 5px; }
   .pinfo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .ptitle { font-family: var(--f-display); font-size: 16px; }
@@ -629,6 +607,11 @@
   .tag { font-family: var(--f-body); font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 999px; padding: 0 6px; }
 
   .listbtn { align-self: flex-start; margin-top: 8px; }
+  .langrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .lbl { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); min-width: 92px; }
+  .subs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .subs .chipbtn { font-family: var(--f-body); }
+  .chipbtn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
   .pl { display: flex; flex-direction: column; gap: 12px; }
   .plhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
   .pltitle { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -642,9 +625,6 @@
   .ethumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .etxt { display: flex; flex-direction: column; min-width: 0; }
   .et { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lists { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .lists .chipbtn { font-family: var(--f-body); }
-  .chipbtn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
   .tools { display: flex; flex-direction: column; gap: 10px; border-color: rgba(53, 160, 162, 0.5); }
   .tool { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
   .tn { display: flex; flex-direction: column; }
@@ -669,26 +649,8 @@
   .jacts { display: flex; gap: 2px; }
   .mini { border: 0; background: transparent; color: var(--dim); padding: 6px; border-radius: 7px; display: inline-flex; align-items: center; gap: 4px; }
   .mini:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
-  .mini.armed { color: var(--bad); background: rgba(224, 106, 106, 0.12); font-size: 12px; font-weight: 700; }
 
-  .lib .h2 .sub { font-family: var(--f-body); font-weight: 500; margin-left: 4px; }
-  .search { background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; width: 180px; }
   .sm { padding: 6px 11px; font-size: 13px; }
-  .seg .n { color: var(--dim); margin-left: 3px; font-variant-numeric: tabular-nums; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 14px; }
-  .card { display: flex; flex-direction: column; gap: 8px; min-width: 0; cursor: default; }
-  .cthumb { border: 1px solid var(--line); }
-  .card:hover .cthumb { border-color: var(--gold-dim); }
-  .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); }
-  .qual { position: absolute; left: 6px; top: 6px; background: rgba(18, 20, 23, 0.85); color: var(--gold); font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 5px; }
-  .hover { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 0.15s; background: rgba(0, 0, 0, 0.18); }
-  .card:hover .hover { opacity: 1; }
-  .round { width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(227, 194, 112, 0.92); color: #1b1608; display: grid; place-items: center; }
-  .cbody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .ctitle { font-weight: 600; font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .cacts { display: flex; opacity: 0.5; transition: opacity 0.15s; }
-  .card:hover .cacts { opacity: 1; }
-  .empty { grid-column: 1 / -1; margin: 6px 0; }
 
   .state { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; color: var(--muted); }
   .state .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }

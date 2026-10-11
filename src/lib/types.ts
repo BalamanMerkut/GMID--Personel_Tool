@@ -237,6 +237,30 @@ export interface Probe {
   duration: number | null;
   thumbnail: string | null;
   options: QualityOption[];
+  /** Birden çok ses dili (dublaj) varsa. */
+  audioLangs: Track[];
+  /** Sitenin altyazıları. */
+  subtitles: Track[];
+}
+
+/** Ses dili ya da altyazı. `code` sitenin kullandığı ad ("tr", "tur", "en-US"…). */
+export interface Track {
+  code: string;
+  label: string;
+}
+
+/** İndirmede seçilen dublaj ve altyazılar. */
+export interface Langs {
+  audio: string | null;
+  subs: string[];
+}
+
+/** Videonun yanındaki altyazı dosyası. */
+export interface Sidecar {
+  file: string;
+  /** "tr", "en"…; uygulamanın yazıya döktüğünde boş. */
+  lang: string;
+  label: string;
 }
 
 export interface PlaylistEntry {

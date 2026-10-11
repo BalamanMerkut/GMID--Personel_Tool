@@ -12,7 +12,10 @@
   import Reminders from "./lib/screens/Reminders.svelte";
   import Servers from "./lib/screens/Servers.svelte";
   import Videos from "./lib/screens/Videos.svelte";
-  import { activeSummary, startDownloadsSync } from "./lib/downloads.svelte";
+  import Media from "./lib/screens/Media.svelte";
+  import Player from "./lib/components/Player.svelte";
+  import { player, stopPlayer } from "./lib/player.svelte";
+  import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
   import Icon from "./lib/Icon.svelte";
   import Settings from "./lib/screens/Settings.svelte";
   import Timer from "./lib/screens/Timer.svelte";
@@ -27,6 +30,12 @@
   let active = $state(true);
   let info: AppInfo | null = $state(null);
   let main: HTMLElement | undefined = $state();
+
+  // Çalan kayıt silinirse oynatıcı kapanır.
+  $effect(() => {
+    const id = player.item?.id;
+    if (id && downloads.loaded && !downloads.list.some((d) => d.id === id)) stopPlayer();
+  });
 
   const quality = $derived(effectiveQuality(settings.quality));
   const screen = $derived(findScreen(route) ?? SCREENS[0]);
@@ -103,7 +112,7 @@
 {#if ready}
   <Background active={active && revealed} {quality} />
 
-  <div class="app" class:pre={!revealed} data-quality={quality}>
+  <div class="app" class:pre={!revealed} class:withmini={player.item && !player.open} data-quality={quality}>
     <Sidebar current={route} version={info?.version ?? ""} onnavigate={navigate} />
     <div class="content">
       <header class="topbar">
@@ -129,7 +138,9 @@
         {:else if route === "reminders"}
           <Reminders />
         {:else if route === "videos"}
-          <Videos />
+          <Videos onnavigate={navigate} />
+        {:else if route === "media"}
+          <Media onnavigate={navigate} />
         {:else if route === "servers"}
           <Servers />
         {:else if route === "timer"}
@@ -145,6 +156,19 @@
       </main>
     </div>
   </div>
+
+  {#if player.item}
+    <!-- Ekran değişse de çalmaya devam eder; küçültülünce altta çalma çubuğu. -->
+    <Player
+      item={player.item}
+      queue={player.queue}
+      mini={!player.open}
+      onclose={() => (player.open = false)}
+      onexpand={() => (player.open = true)}
+      onstop={stopPlayer}
+      onpick={(d) => (player.item = d)}
+    />
+  {/if}
 
   {#if showSplash}
     <Splash onleave={() => (revealed = true)} ondone={() => (showSplash = false)} />
@@ -162,6 +186,7 @@
     transition: opacity 0.6s ease, transform 0.6s ease;
   }
   .app.pre { opacity: 0; transform: scale(0.99); }
+  .app.withmini main { padding-bottom: 96px; }
   .content { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
   .topbar {
     display: flex; justify-content: space-between; align-items: center; gap: 16px;

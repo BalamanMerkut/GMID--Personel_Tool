@@ -274,6 +274,7 @@ fn handle(app: &AppHandle, mut req: Request) {
                 b.cookies,
                 "extension",
                 &b.context,
+                None,
             ) {
                 Ok(d) => reply(req, 200, json!(d)),
                 Err(e) if e == "TOOLS_MISSING" => {

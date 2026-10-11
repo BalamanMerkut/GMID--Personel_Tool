@@ -1,7 +1,8 @@
 // GMID Tool eklentisi — sayfanın kendi dünyasında çalışır (oynatıcıyla aynı yerde).
 // Bazı film siteleri yayın listesinin (HLS, m3u8) adresini ve türünü gizler: ".txt", ".png" ya da
 // "text/plain" gibi görünür, ağ trafiğinden anlaşılmaz. Burada oynatıcının indirdiği yanıtın
-// İÇERİĞİNE bakılır: "#EXTM3U" ile başlıyorsa bu bir yayın listesidir ve adresi eklentiye bildirilir.
+// İÇERİĞİNE bakılır: "#EXTM3U" ile başlıyorsa bu bir yayın listesidir, "WEBVTT" ile başlıyorsa
+// (ya da SRT biçimindeyse) altyazıdır; adresi eklentiye bildirilir.
 // Hiçbir yanıt değiştirilmez, hiçbir şey dışarı gönderilmez.
 (() => {
   if (window.__gmidSniff) return;
@@ -9,8 +10,11 @@
   const MAX = 2 * 1024 * 1024;
   const seen = new Set();
 
+  const SRT = /^\uFEFF?\d+\r?\n\d\d:\d\d:\d\d[,.]\d+ --> /;
   function report(url, text) {
-    if (typeof text !== "string" || !text.startsWith("#EXTM3U")) return;
+    if (typeof text !== "string") return;
+    const sub = /^\uFEFF?WEBVTT/.test(text) || SRT.test(text);
+    if (!sub && !text.startsWith("#EXTM3U")) return;
     try {
       url = new URL(url, location.href).href;
     } catch {
@@ -18,6 +22,7 @@
     }
     if (!/^https?:/.test(url) || seen.has(url)) return;
     seen.add(url);
+    if (sub) return window.postMessage({ __gmid: "sub", url }, "*");
     // Ana liste (çözünürlük seçenekleri) tek kalitelik listeden önce denenir.
     window.postMessage({ __gmid: "hls", url, master: text.includes("#EXT-X-STREAM-INF") }, "*");
   }
@@ -76,7 +81,7 @@
           const pump = () =>
             reader.read().then(({ done, value }) => {
               if (value) text += decoder.decode(value, { stream: true });
-              if (text.length >= 7 && !text.startsWith("#EXTM3U")) return reader.cancel();
+              if (text.length >= 8 && !/^(#EXTM3U|\uFEFF?WEBVTT|\uFEFF?\d)/.test(text)) return reader.cancel();
               if (text.length > MAX) return reader.cancel();
               if (done) return report(r.url, text);
               return pump();

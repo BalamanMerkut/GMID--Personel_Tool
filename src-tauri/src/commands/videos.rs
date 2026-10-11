@@ -1,7 +1,11 @@
 //! Video İndirici komutları. Ağa ya da yt-dlp'ye giden her şey arka planda çalışır.
 
-use crate::downloader::{self, bridge::Bridge, tools, ytdlp::Context, Download, Downloader, Live};
+use crate::downloader::subs::{self, Sidecar};
+use crate::downloader::ytdlp::{Context, Langs};
+use crate::downloader::{self, bridge::Bridge, tools, Download, Downloader, Live};
+use crate::transcript::parse::{self, Segment};
 use crate::{db::Db, paths::DataDir};
+use std::path::Path;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
@@ -75,10 +79,22 @@ pub async fn videos_probe(
 }
 
 #[tauri::command]
-pub async fn videos_download(app: AppHandle, url: String, option: String) -> CmdResult<Download> {
+pub async fn videos_download(
+    app: AppHandle,
+    url: String,
+    option: String,
+    langs: Option<Langs>,
+) -> CmdResult<Download> {
     blocking(app, move |app| {
-        app.state::<Downloader>()
-            .enqueue(app, &url, &option, None, "app", &Context::default())
+        app.state::<Downloader>().enqueue(
+            app,
+            &url,
+            &option,
+            None,
+            "app",
+            &Context::default(),
+            langs,
+        )
     })
     .await?
 }
@@ -177,4 +193,46 @@ pub fn bridge_unpair(db: State<'_, Db>, bridge: State<'_, Bridge>) {
 #[tauri::command]
 pub fn extension_install(dir: State<'_, DataDir>) -> CmdResult<String> {
     downloader::extension::install(&dir.folder(Some("Eklenti")))
+}
+
+/// Videonun yanındaki altyazılar (film/dizi altyazıları ve uygulamanın yazıya döktüğü).
+#[tauri::command]
+pub fn media_tracks(db: State<'_, Db>, id: String) -> CmdResult<Vec<Sidecar>> {
+    let d = downloader::get(&db, &id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Video bulunamadı")?;
+    Ok(d.file_path
+        .map(|f| subs::sidecars(Path::new(&f)))
+        .unwrap_or_default())
+}
+
+/// Seçilen altyazının satırları.
+#[tauri::command]
+pub fn media_track(db: State<'_, Db>, id: String, file: String) -> CmdResult<Vec<Segment>> {
+    let d = downloader::get(&db, &id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Video bulunamadı")?;
+    let video = d.file_path.ok_or("Video dosyası yok")?;
+    let path = subs::sidecar_path(Path::new(&video), &file).ok_or("Altyazı bulunamadı")?;
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    // Bazı altyazılar UTF-8 değil (eski Türkçe .srt dosyaları Windows-1254 olabilir).
+    let text = match String::from_utf8(bytes) {
+        Ok(t) => t,
+        Err(e) => e.into_bytes().iter().map(|b| cp1254(*b)).collect(),
+    };
+    Ok(parse::parse_vtt(text.trim_start_matches('\u{feff}')))
+}
+
+/// Windows-1254 (Türkçe) → karakter; ASCII aynen kalır.
+fn cp1254(b: u8) -> char {
+    match b {
+        0xD0 => 'Ğ',
+        0xDD => 'İ',
+        0xDE => 'Ş',
+        0xF0 => 'ğ',
+        0xFD => 'ı',
+        0xFE => 'ş',
+        0x80 => '€',
+        _ => char::from(b),
+    }
 }

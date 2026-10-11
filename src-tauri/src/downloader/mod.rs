@@ -6,6 +6,7 @@
 
 pub mod bridge;
 pub mod extension;
+pub mod subs;
 pub mod tools;
 pub mod ytdlp;
 
@@ -21,7 +22,7 @@ use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
-use ytdlp::{Context, Line, Parsed, PlaylistProbe, QualityOption};
+use ytdlp::{Context, Langs, Line, Parsed, PlaylistProbe, Probe, QualityOption};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(90);
 /// Çözümlenen videolar bu süre boyunca hatırlanır (kalite seçilene kadar tekrar sorulmasın).
@@ -165,6 +166,59 @@ fn emit_changed(app: &AppHandle) {
     let _ = app.emit("downloads-changed", ());
 }
 
+/// İşin kayıtlı sayfa bilgisi (Referer, dublaj, altyazılar).
+pub fn context_of(db: &Db, id: &str) -> Context {
+    db.conn()
+        .query_row("SELECT context FROM downloads WHERE id = ?1", [id], |r| {
+            r.get::<_, Option<String>>(0)
+        })
+        .ok()
+        .flatten()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default()
+}
+
+/// Ayarlardaki tercih: ses dili ("tr" | "orig"), altyazılar ("tr" | "tr,en" | "none").
+fn preferred_langs(db: &Db, probe: &Probe) -> Langs {
+    let audio: String = db
+        .setting_json("videos.audioLang")
+        .unwrap_or_else(|| "tr".into());
+    let subs: String = db
+        .setting_json("videos.subLangs")
+        .unwrap_or_else(|| "tr".into());
+    let pick = |tracks: &[ytdlp::Track], base: &str| {
+        tracks
+            .iter()
+            .find(|t| ytdlp::lang_base(&t.code) == base)
+            .map(|t| t.code.clone())
+    };
+    Langs {
+        audio: (audio != "orig")
+            .then(|| pick(&probe.audio_langs, &audio))
+            .flatten(),
+        subs: subs
+            .split(',')
+            .filter(|b| *b != "none" && !b.is_empty())
+            .filter_map(|b| pick(&probe.subtitles, b))
+            .collect(),
+    }
+}
+
+/// Yalnızca bu videoda gerçekten olan diller kalır.
+fn resolve_langs(probe: &Probe, langs: Langs) -> Langs {
+    Langs {
+        audio: langs
+            .audio
+            .filter(|a| probe.audio_langs.iter().any(|t| &t.code == a)),
+        subs: langs
+            .subs
+            .into_iter()
+            .filter(|s| probe.subtitles.iter().any(|t| &t.code == s))
+            .take(8)
+            .collect(),
+    }
+}
+
 fn valid_url(url: &str) -> bool {
     (url.starts_with("https://") || url.starts_with("http://"))
         && url.len() <= 2048
@@ -280,6 +334,7 @@ impl Downloader {
     }
 
     /// Seçilen kaliteyi sıraya ekler. `cookies`: eklentinin verdiği (Netscape biçimli) çerezler.
+    #[allow(clippy::too_many_arguments)]
     pub fn enqueue(
         &self,
         app: &AppHandle,
@@ -288,6 +343,7 @@ impl Downloader {
         cookies: Option<String>,
         source: &str,
         ctx: &Context,
+        langs: Option<Langs>,
     ) -> Result<Download, String> {
         let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
         let probe = match self.probe(dir.root(), url, ctx, false)? {
@@ -295,17 +351,34 @@ impl Downloader {
             Parsed::Playlist(_) => return Err("PLAYLIST".into()),
         };
         let option = ytdlp::choose(&probe.options, option_id).ok_or("Kalite bulunamadı")?;
+        // Dublaj ve altyazı: arayüzde seçildiyse o, değilse (eklenti) ayarlardaki tercih.
+        let langs = resolve_langs(
+            &probe,
+            langs.unwrap_or_else(|| preferred_langs(&db, &probe)),
+        );
+        let mut ctx = Context {
+            audio_lang: langs.audio,
+            sub_langs: if option.audio_only {
+                Vec::new()
+            } else {
+                langs.subs
+            },
+            ..ctx.clone()
+        };
+        if option.audio_only {
+            ctx.extra_subs.clear();
+        }
+        ctx.extra_subs
+            .retain(|s| s.url.starts_with("http://") || s.url.starts_with("https://"));
+        ctx.extra_subs.truncate(6);
         // Sayfa bilgisi sadece site videoyu tanımıyorsa saklanır (dosya adı ve erişim için).
         let ctx = if probe.site.eq_ignore_ascii_case("generic") {
             Context {
                 title: Some(probe.title.clone()),
-                ..ctx.clone()
+                ..ctx
             }
         } else {
-            Context {
-                title: None,
-                ..ctx.clone()
-            }
+            Context { title: None, ..ctx }
         };
         let context = (ctx != Context::default())
             .then(|| serde_json::to_string(&ctx).ok())
@@ -717,6 +790,12 @@ impl Downloader {
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
                         .remove(id);
+                    subs::fetch_after(
+                        dir.root().to_path_buf(),
+                        d.url.clone(),
+                        PathBuf::from(&f),
+                        context_of(&db, id),
+                    );
                     crate::overlay::system_notification(
                         app,
                         "videos.notify",
@@ -874,10 +953,9 @@ impl Downloader {
                         }
                     })
                     .map_err(|e| format!("Dosya silinemedi (açık olabilir): {e}"))?;
-                // Yanındaki yazı dosyaları (Whisper / altyazı) da gitsin.
-                for ext in ["srt", "lrc"] {
-                    let _ = std::fs::remove_file(Path::new(f).with_extension(ext));
-                }
+                // Yanındaki yazı dosyaları (Whisper / altyazılar) da gitsin.
+                subs::remove_all(Path::new(f));
+                let _ = std::fs::remove_file(Path::new(f).with_extension("lrc"));
             }
         }
         crate::transcript::delete(&db, id);

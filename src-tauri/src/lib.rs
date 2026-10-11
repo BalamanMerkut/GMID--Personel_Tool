@@ -189,6 +189,8 @@ pub fn run() {
             commands::videos::videos_update,
             commands::videos::videos_probe,
             commands::videos::videos_download,
+            commands::videos::media_tracks,
+            commands::videos::media_track,
             commands::videos::videos_download_playlist,
             commands::videos::videos_list,
             commands::videos::videos_live,

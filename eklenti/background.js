@@ -64,6 +64,25 @@ async function api(path, body) {
 
 /** Sekme kimliği → [{ url, kind, size, frameUrl, time }] (bellekte; tarayıcı kapanınca silinir) */
 const media = new Map();
+/** Sekme kimliği → [{ url, lang }]: oynatıcının ayrıca yüklediği altyazı dosyaları (film siteleri). */
+const subs = new Map();
+
+/** Altyazı adresinden dil tahmini: ".../tr.vtt", "turkce", "eng"… */
+function guessLang(url) {
+  let path = url.toLowerCase();
+  try {
+    path = decodeURIComponent(new URL(url).pathname + "?" + new URL(url).search).toLowerCase();
+  } catch {
+    /* adres olduğu gibi */
+  }
+  if (/(^|[^a-z])(tr|tur|turkce|türkçe|turkish|trk)([^a-z]|$)/.test(path)) return "tr";
+  if (/(^|[^a-z])(en|eng|english|ingilizce)([^a-z]|$)/.test(path)) return "en";
+  return "und";
+}
+
+function subsFor(tabId) {
+  return (subs.get(tabId) || []).map(({ url, lang }) => ({ url, lang }));
+}
 
 function hostOf(url) {
   try {
@@ -105,10 +124,14 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
   // Yeni sayfa açılınca o sekmenin listesi sıfırlanır.
   if (info.status === "loading" && info.url) {
     media.delete(tabId);
+    subs.delete(tabId);
     updateBadge(tabId);
   }
 });
-chrome.tabs.onRemoved.addListener((tabId) => media.delete(tabId));
+chrome.tabs.onRemoved.addListener((tabId) => {
+  media.delete(tabId);
+  subs.delete(tabId);
+});
 
 function updateBadge(tabId) {
   const n = (media.get(tabId) || []).length;
@@ -270,6 +293,15 @@ async function handle(msg, sender) {
     }
     case "smart-probe":
       return smartProbe({ ...(await tabInfo(msg, sender)), wholeList: msg.wholeList, src: msg.src, hint: msg.hint });
+    case "found-sub": {
+      if (!sender.tab || !/^https?:/.test(msg.url || "")) return null;
+      const list = subs.get(sender.tab.id) || [];
+      if (!list.some((x) => x.url === msg.url)) {
+        list.push({ url: msg.url, lang: guessLang(msg.url) });
+        subs.set(sender.tab.id, list.slice(-8));
+      }
+      return null;
+    }
     case "found-media": {
       // sniff.js: adresi/türü gizlenmiş yayın listesi (içeriği "#EXTM3U" ile başlıyor).
       if (!sender.tab || !/^https?:/.test(msg.url || "")) return null;
@@ -298,8 +330,13 @@ async function handle(msg, sender) {
       }
       throw last || new Error("Video bulunamadı.");
     }
-    case "download":
-      return download(msg);
+    case "download": {
+      // Sayfada yakalanan altyazılar da videoyla birlikte iner.
+      const { tabId } = await tabInfo(msg, sender);
+      const found = tabId != null ? subsFor(tabId) : [];
+      const context = found.length ? { ...(msg.context || {}), extraSubs: found } : msg.context;
+      return download({ ...msg, context });
+    }
     case "playlist":
       return api("/v1/playlist", { url: msg.url, option: msg.option, ids: null });
     case "jobs":

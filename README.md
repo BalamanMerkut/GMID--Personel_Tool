@@ -41,7 +41,12 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
   yüklediği video (mp4, m3u8, mpd) yakalanır ve sayfa bilgisiyle indirilir; adı/türü gizlenmiş yayın listeleri de
   (içeriğinden) tanınır. Videonun üstüne gelince sağ üstte
   **GMID ile indir** düğmesi; videoya sağ tık → **GMID Tool ile indir** → kalite.
-- **Uygulama içi oynatıcı:** Videolarım'da çift tıkla. **Sahne** görünümü (video/kapak solda, yazılar sağda) ya da
+- **Medya Oynatıcı (ayrı ekran):** indirilen müzikler ve videolar; Müzik / Videolar / site / çalma listesi süzgeci,
+  "Hepsini çal". Oynatıcıyı küçültünce (Esc) başka ekranlarda altta çalmaya devam eder, video köşede küçük oynar.
+- **Dublaj ve altyazı:** sitede birden çok ses dili ya da altyazı varsa indirirken seçilir (varsayılan: Türkçe
+  dublaj, Türkçe altyazı; Kontrol Odası → Video İndirici). Altyazılar videonun yanına `<ad>.tr.vtt` olarak iner;
+  eklenti, film sitelerinin ayrıca yüklediği altyazı dosyalarını da yakalar. Oynatıcıda **CC** ile açılır.
+- **Uygulama içi oynatıcı:** Medya Oynatıcı'da çift tıkla. **Sahne** görünümü (video/kapak solda, yazılar sağda) ya da
   **Liste** görünümü (parçalar solda, sözler sağda). Altta çalma çubuğu: oynat/duraklat, önceki/sonraki, karıştır,
   tekrar (liste/parça), ilerleme, hız (0.5×–2×), ses kaydırıcısı, tam ekran; kapağa ya da videoya tıklayınca durur.
   O an söylenen satır altınla, kelime zamanları varsa kelime kelime işaretlenir; satıra tıkla → oraya git.

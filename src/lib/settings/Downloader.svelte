@@ -11,6 +11,8 @@
 
   let parallel = $state(getJson("videos.parallel", 2));
   let lyricsDb = $state(getJson("transcript.lyricsDb", true));
+  let audioLang = $state(getJson<string>("videos.audioLang", "tr"));
+  let subLangs = $state(getJson<string>("videos.subLangs", "tr"));
   let tools: ToolsState | null = $state(null);
   let bridge: BridgeStatus | null = $state(null);
   let busy: "update" | "reinstall" | null = $state(null);
@@ -113,6 +115,30 @@
       <button class="btn" onclick={() => onnavigate("videos")}><Icon name="download" />Video İndirici'de kur</button>
     {/if}
   {/if}
+</section>
+
+<section class="panel">
+  <h3 class="h2"><Icon name="film" />Film ve dizi: dublaj ve altyazı</h3>
+  <p class="sub small">
+    Sitede birden çok ses dili ya da altyazı varsa hangisinin seçili geleceği. Uygulamada indirirken değiştirebilirsin;
+    tarayıcı eklentisinden indirilenlerde bu tercih kullanılır.
+  </p>
+  <div class="line">
+    <div><b>Ses dili</b><span class="sub small">Türkçe dublaj varsa o iner.</span></div>
+    <div class="seg">
+      {#each [["tr", "Türkçe dublaj"], ["en", "İngilizce"], ["orig", "Orijinal"]] as [v, l] (v)}
+        <button aria-pressed={audioLang === v} onclick={() => ((audioLang = v), void setJson("videos.audioLang", v))}>{l}</button>
+      {/each}
+    </div>
+  </div>
+  <div class="line">
+    <div><b>Altyazı</b><span class="sub small">Videonun yanına iner; oynatıcıda CC ile açılır.</span></div>
+    <div class="seg">
+      {#each [["tr", "Türkçe"], ["tr,en", "Türkçe + İngilizce"], ["none", "İndirme"]] as [v, l] (v)}
+        <button aria-pressed={subLangs === v} onclick={() => ((subLangs = v), void setJson("videos.subLangs", v))}>{l}</button>
+      {/each}
+    </div>
+  </div>
 </section>
 
 <section class="panel">

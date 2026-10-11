@@ -2,6 +2,7 @@
 //! ilerleme satırlarının okunması.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 /// Kalite kartlarından biri.
@@ -36,6 +37,29 @@ pub struct Probe {
     pub duration: Option<f64>,
     pub thumbnail: Option<String>,
     pub options: Vec<QualityOption>,
+    /// Birden çok ses dili (dublaj) varsa hepsi; tek dilse boş.
+    #[serde(default)]
+    pub audio_langs: Vec<Track>,
+    /// Sitenin elle hazırlanmış altyazıları (otomatik olanlar hariç).
+    #[serde(default)]
+    pub subtitles: Vec<Track>,
+}
+
+/// Ses dili ya da altyazı: `code` yt-dlp'nin kullandığı ad ("tr", "tur", "en-US"…).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Track {
+    pub code: String,
+    pub label: String,
+}
+
+/// Kullanıcının seçtiği ses dili ve altyazılar.
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Langs {
+    /// `None`: sitenin varsayılan sesi.
+    pub audio: Option<String>,
+    #[serde(default)]
+    pub subs: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -53,6 +77,7 @@ struct RawFormat {
     protocol: Option<String>,
     has_drm: Option<serde_json::Value>,
     format_note: Option<String>,
+    language: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -97,6 +122,83 @@ struct RawInfo {
     height: Option<u32>,
     filesize: Option<u64>,
     filesize_approx: Option<u64>,
+    #[serde(default)]
+    subtitles: BTreeMap<String, serde_json::Value>,
+}
+
+/// "tur", "tr-TR", "TR" → "tr" (karşılaştırma için).
+pub fn lang_base(code: &str) -> String {
+    let base = code
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(code)
+        .to_ascii_lowercase();
+    let two = match base.as_str() {
+        "tur" => "tr",
+        "eng" => "en",
+        "ger" | "deu" => "de",
+        "fre" | "fra" => "fr",
+        "spa" => "es",
+        "ita" => "it",
+        "rus" => "ru",
+        "ara" => "ar",
+        "jpn" => "ja",
+        "kor" => "ko",
+        "por" => "pt",
+        "chi" | "zho" => "zh",
+        "dut" | "nld" => "nl",
+        "pol" => "pl",
+        "swe" => "sv",
+        "gre" | "ell" => "el",
+        "hin" => "hi",
+        "per" | "fas" => "fa",
+        "aze" => "az",
+        "ukr" => "uk",
+        _ => return base,
+    };
+    two.to_string()
+}
+
+/// Dil kodunun Türkçe adı ("tr" → "Türkçe"); bilinmiyorsa kodun kendisi.
+pub fn lang_label(code: &str) -> String {
+    let name = match lang_base(code).as_str() {
+        "tr" => "Türkçe",
+        "en" => "İngilizce",
+        "de" => "Almanca",
+        "fr" => "Fransızca",
+        "es" => "İspanyolca",
+        "it" => "İtalyanca",
+        "ru" => "Rusça",
+        "ar" => "Arapça",
+        "ja" => "Japonca",
+        "ko" => "Korece",
+        "pt" => "Portekizce",
+        "zh" => "Çince",
+        "nl" => "Felemenkçe",
+        "pl" => "Lehçe",
+        "sv" => "İsveççe",
+        "el" => "Yunanca",
+        "hi" => "Hintçe",
+        "fa" => "Farsça",
+        "az" => "Azerice",
+        "uk" => "Ukraynaca",
+        "und" | "" => return "Bilinmeyen dil".into(),
+        _ => return code.to_string(),
+    };
+    // "en-US" gibi bölgeli kodlarda bölge de görünsün.
+    match code.split_once(['-', '_']) {
+        Some((_, region)) if !region.is_empty() => format!("{name} ({region})"),
+        _ => name.to_string(),
+    }
+}
+
+/// yt-dlp biçim süzgecine güvenle yazılabilecek kod mu?
+pub fn valid_code(code: &str) -> bool {
+    !code.is_empty()
+        && code.len() <= 24
+        && code
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 impl RawFormat {
@@ -441,6 +543,39 @@ fn parse_info(info: RawInfo, fallback_url: &str) -> Result<Probe, String> {
         return Err("Bu sayfada indirilebilir video bulunamadı.".into());
     }
 
+    // Dublajlar: ayrı ses parçaları farklı dillerdeyse seçilebilsin.
+    let mut audio_langs: Vec<Track> = Vec::new();
+    for f in usable.iter().filter(|f| !f.has_video()) {
+        if let Some(code) = f.language.as_deref().filter(|c| valid_code(c)) {
+            if !audio_langs.iter().any(|t| t.code == code) {
+                audio_langs.push(Track {
+                    code: code.to_string(),
+                    label: lang_label(code),
+                });
+            }
+        }
+    }
+    if audio_langs.len() < 2 {
+        audio_langs.clear();
+    }
+    let subtitles: Vec<Track> = info
+        .subtitles
+        .iter()
+        .filter(|(code, _)| {
+            valid_code(code) && !matches!(code.as_str(), "live_chat" | "danmaku" | "rechat")
+        })
+        .map(|(code, v)| Track {
+            code: code.clone(),
+            label: v
+                .get(0)
+                .and_then(|x| x.get("name"))
+                .and_then(|n| n.as_str())
+                .filter(|n| !n.trim().is_empty())
+                .map(|n| n.trim().to_string())
+                .unwrap_or_else(|| lang_label(code)),
+        })
+        .collect();
+
     Ok(Probe {
         url: info.webpage_url.unwrap_or_else(|| fallback_url.to_string()),
         video_id: info.id.unwrap_or_default(),
@@ -450,6 +585,8 @@ fn parse_info(info: RawInfo, fallback_url: &str) -> Result<Probe, String> {
         duration,
         thumbnail: info.thumbnail,
         options,
+        audio_langs,
+        subtitles,
     })
 }
 
@@ -472,6 +609,54 @@ pub fn site_folder(site: &str) -> &'static str {
     }
 }
 
+/// Seçilen dublaj varsa önce o dildeki ses denenir; yoksa normal seçim.
+fn format_for(option: &QualityOption, audio_lang: Option<&str>) -> String {
+    let Some(l) = audio_lang.filter(|l| valid_code(l)) else {
+        return option.format.clone();
+    };
+    if option.audio_only {
+        return format!("ba[language={l}]/{}", option.format);
+    }
+    let h = option
+        .id
+        .parse::<u32>()
+        .map(|h| format!("[height<={h}]"))
+        .unwrap_or_default();
+    format!(
+        "bv*{h}+ba[language={l}]/b{h}[language={l}]/{}",
+        option.format
+    )
+}
+
+/// Yalnızca altyazıları indiren komutun argümanları; dosyalar videonun yanına
+/// `<video adı>.<dil>.vtt` olarak yazılır.
+pub fn subtitle_args(url: &str, video_file: &Path, langs: &[String], ctx: &Context) -> Vec<String> {
+    let langs: Vec<&str> = langs
+        .iter()
+        .map(String::as_str)
+        .filter(|l| valid_code(l))
+        .collect();
+    let stem = video_file.with_extension("");
+    let mut a: Vec<String> = vec![
+        "--skip-download".into(),
+        "--no-playlist".into(),
+        "--no-warnings".into(),
+        "--write-subs".into(),
+        "--sub-langs".into(),
+        langs.join(","),
+        "--sub-format".into(),
+        "vtt/srt/best".into(),
+        "--convert-subs".into(),
+        "vtt".into(),
+        "-o".into(),
+        format!("{}.%(ext)s", stem.to_string_lossy().replace('%', "%%")),
+    ];
+    a.extend(ctx.args());
+    a.push("--".into());
+    a.push(url.into());
+    a
+}
+
 /// İndirme komutunun argümanları.
 /// Eklentinin yakaladığı videolar için: sayfa adresi, tarayıcı kimliği ve sayfa başlığı.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -481,6 +666,22 @@ pub struct Context {
     pub user_agent: Option<String>,
     /// Dosya adı için sayfa başlığı (site videoyu tanımıyorsa).
     pub title: Option<String>,
+    /// Seçilen ses dili (dublaj); yt-dlp'nin dil kodu.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_lang: Option<String>,
+    /// İndirilecek altyazılar (sitenin dil kodları).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sub_langs: Vec<String>,
+    /// Eklentinin sayfada yakaladığı altyazı dosyaları (oynatıcı ayrı yüklüyorsa).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_subs: Vec<ExtraSub>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ExtraSub {
+    pub url: String,
+    #[serde(default)]
+    pub lang: String,
 }
 
 impl Context {
@@ -561,7 +762,7 @@ pub fn download_args(
         "--retry-sleep".into(),
         "fragment:exp=1:15".into(),
         "-f".into(),
-        option.format.clone(),
+        format_for(option, ctx.audio_lang.as_deref()),
         "-o".into(),
         out_dir
             .join(if option.audio_only {
@@ -589,7 +790,9 @@ pub fn download_args(
     ];
     if option.audio_only {
         a.extend(
-            ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
+            // Sabit bit hızı (CBR): değişken hızlı MP3'te ileri sarınca oynatıcı yeri tam bulamıyor
+            // ve şarkı sözleri kayıyordu.
+            ["-x", "--audio-format", "mp3", "--audio-quality", "320K"]
                 .iter()
                 .map(|s| s.to_string()),
         );
@@ -845,6 +1048,45 @@ mod tests {
     }
 
     #[test]
+    fn dubs_and_subtitles() {
+        let json = r#"{"id":"f1","title":"Film","extractor_key":"Generic","duration":5400,
+          "formats":[
+            {"format_id":"v1080","ext":"mp4","vcodec":"avc1.640028","acodec":"none","height":1080,"protocol":"m3u8_native"},
+            {"format_id":"a-tur","ext":"mp4","vcodec":"none","acodec":"mp4a.40.2","language":"tur","protocol":"m3u8_native"},
+            {"format_id":"a-eng","ext":"mp4","vcodec":"none","acodec":"mp4a.40.2","language":"eng","protocol":"m3u8_native"}],
+          "subtitles":{"tr":[{"ext":"vtt","name":"Türkçe"}],"en":[{"ext":"vtt"}],"live_chat":[{"ext":"json"}]}}"#;
+        let p = parse_probe(json.as_bytes(), "https://x").unwrap();
+        assert_eq!(
+            p.audio_langs
+                .iter()
+                .map(|t| t.label.as_str())
+                .collect::<Vec<_>>(),
+            ["Türkçe", "İngilizce"]
+        );
+        assert_eq!(
+            p.subtitles
+                .iter()
+                .map(|t| (t.code.as_str(), t.label.as_str()))
+                .collect::<Vec<_>>(),
+            [("en", "İngilizce"), ("tr", "Türkçe")]
+        );
+        let o = choose(&p.options, "1080").unwrap();
+        assert!(format_for(&o, Some("tur")).starts_with("bv*[height<=1080]+ba[language=tur]/"));
+        assert_eq!(format_for(&o, Some("bad]code")), o.format);
+        assert_eq!(lang_base("tr-TR"), "tr");
+        assert_eq!(lang_label("en-US"), "İngilizce (US)");
+        let a = subtitle_args(
+            "https://x",
+            Path::new("/v/Film [f1] 1080p.mp4"),
+            &["tr".into()],
+            &Context::default(),
+        );
+        assert!(a
+            .windows(2)
+            .any(|w| w[0] == "-o" && w[1] == "/v/Film [f1] 1080p.%(ext)s"));
+    }
+
+    #[test]
     fn names_and_context() {
         assert_eq!(safe_name(" Film: Bölüm 1/2? ", 50), "Film_ Bölüm 1_2_");
         assert_eq!(safe_name("...", 10), "Video");
@@ -852,6 +1094,7 @@ mod tests {
             referer: Some("https://site.example/izle/1".into()),
             user_agent: Some("UA".into()),
             title: Some("%100 Gerçek".into()),
+            ..Default::default()
         };
         let a = download_args(
             "https://cdn.example/v.m3u8",

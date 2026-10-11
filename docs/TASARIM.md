@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.12 (taslak)
+## Tasarım Dokümanı · v0.13 (taslak)
 
 > **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -197,6 +197,17 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >   - *Yeni oynatıcı:* özel kontroller (oynat/duraklat, önceki/sonraki, karıştır, tekrar: kapalı/liste/parça,
 >     ilerleme, hız menüsü, ses kaydırıcısı + sessiz, tam ekran), kapağa/videoya tıklayınca durur, **Sahne** ve
 >     **Liste** görünümü (solda parçalar, sağda sözler), Spotify benzeri alt çubuk, Windows medya tuşları.
+> - **v0.13:**
+>   - *Medya Oynatıcı ayrı ekran* (Eğlence Salonu): kütüphane (Müzik / Videolar / site / çalma listesi süzgeçleri,
+>     "Hepsini çal"); Video İndirici yalnızca indirme işleri ve son indirilenler. Oynatıcı uygulama genelinde
+>     yaşar: kapatınca (Esc / ⌄) küçülür, başka ekranlarda altta çalma çubuğu, video köşede küçük oynar.
+>   - *Tam ekran düzeltildi:* filmde görüntü bütün ekranı kaplar, kontroller altta süzülür, fare durunca gizlenir.
+>   - *Dublaj ve altyazı:* çözümlemede ses dilleri (biçimlerin `language` alanı) ve sitenin altyazıları listelenir;
+>     indirirken seçilir (ayardaki tercih: Türkçe dublaj, Türkçe altyazı). Seçilen dil `ba[language=…]` ile,
+>     altyazılar video bittikten sonra ayrı bir `--skip-download --write-subs` çağrısıyla `<ad>.<dil>.vtt` olarak
+>     iner (altyazı hatası videoyu bozmaz). Eklenti oynatıcının ayrıca yüklediği WEBVTT/SRT dosyalarını da
+>     içeriğinden tanır ve videoyla birlikte gönderir. Oynatıcıda **CC** menüsü; tercih edilen dil kendiliğinden açılır.
+>   - *MP3 sabit bit hızı (320K CBR):* değişken hızlı MP3'te ileri sarınca sözler kayıyordu.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -958,6 +969,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.13 | 2026-10-11 | Medya Oynatıcı ayrı ekran ve arka planda çalma (mini oynatıcı), film tam ekranı düzeltildi, dublaj/altyazı seçimi (indirme, eklenti, oynatıcıda CC), MP3 sabit bit hızı; sesle yazma (Wispr Flow benzeri) araştırıldı |
 | v0.12 | 2026-10-11 | Geri bildirim turu: indirmelerde kendiliğinden yeniden deneme ve doğru hata mesajları, eklentide gizli HLS yakalama + iframe Referer + X/Instagram akışı, şarkı sözü veritabanı (LRCLIB), Whisper uydurma süzgeci ve dil tespiti, oynatıcı yeniden yazıldı (özel kontroller, liste görünümü, alt çalma çubuğu) |
 | v0.11 | 2026-10-11 | Video İndirici genişledi: YouTube çalma listeleri (seçerek toplu indirme, liste klasörü), eklenti her sitede video yakalama (HLS/DASH/mp4 + Referer), video üstü düğme ve sağ tık kalite menüsü, uygulama içi oynatıcı ve senkron yazılar (site altyazısı ya da yerel Whisper; .srt/.lrc), parçalı hızlı indirme |
 | v0.10 | 2026-10-11 | Kontrol Odası sekmeli ayarlar merkezine dönüştü (arama, kısayollar burada, gruplu); yeni kısayollar: pencereyi aç, panodaki bağlantıyı indir; ekran göstergesi ayarı; Video İndirici'de Türkçe Windows dosya adı hatası giderildi |

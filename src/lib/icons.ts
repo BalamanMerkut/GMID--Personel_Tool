@@ -60,6 +60,7 @@ export const ICONS = {
   shuffle: '<path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
   expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+  shrinkdown: '<path d="M6 9l6 6 6-6"/>',
   stage: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/>',
   volumelow: '<path d="M4 9v6h4l5 4V5L8 9zM16.5 9a4 4 0 0 1 0 6"/>',
 } as const;

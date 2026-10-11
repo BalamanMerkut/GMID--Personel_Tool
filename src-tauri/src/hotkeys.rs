@@ -242,6 +242,7 @@ fn download_clipboard(app: &AppHandle) {
         None,
         "app",
         &crate::downloader::ytdlp::Context::default(),
+        None,
     ) {
         Ok(d) => show_osd(app, "download", format!("Sıraya eklendi: {}", d.title)),
         Err(e) if e == "PLAYLIST" => {

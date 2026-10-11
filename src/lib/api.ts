@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, Download, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, Download, Langs, Segment, Sidecar, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -204,7 +204,11 @@ export const api = {
     /** `ids` boşsa listenin tamamı. Eklenen video sayısını döner. */
     downloadPlaylist: (url: string, option: string, ids: string[] | null) =>
       call<number>("videos_download_playlist", { url, option, ids }),
-    download: (url: string, option: string) => call<Download>("videos_download", { url, option }),
+    download: (url: string, option: string, langs: Langs | null = null) =>
+      call<Download>("videos_download", { url, option, langs }),
+    /** Videonun yanındaki altyazılar ve seçilenin satırları (oynatıcı için). */
+    tracks: (id: string) => call<Sidecar[]>("media_tracks", { id }),
+    track: (id: string, file: string) => call<Segment[]>("media_track", { id, file }),
     list: () => call<Download[]>("videos_list"),
     live: () => call<Live[]>("videos_live"),
     pause: (id: string) => call<void>("videos_pause", { id }),

@@ -4,6 +4,8 @@
   //  • Liste: solda sıradaki şarkılar/videolar, sağda yazılar (video varsa listenin üstünde küçük oynar).
   // Altta her zaman çalma çubuğu: oynat/duraklat, önceki/sonraki, karıştır, tekrar, ilerleme, hız, ses, tam ekran.
   // O an söylenen satır altınla işaretlenir; kelime zamanları varsa kelime kelime (karaoke gibi).
+  // Küçültülünce (mini) uygulamanın altında çalmaya devam eder; video köşede küçük oynar.
+  // Filmlerde videonun yanındaki altyazılar (.tr.vtt…) seçilip görüntünün üstünde gösterilir.
   import { onMount, tick } from "svelte";
   import { api, inTauri } from "../api";
   import { on } from "../bus";
@@ -11,14 +13,28 @@
   import Icon from "../Icon.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { notify } from "../toast.svelte";
-  import type { Download, Segment, Transcript, TranscriptProgress, WhisperStatus } from "../types";
+  import type { Download, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
 
   let {
     item,
     queue,
+    mini = false,
     onclose,
+    onexpand,
+    onstop,
     onpick,
-  }: { item: Download; queue: Download[]; onclose: () => void; onpick: (d: Download) => void } = $props();
+  }: {
+    item: Download;
+    queue: Download[];
+    /** Küçültülmüş: uygulamanın altında çalma çubuğu. */
+    mini?: boolean;
+    /** Küçült (çalmaya devam eder). */
+    onclose: () => void;
+    onexpand: () => void;
+    /** Çalmayı bitir ve kapat. */
+    onstop: () => void;
+    onpick: (d: Download) => void;
+  } = $props();
 
   type Repeat = "off" | "all" | "one";
   const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -52,6 +68,11 @@
   let menuOpen = $state(false);
   let full = $state(false);
   let idle = $state(false);
+  /** Filmin altyazıları ve seçilen ("off" | "transcript" | dosya adı). */
+  let tracks: Sidecar[] = $state([]);
+  let sub = $state("off");
+  let subSegs: Segment[] = $state([]);
+  let ccOpen = $state(false);
   /** Karıştırırken "önceki" düğmesi için çalınanların sırası. */
   let history: string[] = [];
   /** Kullanıcı yazıları elle kaydırdıysa bir süre otomatik kaydırma yapılmaz. */
@@ -75,7 +96,23 @@
     }
     return found;
   });
-  const shownView: "stage" | "list" = $derived(full ? "stage" : view);
+  const shownView: "stage" | "list" = $derived(full || mini ? "stage" : view);
+  /** Görüntünün üstündeki altyazı satırı. */
+  const cue = $derived.by(() => {
+    const segs = sub === "transcript" ? segments : subSegs;
+    if (sub === "off" || !segs.length) return "";
+    let lo = 0;
+    let hi = segs.length - 1;
+    let found = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (segs[mid].start <= time) {
+        found = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    return found >= 0 && time <= segs[found].end ? segs[found].text : "";
+  });
   const hideStage = $derived(shownView === "list" && item.audioOnly && showText);
 
   function nextItem(): Download | null {
@@ -130,10 +167,41 @@
       transcript = null;
     }
     loading = false;
+    void loadTracks();
     whisper = await api.transcripts.whisperStatus().catch(() => null);
     void tick().then(() =>
       queueEl?.querySelector<HTMLElement>(`[data-id="${item.id}"]`)?.scrollIntoView({ block: "nearest" }),
     );
+  }
+
+  // Filmin altyazıları: tercih edilen dil (varsayılan Türkçe) kendiliğinden açılır.
+  async function loadTracks() {
+    tracks = [];
+    subSegs = [];
+    sub = "off";
+    if (item.audioOnly) return;
+    const id = item.id;
+    const found = await api.videos.tracks(id).catch(() => [] as Sidecar[]);
+    if (id !== item.id) return;
+    tracks = found;
+    const pref = getJson<string>("player.subLang", "tr");
+    const pick = pref === "off" ? undefined : found.find((t) => t.lang.split(/[-_]/)[0].replace(/^tur$/, "tr").replace(/^eng$/, "en") === pref);
+    if (pick) await chooseSub(pick.file, false);
+  }
+
+  async function chooseSub(value: string, remember = true) {
+    ccOpen = false;
+    sub = value;
+    subSegs = [];
+    if (value !== "off" && value !== "transcript") {
+      const id = item.id;
+      const segs = await api.videos.track(id, value).catch(() => [] as Segment[]);
+      if (id === item.id && sub === value) subSegs = segs;
+    }
+    if (remember) {
+      const t = tracks.find((x) => x.file === value);
+      void setJson("player.subLang", value === "off" ? "off" : (t?.lang.split(/[-_]/)[0] ?? "tr"));
+    }
   }
 
   // Video değişince her şeyi baştan yükle.
@@ -302,8 +370,10 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    // Küçültülmüşken uygulamanın geri kalanında yazı yazılabilsin: kısayollar yalnızca açıkken.
+    if (mini) return;
     const target = e.target as HTMLElement;
-    if (target.closest("input:not([type=range]):not([type=checkbox]), select, textarea")) return;
+    if (target.isContentEditable || target.closest("input:not([type=range]):not([type=checkbox]), select, textarea, [contenteditable]")) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     const k = e.key.toLowerCase();
     if (e.key === "Escape") {
@@ -335,8 +405,18 @@
   }
 
   function onWindowClick(e: MouseEvent) {
-    if (menuOpen && !(e.target as HTMLElement).closest(".menuwrap")) menuOpen = false;
+    const t = e.target as HTMLElement;
+    if (menuOpen && !t.closest(".menuwrap")) menuOpen = false;
+    if (ccOpen && !t.closest(".ccwrap")) ccOpen = false;
   }
+
+  // Küçültülünce tam ekrandan da çık.
+  $effect(() => {
+    if (mini && full) {
+      full = false;
+      void setWindowFull(false);
+    }
+  });
 
   function ended() {
     playing = false;
@@ -430,9 +510,19 @@
 
 <svelte:window onkeydown={onKey} onclick={onWindowClick} />
 
-<div class="player" class:full class:idle role="dialog" aria-label="Oynatıcı" tabindex="-1" onmousemove={wake}>
+<div
+  class="player"
+  class:full
+  class:idle
+  class:mini
+  class:isvideo={!item.audioOnly}
+  role={mini ? "region" : "dialog"}
+  aria-label="Oynatıcı"
+  tabindex="-1"
+  onmousemove={wake}
+>
   <header class="bar">
-    <button class="icon" title="Kapat (Esc)" onclick={onclose}><Icon name="x" size={20} /></button>
+    <button class="icon" title="Küçült (Esc) — çalmaya devam eder" onclick={onclose}><Icon name="shrinkdown" size={20} /></button>
     <div class="ttl">
       <b title={item.title}>{item.title}</b>
       <span class="sub small">{[item.uploader, item.playlist, item.quality].filter(Boolean).join(" · ")}</span>
@@ -446,6 +536,7 @@
         <Icon name="note" size={16} />{showText ? "Yazıları gizle" : "Yazıları göster"}
       </button>
       <button class="btn ghost sm" title="Varsayılan oynatıcıda aç" onclick={() => api.videos.open(item.id)}><Icon name="monitor" size={16} />Dışarıda aç</button>
+      <button class="icon" title="Çalmayı bitir ve kapat" onclick={onstop}><Icon name="x" size={20} /></button>
     </div>
   </header>
 
@@ -476,7 +567,7 @@
       </section>
     {/if}
 
-    <div class="stage" class:compact={shownView === "list"} class:hidden={hideStage}>
+    <div class="stage" class:compact={shownView === "list"} class:hidden={hideStage} class:broken={!playable}>
       {#if playable}
         {#if item.audioOnly}
           <button class="cover" title={playing ? "Duraklat" : "Oynat"} onclick={toggle}>
@@ -501,7 +592,9 @@
               {onseeked}
               {onerror}
             ></video>
-            {#if !playing}<button class="bigplay show" title="Oynat" onclick={toggle}><Icon name="play" size={40} /></button>{/if}
+            {#if cue}<div class="cue">{cue}</div>{/if}
+            {#if !playing && !mini}<button class="bigplay show" title="Oynat" onclick={toggle}><Icon name="play" size={40} /></button>{/if}
+            {#if mini}<button class="miniexp" title="Büyüt" onclick={onexpand}><Icon name="expand" size={16} /></button>{/if}
           </div>
         {/if}
       {:else}
@@ -617,7 +710,7 @@
 
   <footer class="ctl">
     <div class="playing-now">
-      <button class="nthumb" title={playing ? "Duraklat" : "Oynat"} onclick={toggle}>
+      <button class="nthumb" title={mini ? "Oynatıcıyı aç" : playing ? "Duraklat" : "Oynat"} onclick={() => (mini ? onexpand() : toggle())}>
         {#if item.thumbnail}<img src={thumb(item)} alt="" />{:else}<Icon name={item.audioOnly ? "headphones" : "film"} size={20} />{/if}
       </button>
       <div class="ntx">
@@ -665,6 +758,23 @@
     </div>
 
     <div class="right">
+      {#if !item.audioOnly && (tracks.length || segments.length)}
+        <div class="ccwrap">
+          <button class="pill" class:lit={sub !== "off"} title="Altyazı" aria-expanded={ccOpen} onclick={() => (ccOpen = !ccOpen)}>CC</button>
+          {#if ccOpen}
+            <div class="menu">
+              <span class="mlabel">Altyazı</span>
+              <button class="mi" class:on={sub === "off"} onclick={() => chooseSub("off")}>Kapalı</button>
+              {#each tracks as t (t.file)}
+                <button class="mi" class:on={sub === t.file} onclick={() => chooseSub(t.file)}>{t.label}</button>
+              {/each}
+              {#if segments.length}
+                <button class="mi" class:on={sub === "transcript"} onclick={() => chooseSub("transcript")}>Yazıya dökülen</button>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/if}
       <div class="menuwrap">
         <button class="pill" class:lit={speed !== 1} title="Hız ve oynatma ayarları" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>
           <span class="tnum">{speed}×</span>
@@ -703,7 +813,12 @@
         />
         <span class="sub small tnum vpct">{Math.round(shownVolume * 100)}</span>
       </div>
-      <button class="icon" title={full ? "Tam ekrandan çık (F)" : "Tam ekran (F)"} onclick={toggleFull}><Icon name={full ? "shrink" : "expand"} size={18} /></button>
+      {#if mini}
+        <button class="icon" title="Oynatıcıyı aç" onclick={onexpand}><Icon name="expand" size={18} /></button>
+        <button class="icon" title="Çalmayı bitir" onclick={onstop}><Icon name="x" size={18} /></button>
+      {:else}
+        <button class="icon" title={full ? "Tam ekrandan çık (F)" : "Tam ekran (F)"} onclick={toggleFull}><Icon name={full ? "shrink" : "expand"} size={18} /></button>
+      {/if}
     </div>
   </footer>
 </div>
@@ -839,12 +954,47 @@
   .range::-moz-range-track { height: 4px; border-radius: 999px; background: linear-gradient(90deg, var(--gold) var(--p, 0%), rgba(255, 255, 255, 0.14) var(--p, 0%)); }
   .range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 999px; background: var(--text); }
 
+  /* Görüntünün üstündeki altyazı */
+  .cue { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); max-width: 84%; padding: 4px 14px; border-radius: 8px; background: rgba(0, 0, 0, 0.62); color: #fff; text-align: center; font-size: clamp(15px, 1.9vw, 30px); line-height: 1.35; font-weight: 600; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); pointer-events: none; white-space: pre-line; transition: bottom 0.3s; }
+  .ccwrap { position: relative; }
+  .mi { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text); padding: 7px 10px; border-radius: 8px; font-size: 13px; }
+  .mi:hover { background: rgba(255, 255, 255, 0.06); }
+  .mi.on { color: var(--gold); font-weight: 700; }
+  .ccwrap .menu { width: 200px; gap: 2px; }
+
   /* Tam ekran: başlık gizlenir, fare durunca alt çubuk da */
+  .full { grid-template-rows: minmax(0, 1fr) auto; }
   .full .bar { display: none; }
   .full .ctl { transition: opacity 0.3s; }
   .full.idle .ctl { opacity: 0; }
   .full.idle { cursor: none; }
+  /* Filmde tam ekran: görüntü bütün ekranı kaplar, kontroller üstünde süzülür. */
+  .full.isvideo { grid-template-rows: minmax(0, 1fr); background: #000; }
+  .full.isvideo .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "stage"; }
+  .full.isvideo .text { display: none; }
+  .full.isvideo .stage { padding: 0; }
+  .full.isvideo .vwrap { width: 100%; height: 100%; }
+  .full.isvideo video { width: 100%; height: 100%; max-height: none; object-fit: contain; border-radius: 0; }
+  .full.isvideo .ctl { position: absolute; left: 0; right: 0; bottom: 0; border-top: 0; background: linear-gradient(transparent, rgba(0, 0, 0, 0.88) 45%); padding-top: 34px; }
+  .full.isvideo:not(.idle) .cue { bottom: 120px; }
 
+  /* Küçültülmüş: uygulamanın altında çalma çubuğu, video köşede */
+  .mini { inset: auto 0 0 var(--side-w); z-index: 20; grid-template-rows: auto; background: transparent; }
+  .mini .bar, .mini .queue, .mini .text { display: none; }
+  .mini .body { display: block; height: 0; }
+  .mini .stage { display: none; }
+  .mini.isvideo .stage { display: block; position: fixed; right: 16px; bottom: 90px; width: 360px; padding: 0; z-index: 21; border-radius: 12px; overflow: hidden; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); border: 1px solid var(--line-2); }
+  .mini.isvideo .stage.broken { display: none; }
+  .mini video { max-height: none; border-radius: 0; }
+  .mini .cue { font-size: 13px; bottom: 6%; }
+  .mini .ctl { background: rgba(23, 26, 30, 0.97); backdrop-filter: blur(10px); padding: 8px 16px; }
+  .mini .nthumb { width: 46px; height: 46px; }
+  .miniexp { position: absolute; top: 8px; right: 8px; border: 0; border-radius: 8px; padding: 6px; display: grid; place-items: center; background: rgba(0, 0, 0, 0.6); color: #fff; opacity: 0; transition: opacity 0.2s; }
+  .vwrap:hover .miniexp { opacity: 1; }
+
+  @media (max-width: 1100px) {
+    .mini { left: 76px; }
+  }
   @media (max-width: 900px) {
     .body, .body.v-list, .body.v-list.nostage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "stage" "text"; }
     .body.v-list { grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: "stage" "queue" "text"; }
