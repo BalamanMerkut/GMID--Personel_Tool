@@ -1,53 +1,64 @@
 <script lang="ts">
-  // Medya Oynatıcı: indirilen müzikler ve videolar. Çalma, ekran değişse de sürer (alttaki mini oynatıcı).
+  // Medya Oynatıcı: iki ayrı bölüm. Müzik (şarkı listesi) ve Videolar (kartlar: klipler, filmler…).
+  // Çalma, ekran değişse de sürer (alttaki mini oynatıcı).
   import { api, formatSize, inTauri } from "../api";
   import { downloads, formatDuration, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
   import { play, player } from "../player.svelte";
+  import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
   import type { Download } from "../types";
 
   let { onnavigate }: { onnavigate: (id: string) => void } = $props();
 
-  type Tab = "all" | "audio" | "video" | "YouTube" | "X" | "Instagram" | "other";
-  const TABS: [Tab, string][] = [
+  type Section = "music" | "video";
+  type Site = "all" | "YouTube" | "X" | "Instagram" | "other";
+  const SITES: [Site, string][] = [
     ["all", "Tümü"],
-    ["audio", "Müzik"],
-    ["video", "Videolar"],
     ["YouTube", "YouTube"],
     ["X", "X"],
     ["Instagram", "Instagram"],
     ["other", "Diğer siteler"],
   ];
 
-  let tab: Tab = $state("all");
+  let section: Section = $state(getJson<Section>("media.section", "music"));
+  let site: Site = $state("all");
   let search = $state("");
   let plFilter: string | null = $state(null);
   let armed: string | null = $state(null);
   let hovering: string | null = $state(null);
 
   const library = $derived(downloads.list.filter((d) => d.status === "done"));
-  const inTab = (d: Download, t: Tab): boolean => {
+  const music = $derived(library.filter((d) => d.audioOnly));
+  const videos = $derived(library.filter((d) => !d.audioOnly));
+  const inSite = (d: Download, t: Site): boolean => {
     if (t === "all") return true;
-    if (t === "audio") return d.audioOnly;
-    if (t === "video") return !d.audioOnly;
     const s = siteLabel(d.site);
     if (t === "other") return s !== "YouTube" && s !== "X" && s !== "Instagram";
     return s === t;
   };
-  const counts = $derived(Object.fromEntries(TABS.map(([t]) => [t, library.filter((d) => inTab(d, t)).length])));
+  const siteCounts = $derived(Object.fromEntries(SITES.map(([t]) => [t, videos.filter((d) => inSite(d, t)).length])));
+  const pool = $derived(section === "music" ? music : videos.filter((d) => inSite(d, site)));
   const shown = $derived.by(() => {
     const q = search.trim().toLocaleLowerCase("tr-TR");
-    return library.filter(
+    return pool.filter(
       (d) =>
-        inTab(d, tab) &&
         (!plFilter || d.playlist === plFilter) &&
         (!q || `${d.title} ${d.uploader} ${d.playlist ?? ""}`.toLocaleLowerCase("tr-TR").includes(q)),
     );
   });
-  const playlists = $derived([...new Set(library.map((d) => d.playlist).filter((p): p is string => !!p))]);
-  const totalSize = $derived(library.reduce((s, d) => s + (d.size ?? 0), 0));
+  const playlists = $derived([
+    ...new Set((section === "music" ? music : videos).map((d) => d.playlist).filter((p): p is string => !!p)),
+  ]);
+  const sectionSize = $derived((section === "music" ? music : videos).reduce((s, d) => s + (d.size ?? 0), 0));
+  const musicTime = $derived(music.reduce((s, d) => s + (d.duration ?? 0), 0));
+
+  function pick(s: Section) {
+    section = s;
+    plFilter = null;
+    void setJson("media.section", s);
+  }
 
   async function act(p: Promise<unknown>) {
     try {
@@ -72,11 +83,22 @@
 </script>
 
 <div class="md">
+  <div class="sections" role="tablist">
+    <button role="tab" aria-selected={section === "music"} class:on={section === "music"} onclick={() => pick("music")}>
+      <Icon name="headphones" size={22} />
+      <span><b>Müzik</b><span class="sub small tnum">{music.length} şarkı{musicTime ? ` · ${formatDuration(musicTime)}` : ""}</span></span>
+    </button>
+    <button role="tab" aria-selected={section === "video"} class:on={section === "video"} onclick={() => pick("video")}>
+      <Icon name="film" size={22} />
+      <span><b>Videolar</b><span class="sub small tnum">{videos.length} video · klipler, filmler, diziler</span></span>
+    </button>
+  </div>
+
   {#if player.item}
     <section class="panel now">
       <div class="nthumb">{#if thumbSrc(player.item.thumbnail)}<img src={thumbSrc(player.item.thumbnail)} alt="" />{/if}</div>
       <div class="ntx">
-        <span class="sub small">Şu an çalıyor</span>
+        <span class="sub small">{player.playing ? "Şu an çalıyor" : "Duraklatıldı"}</span>
         <b title={player.item.title}>{player.item.title}</b>
         <span class="sub small">{[player.item.uploader, player.item.playlist].filter(Boolean).join(" · ")}</span>
       </div>
@@ -86,22 +108,27 @@
 
   <section class="panel lib">
     <div class="spread">
-      <h3 class="h2"><Icon name="headphones" />Kütüphane <span class="sub small tnum">{library.length} kayıt · {formatSize(totalSize)}</span></h3>
+      <h3 class="h2">
+        <Icon name={section === "music" ? "headphones" : "film"} />{section === "music" ? "Şarkılar" : "Videolar"}
+        <span class="sub small tnum">{formatSize(sectionSize)}</span>
+      </h3>
       <div class="row">
         {#if shown.length}
           <button class="btn sm" onclick={() => play(shown[0], shown)}><Icon name="play" size={16} />Hepsini çal</button>
         {/if}
-        <input class="search" type="search" placeholder="Ara…" bind:value={search} aria-label="Kütüphanede ara" />
+        <input class="search" type="search" placeholder="Ara…" bind:value={search} aria-label="Ara" />
         <button class="btn ghost sm" onclick={() => api.openDataFolder("Videolar")}><Icon name="folder" size={16} />Klasör</button>
       </div>
     </div>
-    <div class="seg" role="tablist">
-      {#each TABS as [t, label] (t)}
-        {#if t === "all" || counts[t]}
-          <button aria-pressed={tab === t} onclick={() => (tab = t)}>{label} <span class="n">{counts[t]}</span></button>
-        {/if}
-      {/each}
-    </div>
+    {#if section === "video"}
+      <div class="seg" role="tablist">
+        {#each SITES as [t, label] (t)}
+          {#if t === "all" || siteCounts[t]}
+            <button aria-pressed={site === t} onclick={() => (site = t)}>{label} <span class="n">{siteCounts[t]}</span></button>
+          {/if}
+        {/each}
+      </div>
+    {/if}
     {#if playlists.length}
       <div class="lists">
         <span class="sub small">Listeler:</span>
@@ -111,51 +138,80 @@
         {/each}
       </div>
     {/if}
-    <div class="grid">
-      {#each shown as d (d.id)}
-        <article
-          class="card"
-          class:on={player.item?.id === d.id}
-          ondblclick={() => play(d, shown)}
-          onmouseenter={() => (hovering = d.id)}
-          onmouseleave={() => hovering === d.id && (hovering = null)}
-          title="Çift tıkla: oynat"
-        >
-          <div class="cthumb">
-            {#if hovering === d.id && previewable(d) && inTauri}
-              <!-- svelte-ignore a11y_media_has_caption -->
-              <video src={api.fileSrc(d.filePath ?? "")} autoplay muted loop playsinline></video>
-            {:else if thumbSrc(d.thumbnail)}
-              <img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />
-            {:else}
-              <span class="ph"><Icon name={d.audioOnly ? "speaker" : "film"} size={30} /></span>
-            {/if}
-            <span class="qual">{d.quality}</span>
-            {#if d.duration}<span class="dur tnum">{formatDuration(d.duration)}</span>{/if}
-            <div class="hover">
-              <button class="round" title="Oynat (yazılarıyla)" onclick={() => play(d, shown)}><Icon name="play" size={20} /></button>
-            </div>
+
+    {#if section === "music"}
+      <div class="tracks" role="list">
+        {#each shown as d, i (d.id)}
+          {@const on = player.item?.id === d.id}
+          <div class="track" class:on role="listitem" ondblclick={() => play(d, shown)}>
+            <button class="tn tnum" title="Çal" onclick={() => (on ? (player.open = true) : play(d, shown))}>
+              {#if on && player.playing}<span class="eq"><i></i><i></i><i></i></span>{:else}<span class="num">{i + 1}</span><span class="pl"><Icon name="play" size={15} /></span>{/if}
+            </button>
+            <span class="tthumb">{#if thumbSrc(d.thumbnail)}<img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />{:else}<Icon name="headphones" size={16} />{/if}</span>
+            <span class="ttx">
+              <b title={d.title}>{d.title}</b>
+              <span class="sub small">{d.uploader}</span>
+            </span>
+            <span class="sub small tpl">{d.playlist ?? ""}</span>
+            <span class="sub small tnum">{formatDuration(d.duration ?? 0)}</span>
+            <span class="cacts">
+              <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={16} /></button>
+              <button class="mini" class:armed={armed === d.id} title="Sil" onclick={() => remove(d)}>
+                <Icon name="trash" size={16} />{#if armed === d.id}<span>Sil?</span>{/if}
+              </button>
+            </span>
           </div>
-          <div class="cbody">
-            <b class="ctitle" title={d.title}>{d.title}</b>
-            <span class="sub small">{[d.uploader, siteLabel(d.site)].filter(Boolean).join(" · ")}</span>
-            <div class="spread">
-              <span class="sub small tnum">{d.size ? formatSize(d.size) : ""}{d.finishedAt ? ` · ${ago(d.finishedAt)}` : ""}</span>
-              <span class="cacts">
-                <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={16} /></button>
-                <button class="mini" class:armed={armed === d.id} title="Videoyu sil" onclick={() => remove(d)}>
-                  <Icon name="trash" size={16} />{#if armed === d.id}<span>Sil?</span>{/if}
-                </button>
-              </span>
+        {:else}
+          <p class="sub empty">
+            {music.length ? "Aramaya uyan şarkı yok." : "Henüz şarkı yok. Video İndirici'de \"MP3\" ya da bir çalma listesi indir."}
+          </p>
+        {/each}
+      </div>
+    {:else}
+      <div class="grid">
+        {#each shown as d (d.id)}
+          <article
+            class="card"
+            class:on={player.item?.id === d.id}
+            ondblclick={() => play(d, shown)}
+            onmouseenter={() => (hovering = d.id)}
+            onmouseleave={() => hovering === d.id && (hovering = null)}
+            title="Çift tıkla: oynat"
+          >
+            <div class="cthumb">
+              {#if hovering === d.id && previewable(d) && inTauri}
+                <!-- svelte-ignore a11y_media_has_caption -->
+                <video src={api.fileSrc(d.filePath ?? "")} autoplay muted loop playsinline></video>
+              {:else if thumbSrc(d.thumbnail)}
+                <img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />
+              {:else}
+                <span class="ph"><Icon name="film" size={30} /></span>
+              {/if}
+              <span class="qual">{d.quality}</span>
+              {#if d.duration}<span class="dur tnum">{formatDuration(d.duration)}</span>{/if}
+              <div class="hover">
+                <button class="round" title="Oynat" onclick={() => play(d, shown)}><Icon name="play" size={20} /></button>
+              </div>
             </div>
-          </div>
-        </article>
-      {:else}
-        <p class="sub empty">
-          {library.length ? "Bu süzgeçte video yok." : "Henüz indirilen yok. Video İndirici'de bir bağlantı yapıştırarak başla."}
-        </p>
-      {/each}
-    </div>
+            <div class="cbody">
+              <b class="ctitle" title={d.title}>{d.title}</b>
+              <span class="sub small">{[d.uploader, siteLabel(d.site)].filter(Boolean).join(" · ")}</span>
+              <div class="spread">
+                <span class="sub small tnum">{d.size ? formatSize(d.size) : ""}{d.finishedAt ? ` · ${ago(d.finishedAt)}` : ""}</span>
+                <span class="cacts">
+                  <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={16} /></button>
+                  <button class="mini" class:armed={armed === d.id} title="Videoyu sil" onclick={() => remove(d)}>
+                    <Icon name="trash" size={16} />{#if armed === d.id}<span>Sil?</span>{/if}
+                  </button>
+                </span>
+              </div>
+            </div>
+          </article>
+        {:else}
+          <p class="sub empty">{videos.length ? "Bu süzgeçte video yok." : "Henüz video yok. Video İndirici'de bir bağlantı yapıştırarak başla."}</p>
+        {/each}
+      </div>
+    {/if}
   </section>
   {#if !library.length}
     <button class="btn ghost" onclick={() => onnavigate("videos")}><Icon name="download" size={17} />Video İndirici'ye git</button>
@@ -199,4 +255,37 @@
   .cacts { display: flex; opacity: 0.5; transition: opacity 0.15s; }
   .card:hover .cacts { opacity: 1; }
   .empty { grid-column: 1 / -1; margin: 6px 0; }
+
+  /* Müzik / Videolar */
+  .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .sections button { display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--line-2); background: rgba(23, 26, 30, 0.7); color: var(--muted); transition: border-color 0.15s, background 0.15s, color 0.15s; }
+  .sections button:hover { border-color: var(--gold-dim); color: var(--text); }
+  .sections button.on { border-color: var(--gold); color: var(--gold-glow); background: linear-gradient(135deg, rgba(227, 194, 112, 0.14), rgba(227, 194, 112, 0.03)); box-shadow: 0 0 22px rgba(227, 194, 112, 0.1); }
+  .sections b { display: block; font-family: var(--f-display); font-size: 17px; color: var(--text); }
+  .sections .on b { color: var(--gold-glow); }
+
+  /* Şarkı listesi */
+  .tracks { display: flex; flex-direction: column; gap: 2px; }
+  .track { display: grid; grid-template-columns: 34px 44px minmax(0, 2fr) minmax(0, 1fr) 64px auto; gap: 12px; align-items: center; padding: 6px 10px; border-radius: 10px; }
+  .track:hover { background: rgba(255, 255, 255, 0.04); }
+  .track.on { background: rgba(227, 194, 112, 0.1); box-shadow: inset 3px 0 0 var(--gold); }
+  .track.on .ttx b { color: var(--gold-glow); }
+  .tn { border: 0; background: none; color: var(--dim); font-size: 12.5px; display: grid; place-items: center; height: 32px; }
+  .tn .pl { display: none; color: var(--gold); }
+  .track:hover .tn .num { display: none; }
+  .track:hover .tn .pl { display: grid; }
+  .tthumb { width: 44px; height: 44px; border-radius: 8px; overflow: hidden; background: var(--coal-2); display: grid; place-items: center; color: var(--dim); }
+  .tthumb img { width: 100%; height: 100%; object-fit: cover; }
+  .ttx { display: flex; flex-direction: column; min-width: 0; }
+  .ttx b, .ttx .sub, .tpl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ttx b { font-weight: 600; font-size: 14px; }
+  .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
+  .eq i { width: 3px; background: var(--gold); border-radius: 1px; animation: eq 0.9s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: 0.2s; }
+  .eq i:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+  @media (max-width: 900px) {
+    .track { grid-template-columns: 34px 44px minmax(0, 1fr) 56px auto; }
+    .tpl { display: none; }
+  }
 </style>

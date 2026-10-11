@@ -178,6 +178,8 @@ pub fn apply(app: &AppHandle) {
         d.engine.shutdown();
         return;
     }
+    // Gösterge penceresi önceden hazır olsun: ilk dikte gecikmeli görünmesin.
+    crate::overlay::prepare_osd(app);
     #[cfg(windows)]
     if !d.hook.swap(true, Ordering::SeqCst) {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -218,12 +220,15 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
     const LCTRL: u32 = 0xA2;
     const RCTRL: u32 = 0xA3;
     const LALT: u32 = 0xA4;
-    /// Bu kadar basılı tutulunca kayıt başlar (Ctrl+Alt+N gibi kısayollarla karışmasın).
-    const ARM: Duration = Duration::from_millis(250);
+    /// Bu kadar basılı tutulunca dikte başlar (Ctrl+Alt+N gibi kısayollarla karışmasın).
+    const ARM: Duration = Duration::from_millis(220);
+    /// Mikrofon biraz önce açılır: açılış gecikmesi gizlenir, ilk hece kaçmaz.
+    const PRE_ROLL: Duration = Duration::from_millis(90);
 
     enum Mode {
         Idle,
-        Armed(Instant),
+        /// Tuşlar basılı, süre dolması bekleniyor (mikrofon erken açılmış olabilir).
+        Armed(Instant, Option<win::Recorder>),
         Recording(win::Recorder, Instant, u64),
         /// Başka bir tuşa basıldı: Ctrl ve Alt bırakılana kadar bekle.
         Blocked,
@@ -257,23 +262,35 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
         mode = match mode {
             Mode::Idle => {
                 if combo && !others && d.enabled.load(Ordering::SeqCst) {
-                    Mode::Armed(Instant::now())
+                    Mode::Armed(Instant::now(), None)
                 } else {
                     Mode::Idle
                 }
             }
-            Mode::Armed(t) => {
-                if others {
-                    Mode::Blocked
-                } else if !combo {
-                    Mode::Idle
+            Mode::Armed(t, rec) => {
+                if others || !combo {
+                    // Kısayol ya da yanlışlıkla basma: erken açılan kayıt atılır.
+                    if let Some(r) = rec {
+                        std::thread::spawn(move || drop(r.finish()));
+                    }
+                    if others {
+                        Mode::Blocked
+                    } else {
+                        Mode::Idle
+                    }
                 } else if t.elapsed() >= ARM {
                     if d.busy.load(Ordering::SeqCst) {
+                        if let Some(r) = rec {
+                            std::thread::spawn(move || drop(r.finish()));
+                        }
                         crate::overlay::show_osd(&app, "mic", "Önceki yazı hazırlanıyor…");
                         Mode::Blocked
                     } else {
                         win::mask_alt();
-                        let rec = win::Recorder::start();
+                        let rec = rec.unwrap_or_else(win::Recorder::start);
+                        if sounds_on(&app) {
+                            win::play_start();
+                        }
                         d.set_phase(&app, "listening", None);
                         crate::overlay::show_osd(&app, "mic", "Dinliyorum… bırakınca yazarım");
                         // Konuşma sürerken modeller yüklensin.
@@ -281,8 +298,10 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                         std::thread::spawn(move || warm_up(&app2));
                         Mode::Recording(rec, Instant::now(), 0)
                     }
+                } else if rec.is_none() && t.elapsed() >= PRE_ROLL {
+                    Mode::Armed(t, Some(win::Recorder::start()))
                 } else {
-                    Mode::Armed(t)
+                    Mode::Armed(t, rec)
                 }
             }
             Mode::Recording(rec, start, shown) => {
@@ -292,6 +311,9 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                     crate::overlay::show_osd(&app, "mic", "Sesle yazma iptal edildi");
                     Mode::Blocked
                 } else if !combo {
+                    if sounds_on(&app) {
+                        win::play_stop();
+                    }
                     let app2 = app.clone();
                     std::thread::spawn(move || process(&app2, rec));
                     Mode::Idle
@@ -319,6 +341,13 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
     }
 }
 
+#[cfg(windows)]
+fn sounds_on(app: &AppHandle) -> bool {
+    app.state::<Db>()
+        .setting_json("dictation.sounds")
+        .unwrap_or(true)
+}
+
 /// Kaydı bitirir, yazıya döker, (isteğe bağlı) toparlar ve yapıştırır.
 #[cfg(windows)]
 fn process(app: &AppHandle, rec: win::Recorder) {
@@ -332,6 +361,7 @@ fn process(app: &AppHandle, rec: win::Recorder) {
         .and_then(|samples| run(app, &samples, released));
     match result {
         Ok(Some(entry)) => {
+            crate::overlay::hide_osd(app);
             let _ = app.emit("dictation-entry", &entry);
             let mut h = d.history.lock().unwrap_or_else(|e| e.into_inner());
             h.push_front(entry);

@@ -2,11 +2,16 @@
 // Açıkken bütün pencereyi kaplar; küçültülünce uygulamanın altında çalma çubuğu olur.
 import type { Download } from "./types";
 
-export const player = $state<{ item: Download | null; queue: Download[]; open: boolean }>({
+export const player = $state<{ item: Download | null; queue: Download[]; open: boolean; playing: boolean }>({
   item: null,
   queue: [],
   open: false,
+  /** Gerçekten çalıyor mu (duraklatılınca kenar çubuğundaki gösterge durur). */
+  playing: false,
 });
+
+/** Oynatıcıdan başka bir ekrana gitmek için (App doldurur). */
+export const nav = { go: (_route: string) => {} };
 
 /** `queue`: sıradakiler (önceki/sonraki ve liste görünümü için). */
 export function play(item: Download, queue: Download[]) {
@@ -17,5 +22,6 @@ export function play(item: Download, queue: Download[]) {
 
 export function stopPlayer() {
   player.item = null;
+  player.playing = false;
   player.open = false;
 }

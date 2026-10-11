@@ -12,6 +12,7 @@
   import { formatDuration, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
   import { getJson, setJson } from "../settings.svelte";
+  import { nav, player } from "../player.svelte";
   import { notify } from "../toast.svelte";
   import type { Download, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
 
@@ -73,6 +74,8 @@
   let sub = $state("off");
   let subSegs: Segment[] = $state([]);
   let ccOpen = $state(false);
+  /** NVIDIA hızlandırma kurulu değilse Whisper beklerken öneri gösterilir. */
+  let gpuMissing = $state(false);
   /** Karıştırırken "önceki" düğmesi için çalınanların sırası. */
   let history: string[] = [];
   /** Kullanıcı yazıları elle kaydırdıysa bir süre otomatik kaydırma yapılmaz. */
@@ -168,6 +171,10 @@
     }
     loading = false;
     void loadTracks();
+    void api.dictation
+      .status()
+      .then((s) => (gpuMissing = s.supported && !s.gpuInstalled))
+      .catch(() => {});
     whisper = await api.transcripts.whisperStatus().catch(() => null);
     void tick().then(() =>
       queueEl?.querySelector<HTMLElement>(`[data-id="${item.id}"]`)?.scrollIntoView({ block: "nearest" }),
@@ -361,13 +368,29 @@
     wake();
   }
 
-  // Tam ekranda fare durunca kontroller gizlenir.
+  // Tam ekranda fare durunca kontroller gizlenir; fare kıpırdayınca (nerede olursa olsun) geri gelir.
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastMove = { x: -1, y: -1 };
   function wake() {
     idle = false;
     clearTimeout(idleTimer);
-    if (full) idleTimer = setTimeout(() => (idle = playing && !menuOpen), 2500);
+    if (full) idleTimer = setTimeout(() => (idle = playing && !menuOpen && !overControls), 2500);
   }
+  /** Fare alt çubuğun üstündeyken gizlenmez. */
+  let overControls = $state(false);
+  function onWindowMove(e: PointerEvent) {
+    if (!full) return;
+    // Bazı sistemler fare kıpırdamadan da olay gönderir; gerçekten hareket edince uyan.
+    if (e.clientX === lastMove.x && e.clientY === lastMove.y) return;
+    lastMove = { x: e.clientX, y: e.clientY };
+    overControls = e.clientY > window.innerHeight - 130;
+    wake();
+  }
+
+  // Kenar çubuğundaki "çalıyor" göstergesi gerçek duruma uysun.
+  $effect(() => {
+    player.playing = playing;
+  });
 
   function onKey(e: KeyboardEvent) {
     // Küçültülmüşken uygulamanın geri kalanında yazı yazılabilsin: kısayollar yalnızca açıkken.
@@ -433,7 +456,7 @@
       notify(
         transcript.source === "whisper"
           ? "Yazıya döküldü (Whisper)"
-          : transcript.source === "lyrics"
+          : transcript.source === "lyrics" || transcript.source === "lyrics-timed"
             ? "Şarkı sözleri bulundu"
             : "Sitenin altyazısı alındı",
         "check",
@@ -483,6 +506,7 @@
     if (!t) return "";
     if (t.source === "whisper") return `Whisper · ${t.language === "auto" ? "dil otomatik" : t.language}`;
     if (t.source === "lyrics") return "Şarkı sözü veritabanı (LRCLIB)";
+    if (t.source === "lyrics-timed") return "Şarkı sözü veritabanı · zamanlama bu bilgisayarda";
     return `${siteLabel(item.site)} altyazısı · ${t.language}`;
   });
   const pct = $derived(total ? Math.min(100, (time / total) * 100) : 0);
@@ -508,7 +532,7 @@
   };
 </script>
 
-<svelte:window onkeydown={onKey} onclick={onWindowClick} />
+<svelte:window onkeydown={onKey} onclick={onWindowClick} onpointermove={onWindowMove} onpointerdown={() => full && wake()} />
 
 <div
   class="player"
@@ -661,6 +685,12 @@
             <p>{stageText(creating)}</p>
             <div class="pbar"><i style:width="{creating.stage === 'whisper' ? creating.progress * 100 : 8}%"></i></div>
             <span class="sub small">Uzun videolarda birkaç dakika sürebilir; bu sırada izlemeye devam edebilirsin.</span>
+            {#if (creating.stage === "whisper" || creating.stage === "audio") && gpuMissing}
+              <p class="tip small">
+                Yavaş mı? NVIDIA ekran kartın varsa Whisper'ı ekran kartıyla çalıştır; birkaç dakika yerine saniyeler sürer.
+                <button class="link" onclick={() => ((player.open = false), nav.go("settings/dikte"))}>Kontrol Odası → Sesle yazma → NVIDIA ile hızlandır</button>
+              </p>
+            {/if}
           </div>
         {:else}
           <div class="make">
@@ -708,7 +738,7 @@
     {/if}
   </div>
 
-  <footer class="ctl">
+  <footer class="ctl" onpointerenter={() => (overControls = true)} onpointerleave={() => (overControls = false)}>
     <div class="playing-now">
       <button class="nthumb" title={mini ? "Oynatıcıyı aç" : playing ? "Duraklat" : "Oynat"} onclick={() => (mini ? onexpand() : toggle())}>
         {#if item.thumbnail}<img src={thumb(item)} alt="" />{:else}<Icon name={item.audioOnly ? "headphones" : "film"} size={20} />{/if}
@@ -907,6 +937,8 @@
   .field > span { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
   .seg.wrap { flex-wrap: wrap; }
   .err { color: var(--bad); }
+  .tip { margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(53, 160, 162, 0.4); background: rgba(53, 160, 162, 0.06); color: var(--muted); }
+  .tip .link { display: inline; text-align: left; }
   .pbar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
   .pbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--neon)); transition: width 0.3s; }
   .wbox { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid rgba(53, 160, 162, 0.4); background: rgba(53, 160, 162, 0.06); }

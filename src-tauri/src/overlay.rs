@@ -81,6 +81,11 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
     }
 
     crate::window::on_ui_thread(app, "Gösterge", move |app| {
+        // Bu arada daha yeni bir mesaj geldiyse ya da gösterge gizlendiyse eskisini gösterme
+        // (iş parçacıkları sırayla çalışmayabilir).
+        if app.state::<Overlay>().osd_gen.load(Ordering::SeqCst) != id {
+            return Ok(());
+        }
         let w = match app.get_webview_window(OSD) {
             Some(w) => w,
             None => tool_window(app, OSD, OSD_SIZE)?,
@@ -91,25 +96,54 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
         // Tıklamalar alttaki oyuna/pencereye geçsin. Pencere ekrana çıktıktan sonra yapılmalı
         // (bazı sistemlerde gizli pencerede bu işlem başarısız olur).
         let _ = w.set_ignore_cursor_events(true);
+        // Gizleme sayacı pencere gerçekten göründükten sonra başlar: ilk açılışta pencerenin
+        // oluşması 2 saniyeden uzun sürerse gösterge ekranda takılı kalıyordu.
+        let app = app.clone();
+        std::thread::spawn(move || {
+            let current = || app.state::<Overlay>().osd_gen.load(Ordering::SeqCst) == id;
+            std::thread::sleep(Duration::from_millis(2200));
+            if current() {
+                if let Some(w) = app.get_webview_window(OSD) {
+                    let _ = w.hide();
+                }
+            }
+            // Bir dakika kullanılmazsa pencereyi tamamen kapat (sesle yazma açıksa hazır beklesin).
+            std::thread::sleep(Duration::from_secs(60));
+            let dictation = app
+                .state::<crate::db::Db>()
+                .setting_json::<bool>(crate::dictation::ENABLED_KEY)
+                .unwrap_or(false);
+            if current() && !dictation {
+                if let Some(w) = app.get_webview_window(OSD) {
+                    let _ = w.destroy();
+                }
+            }
+        });
         Ok(())
     });
+}
 
-    let app = app.clone();
-    std::thread::spawn(move || {
-        let current = || app.state::<Overlay>().osd_gen.load(Ordering::SeqCst) == id;
-        std::thread::sleep(Duration::from_millis(2200));
-        if current() {
-            if let Some(w) = app.get_webview_window(OSD) {
-                let _ = w.hide();
-            }
+/// Gösterge penceresini görünmez olarak önceden oluşturur.
+pub fn prepare_osd(app: &AppHandle) {
+    crate::window::on_ui_thread(app, "Gösterge", |app| {
+        if app.get_webview_window(OSD).is_none() {
+            tool_window(app, OSD, OSD_SIZE)?;
         }
-        // Bir dakika kullanılmazsa pencereyi tamamen kapat.
-        std::thread::sleep(Duration::from_secs(60));
-        if current() {
-            if let Some(w) = app.get_webview_window(OSD) {
-                let _ = w.destroy();
-            }
+        Ok(())
+    });
+}
+
+/// Göstergeyi hemen gizler (sesle yazma bitince "Yazıya dökülüyor…" beklemesin).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn hide_osd(app: &AppHandle) {
+    app.state::<Overlay>()
+        .osd_gen
+        .fetch_add(1, Ordering::SeqCst);
+    crate::window::on_ui_thread(app, "Gösterge", |app| {
+        if let Some(w) = app.get_webview_window(OSD) {
+            let _ = w.hide();
         }
+        Ok(())
     });
 }
 

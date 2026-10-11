@@ -4,6 +4,7 @@
 //! (YouTube'un otomatik altyazısında kelime zamanları da var) denenir; yoksa Whisper bilgisayarda çalışır. Sonuç veritabanında durur ve dosyanın yanına `.srt`
 //! (video) ya da `.lrc` (müzik) olarak da yazılır: başka oynatıcılarda da görünsün.
 
+pub mod align;
 pub mod lrclib;
 pub mod parse;
 pub mod whisper;
@@ -135,17 +136,27 @@ fn run(app: &AppHandle, id: &str, mode: &str, lang: &str) -> Result<Transcript, 
     };
 
     let mut found: Option<(String, String, Vec<Segment>)> = None;
+    // Veritabanında yalnızca düz söz varsa: yazı oradan, zamanlama duyulan sözlerden.
+    let mut plain: Option<Vec<String>> = None;
     let lyrics_db = db.setting_json::<bool>(lrclib::ENABLED_KEY).unwrap_or(true);
     if mode == "lyrics" || (mode == "auto" && lyrics_db) {
         emit("lyrics", 0.0);
         match lrclib::find(&d.title, &d.uploader, d.duration) {
-            Ok(Some(segs)) => found = Some(("lyrics".into(), lang.into(), segs)),
+            Ok(Some(lrclib::Found::Synced(segs))) => {
+                found = Some(("lyrics".into(), lang.into(), segs))
+            }
+            Ok(Some(lrclib::Found::Plain(lines))) => plain = Some(lines),
             Ok(None) => {}
             Err(e) if mode == "lyrics" => return Err(e),
             Err(e) => crate::log!("{e}"),
         }
     }
-    if found.is_none() && (mode == "auto" || mode == "subtitles") {
+    let aligned = |heard: &[Segment]| {
+        plain
+            .as_deref()
+            .and_then(|lines| align::align(lines, heard, d.duration))
+    };
+    if found.is_none() && (mode == "auto" || mode == "subtitles" || plain.is_some()) {
         emit("subtitles", 0.0);
         let ctx: Context = db
             .conn()
@@ -157,26 +168,36 @@ fn run(app: &AppHandle, id: &str, mode: &str, lang: &str) -> Result<Transcript, 
             .and_then(|c| serde_json::from_str(&c).ok())
             .unwrap_or_default();
         match fetch_subtitles(dir.root(), &d.url, &ctx, lang) {
+            // Sitenin otomatik altyazısı kelimeleri yanlış duysa da zamanları doğrudur.
+            Ok(Some((language, segs))) if plain.is_some() => {
+                if let Some(timed) = aligned(&segs) {
+                    found = Some(("lyrics-timed".into(), language, timed));
+                }
+            }
             Ok(Some((language, segs))) => found = Some(("subtitles".into(), language, segs)),
             Ok(None) => {}
             Err(e) => crate::log!("Altyazı alınamadı: {e}"),
         }
     }
-    if found.is_none() && (mode == "auto" || mode == "whisper") {
+    if found.is_none() && (mode == "auto" || mode == "whisper" || plain.is_some()) {
         let model: String = db
             .setting_json(whisper::MODEL_KEY)
             .unwrap_or_else(|| "turbo".into());
-        let prompt = lrclib::clean_title(&d.title);
+        // Sözler biliniyorsa ilk satırları Whisper'a ipucu olur (kelimeleri daha doğru duyar).
+        let prompt = match &plain {
+            Some(lines) => lines.iter().take(4).cloned().collect::<Vec<_>>().join(" "),
+            None => lrclib::clean_title(&d.title),
+        };
         let segs = whisper::transcribe(dir.root(), Path::new(&file), lang, &prompt, &model, emit)?;
-        found = Some((
-            "whisper".into(),
-            if lang == "orig" {
-                "auto".into()
-            } else {
-                lang.into()
-            },
-            segs,
-        ));
+        let language = if lang == "orig" {
+            "auto".to_string()
+        } else {
+            lang.to_string()
+        };
+        found = Some(match aligned(&segs) {
+            Some(timed) => ("lyrics-timed".into(), language, timed),
+            None => ("whisper".into(), language, segs),
+        });
     }
     let Some((source, language, segments)) = found.filter(|f| !f.2.is_empty()) else {
         return Err(match mode {

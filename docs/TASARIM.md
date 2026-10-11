@@ -222,6 +222,13 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >   - *Yapıştırma:* Ctrl/Alt/Shift/Win bırakılınca pano + `SendInput` Ctrl+V; 0,7 sn sonra eski pano yazısı geri
 >     konur. Yönetici olarak açılmış pencerelere yapıştırılamaz → son 20 dikte ayarlarda kopyalanabilir.
 >   - Sunucular 15 dk kullanılmazsa kapanır; tuşa basınca konuşma sürerken yeniden yüklenir.
+> - **v0.15 (geri bildirim):** Medya Oynatıcı **Müzik** (şarkı listesi) ve **Videolar** (kartlar, site süzgeci)
+>   olarak ikiye ayrıldı. Tam ekranda fare pencerenin her yerinde izlenir, kontrollerin üstündeyken gizlenmez.
+>   Kenar çubuğundaki gösterge duraklatınca durur. Eski şarkılar: LRCLIB'de yalnızca düz söz varsa, yazı oradan
+>   alınır; zamanlama sitenin otomatik altyazısıyla ya da Whisper'ın duyduğu kelimelerle **hizalanarak**
+>   (Needleman–Wunsch, Türkçe harf sadeleştirme) bulunur ("lyrics-timed"). Sesle yazma: mikrofon 90 ms'de açılır
+>   (ilk hece kaçmaz), 220 ms'de başlangıç sesi; bırakınca bitiş sesi; gösterge penceresi önceden hazırlanır ve
+>   gizleme sayacı pencere göründükten sonra başlar ("Yazıya dökülüyor…" takılı kalmaz).
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.

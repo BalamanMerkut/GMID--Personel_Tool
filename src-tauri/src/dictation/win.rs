@@ -6,12 +6,14 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
+use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Media::Audio::{
     eCapture, eConsole, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator, MMDeviceEnumerator,
     AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
     AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, WAVEFORMATEX, WAVE_FORMAT_PCM,
 };
+use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
 };
@@ -150,6 +152,46 @@ pub fn paste(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+static START_SOUND: OnceLock<Vec<u8>> = OnceLock::new();
+static STOP_SOUND: OnceLock<Vec<u8>> = OnceLock::new();
+
+/// Kısa, yumuşak iki notalı "tık" sesi (WAV, bellekte).
+fn chime(notes: &[f64]) -> Vec<u8> {
+    const RATE: f64 = 16_000.0;
+    let per = (RATE * 0.075) as usize;
+    let mut samples: Vec<i16> = Vec::with_capacity(per * notes.len());
+    for f in notes {
+        for i in 0..per {
+            let t = i as f64 / RATE;
+            // Yumuşak giriş ve sönüm: tıkırtı olmasın.
+            let env = (i as f64 / 80.0).min(1.0) * (1.0 - i as f64 / per as f64).powf(1.6);
+            let v = (2.0 * std::f64::consts::PI * f * t).sin() * env * 0.22;
+            samples.push((v * i16::MAX as f64) as i16);
+        }
+    }
+    super::to_wav(&samples)
+}
+
+fn play(buf: &'static [u8]) {
+    unsafe {
+        let _ = PlaySoundW(
+            PCWSTR(buf.as_ptr() as *const u16),
+            None,
+            SND_MEMORY | SND_ASYNC | SND_NODEFAULT,
+        );
+    }
+}
+
+/// Dinlemeye başlarken yükselen iki nota.
+pub fn play_start() {
+    play(START_SOUND.get_or_init(|| chime(&[660.0, 990.0])));
+}
+
+/// Bırakınca alçalan iki nota.
+pub fn play_stop() {
+    play(STOP_SOUND.get_or_init(|| chime(&[990.0, 660.0])));
 }
 
 /// Varsayılan mikrofondan 16 kHz, tek kanal, 16 bit kayıt (Windows dönüştürür).

@@ -30,7 +30,7 @@
           <Icon name={s.icon} />
           <span class="label">{s.label}</span>
           {#if s.phase}<span class="soon">Faz {s.phase}</span>{/if}
-          {#if s.id === "media" && player.item}<span class="eq" title="Çalıyor"><i></i><i></i><i></i></span>{/if}
+          {#if s.id === "media" && player.item}<span class="eq" class:paused={!player.playing} title={player.playing ? "Çalıyor" : "Duraklatıldı"}><i></i><i></i><i></i></span>{/if}
           {#if s.id === "videos" && downloading}<span class="badge tnum" title="{downloading} indirme sürüyor">{downloading}</span>{/if}
         </button>
       {/each}
@@ -76,6 +76,7 @@
   .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
   .eq i { width: 3px; background: var(--gold); border-radius: 1px; animation: eq 0.9s ease-in-out infinite; }
   .eq i:nth-child(2) { animation-delay: 0.2s; }
+  .eq.paused i { animation: none; height: 4px; background: var(--dim); }
   .eq i:nth-child(3) { animation-delay: 0.4s; }
   @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
   .foot {

@@ -14,7 +14,7 @@
   import Videos from "./lib/screens/Videos.svelte";
   import Media from "./lib/screens/Media.svelte";
   import Player from "./lib/components/Player.svelte";
-  import { player, stopPlayer } from "./lib/player.svelte";
+  import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
   import Icon from "./lib/Icon.svelte";
   import Settings from "./lib/screens/Settings.svelte";
@@ -43,6 +43,8 @@
 
   /** Ayarlar ekranında açık bölüm ("settings/kisayollar" gibi adreslerle de seçilir). */
   let settingsTab = $state("genel");
+
+  nav.go = (r) => navigate(r);
 
   function navigate(target: string) {
     const [id, sub] = target.split("/");

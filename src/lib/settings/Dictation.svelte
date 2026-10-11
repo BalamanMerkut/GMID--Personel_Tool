@@ -18,6 +18,7 @@
   let gpu = $state(getJson("dictation.gpu", true));
   let tidy = $state(getJson("dictation.tidy", false));
   let words = $state(getJson<string>("dictation.words", ""));
+  let sounds = $state(getJson("dictation.sounds", true));
   let showRaw: number | null = $state(null);
 
   async function refresh() {
@@ -141,6 +142,10 @@
         </button>
       </div>
     {/if}
+    <div class="line">
+      <div><b>Ses efekti</b><span class="sub small">Dinlemeye başlarken ve bırakınca kısa bir "tık" sesi.</span></div>
+      <Switch label="Ses efekti" checked={sounds} onchange={(v) => ((sounds = v), void setJson("dictation.sounds", v))} />
+    </div>
     <p class="sub small">
       Türkçe klavyede <b>AltGr</b> (@, €, {"{"}…) dikteyi başlatmaz. Ctrl+Alt+N gibi kısayollar da çalışmaya devam eder:
       araya başka bir tuş girerse dikte iptal olur.

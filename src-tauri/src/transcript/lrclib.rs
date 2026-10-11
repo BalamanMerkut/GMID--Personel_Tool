@@ -19,6 +19,8 @@ struct Track {
     #[serde(default)]
     synced_lyrics: Option<String>,
     #[serde(default)]
+    plain_lyrics: Option<String>,
+    #[serde(default)]
     instrumental: bool,
 }
 
@@ -84,12 +86,16 @@ pub fn artist_and_track(title: &str, uploader: &str) -> (String, String) {
     (artist.to_string(), t)
 }
 
-/// Şarkının zamanlı sözlerini arar. Bulunamazsa `Ok(None)`.
-pub fn find(
-    title: &str,
-    uploader: &str,
-    duration: Option<f64>,
-) -> Result<Option<Vec<Segment>>, String> {
+/// Veritabanında bulunan söz.
+pub enum Found {
+    /// Satır satır zamanlı (hazır).
+    Synced(Vec<Segment>),
+    /// Yalnızca düz metin (eski şarkılarda sık): zamanlaması duyulan sözlerle eşleştirilerek bulunur.
+    Plain(Vec<String>),
+}
+
+/// Şarkının sözlerini arar: önce zamanlı, yoksa düz metin. Bulunamazsa `Ok(None)`.
+pub fn find(title: &str, uploader: &str, duration: Option<f64>) -> Result<Option<Found>, String> {
     let (artist, track) = artist_and_track(title, uploader);
     if track.is_empty() {
         return Ok(None);
@@ -108,6 +114,7 @@ pub fn find(
     }
     let agent = crate::net::agent(Duration::from_secs(10), Duration::from_secs(15));
     let mut last_err = None;
+    let mut plain: Option<Vec<String>> = None;
     for q in queries {
         let mut req = agent.get(API).header("User-Agent", USER_AGENT);
         for (k, v) in &q {
@@ -132,8 +139,14 @@ pub fn find(
         };
         let tracks: Vec<Track> = serde_json::from_str(&body).unwrap_or_default();
         if let Some(segs) = best(&tracks, duration) {
-            return Ok(Some(segs));
+            return Ok(Some(Found::Synced(segs)));
         }
+        if plain.is_none() {
+            plain = best_plain(&tracks, duration);
+        }
+    }
+    if let Some(lines) = plain {
+        return Ok(Some(Found::Plain(lines)));
     }
     match last_err {
         Some(e) => Err(format!("Şarkı sözü veritabanına ulaşılamadı ({e})")),
@@ -154,6 +167,28 @@ fn best(tracks: &[Track], duration: Option<f64>) -> Option<Vec<Segment>> {
         .find_map(|t| {
             let segs = parse_lrc(t.synced_lyrics.as_deref()?, duration.or(t.duration));
             (segs.len() >= 3).then_some(segs)
+        })
+}
+
+/// Zamansız sözü olan ve süresi tutan ilk sonuç (yanlış şarkıyı almamak için süre şart).
+fn best_plain(tracks: &[Track], duration: Option<f64>) -> Option<Vec<String>> {
+    let d = duration?;
+    tracks
+        .iter()
+        .filter(|t| !t.instrumental)
+        .filter(|t| {
+            t.duration
+                .is_some_and(|td| (d - td).abs() <= DURATION_TOLERANCE)
+        })
+        .find_map(|t| {
+            let lines: Vec<String> = t
+                .plain_lyrics
+                .as_deref()?
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect();
+            (lines.len() >= 3).then_some(lines)
         })
 }
 
@@ -266,6 +301,7 @@ mod tests {
         let t = |d: f64, lyrics: &str| Track {
             duration: Some(d),
             synced_lyrics: Some(lyrics.into()),
+            plain_lyrics: None,
             instrumental: false,
         };
         let a = "[00:01.00]A1\n[00:02.00]A2\n[00:03.00]A3";

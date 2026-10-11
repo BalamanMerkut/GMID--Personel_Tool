@@ -340,7 +340,7 @@ export interface Segment {
 
 export interface Transcript {
   downloadId: string;
-  source: "lyrics" | "subtitles" | "whisper";
+  source: "lyrics" | "lyrics-timed" | "subtitles" | "whisper";
   language: string;
   segments: Segment[];
   createdAt: number;
