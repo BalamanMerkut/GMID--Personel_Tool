@@ -13,6 +13,7 @@ kişisel Windows uygulaması.
 - [Ek A — Oyun ve film puanlama araştırması](docs/ARASTIRMA-PUANLAMA.md)
 - [Ek B — Teknik fizibilite araştırması](docs/ARASTIRMA-TEKNIK.md)
 - [Ek C — Oyun içi panel, otomatik bilgi ve galeri araştırması](docs/ARASTIRMA-OVERLAY-METADATA.md)
+- [Görsel taslak](docs/taslak/gmid-tool-taslak.html) — tıklanabilir prototip, tarayıcıda açılır
 
 ## Marka görselleri
 `assets/marka/` — Merkut Studios, GMID ve GMID AI Butler logoları.

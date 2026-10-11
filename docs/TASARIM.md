@@ -24,6 +24,8 @@ Ekler: [A — Oyun ve film puanlama araştırması](ARASTIRMA-PUANLAMA.md) ·
 [B — Teknik fizibilite araştırması](ARASTIRMA-TEKNIK.md) ·
 [C — Oyun içi panel, otomatik bilgi ve galeri araştırması](ARASTIRMA-OVERLAY-METADATA.md)
 
+**Görsel taslak:** [taslak/gmid-tool-taslak.html](taslak/gmid-tool-taslak.html) — tıklanabilir prototip (açılış animasyonu, Giriş Salonu, Oyun Arşivi ve puanlama kartı, Kliplerim, Notlar, Ses & Mikrofon, Oyun İçi Panel). Tarayıcıda açılır.
+
 ---
 
 ## 1. Vizyon ve temel ilkeler
