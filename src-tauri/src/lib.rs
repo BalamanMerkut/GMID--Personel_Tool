@@ -10,6 +10,7 @@ mod net;
 mod notes;
 mod overlay;
 mod paths;
+mod playlists;
 mod reminders;
 mod scheduler;
 mod servers;
@@ -174,6 +175,7 @@ pub fn run() {
             commands::tools::countdown_toggle,
             commands::tools::countdown_remove,
             commands::tools::take_osd,
+            commands::tools::dictation_view_state,
             commands::tools::alerts_list,
             commands::tools::alerts_fit,
             commands::tools::alerts_close,
@@ -193,6 +195,9 @@ pub fn run() {
             commands::videos::videos_probe,
             commands::videos::videos_download,
             commands::videos::media_tracks,
+            commands::videos::playlists_list,
+            commands::videos::playlist_save,
+            commands::videos::playlist_delete,
             commands::videos::media_track,
             commands::videos::videos_download_playlist,
             commands::videos::videos_list,

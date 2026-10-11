@@ -1,7 +1,7 @@
 //! Windows'a özel parçalar: klavye kancası, mikrofon kaydı (WASAPI) ve yazıyı yapıştırma.
 #![allow(non_snake_case)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
@@ -197,15 +197,26 @@ pub fn play_stop() {
 /// Varsayılan mikrofondan 16 kHz, tek kanal, 16 bit kayıt (Windows dönüştürür).
 pub struct Recorder {
     stop: Arc<AtomicBool>,
+    /// Son ses parçasının seviyesi (0..1, f32 bitleri): göstergedeki dalga için.
+    level: Arc<AtomicU32>,
     handle: JoinHandle<Result<Vec<i16>, String>>,
 }
 
 impl Recorder {
     pub fn start() -> Recorder {
         let stop = Arc::new(AtomicBool::new(false));
-        let flag = stop.clone();
-        let handle = std::thread::spawn(move || record(&flag));
-        Recorder { stop, handle }
+        let level = Arc::new(AtomicU32::new(0));
+        let (flag, lvl) = (stop.clone(), level.clone());
+        let handle = std::thread::spawn(move || record(&flag, &lvl));
+        Recorder {
+            stop,
+            level,
+            handle,
+        }
+    }
+
+    pub fn level(&self) -> f32 {
+        f32::from_bits(self.level.load(Ordering::Relaxed))
     }
 
     pub fn finish(self) -> Result<Vec<i16>, String> {
@@ -219,7 +230,7 @@ impl Recorder {
 /// En fazla 5 dakika.
 const MAX_SAMPLES: usize = 16_000 * 300;
 
-fn record(stop: &AtomicBool) -> Result<Vec<i16>, String> {
+fn record(stop: &AtomicBool, level: &AtomicU32) -> Result<Vec<i16>, String> {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let err = |what: &str, e: windows::core::Error| {
@@ -276,10 +287,14 @@ fn record(stop: &AtomicBool) -> Result<Vec<i16>, String> {
                 if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 || data.is_null() {
                     samples.extend(std::iter::repeat(0i16).take(frames as usize));
                 } else {
-                    samples.extend_from_slice(std::slice::from_raw_parts(
-                        data as *const i16,
-                        frames as usize,
-                    ));
+                    let chunk = std::slice::from_raw_parts(data as *const i16, frames as usize);
+                    let sum: f64 = chunk.iter().map(|v| (*v as f64).powi(2)).sum();
+                    let rms = (sum / chunk.len().max(1) as f64).sqrt();
+                    level.store(
+                        ((rms / 6000.0).min(1.0) as f32).to_bits(),
+                        Ordering::Relaxed,
+                    );
+                    samples.extend_from_slice(chunk);
                 }
                 let _ = capture.ReleaseBuffer(frames);
             }

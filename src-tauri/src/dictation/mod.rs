@@ -237,6 +237,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
     let d = app.state::<Dictation>();
     let mut held: HashSet<u32> = HashSet::new();
     let mut mode = Mode::Idle;
+    let mut last_level = Instant::now();
     loop {
         let ev = rx.recv_timeout(Duration::from_millis(30));
         if let Ok(ev) = &ev {
@@ -292,7 +293,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                             win::play_start();
                         }
                         d.set_phase(&app, "listening", None);
-                        crate::overlay::show_osd(&app, "mic", "Dinliyorum… bırakınca yazarım");
+                        crate::overlay::dictation_view(&app, "listening", 0);
                         // Konuşma sürerken modeller yüklensin.
                         let app2 = app.clone();
                         std::thread::spawn(move || warm_up(&app2));
@@ -308,12 +309,13 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                 if others {
                     let _ = rec.finish();
                     d.set_phase(&app, "idle", None);
-                    crate::overlay::show_osd(&app, "mic", "Sesle yazma iptal edildi");
+                    crate::overlay::dictation_view(&app, "hidden", 0);
                     Mode::Blocked
                 } else if !combo {
                     if sounds_on(&app) {
                         win::play_stop();
                     }
+                    crate::overlay::dictation_view(&app, "processing", 0);
                     let app2 = app.clone();
                     std::thread::spawn(move || process(&app2, rec));
                     Mode::Idle
@@ -321,11 +323,12 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                     // Gösterge her saniye tazelenir (kaybolmasın, süre görünsün).
                     let secs = start.elapsed().as_secs();
                     if secs > shown {
-                        crate::overlay::show_osd(
-                            &app,
-                            "mic",
-                            format!("Dinliyorum · {}:{:02}", secs / 60, secs % 60),
-                        );
+                        crate::overlay::dictation_view(&app, "listening", secs as u32);
+                    }
+                    // Dalga için ses seviyesi (saniyede ~16 kez).
+                    if last_level.elapsed() >= Duration::from_millis(60) {
+                        last_level = Instant::now();
+                        crate::overlay::dictation_level(&app, rec.level());
                     }
                     Mode::Recording(rec, start, secs.max(shown))
                 }
@@ -361,7 +364,7 @@ fn process(app: &AppHandle, rec: win::Recorder) {
         .and_then(|samples| run(app, &samples, released));
     match result {
         Ok(Some(entry)) => {
-            crate::overlay::hide_osd(app);
+            crate::overlay::dictation_view(app, "hidden", 0);
             let _ = app.emit("dictation-entry", &entry);
             let mut h = d.history.lock().unwrap_or_else(|e| e.into_inner());
             h.push_front(entry);
@@ -369,9 +372,13 @@ fn process(app: &AppHandle, rec: win::Recorder) {
             drop(h);
             d.set_phase(app, "idle", None);
         }
-        Ok(None) => d.set_phase(app, "idle", None),
+        Ok(None) => {
+            crate::overlay::dictation_view(app, "hidden", 0);
+            d.set_phase(app, "idle", None);
+        }
         Err(e) => {
             crate::log!("Sesle yazma: {e}");
+            crate::overlay::dictation_view(app, "error", 0);
             crate::overlay::show_osd(app, "mic", format!("Sesle yazma: {e}"));
             d.set_phase(app, "idle", Some(e));
         }
@@ -388,7 +395,6 @@ fn run(
     let d = app.state::<Dictation>();
     let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
     if samples.len() < 16_000 * 2 / 5 {
-        crate::overlay::show_osd(app, "mic", "Çok kısa — Ctrl+Alt'ı basılı tutup konuş");
         return Ok(None);
     }
     if rms(samples) < 60.0 {
@@ -396,7 +402,6 @@ fn run(
     }
     let s = settings(&db);
     d.set_phase(app, "transcribing", None);
-    crate::overlay::show_osd(app, "mic", "Yazıya dökülüyor…");
     let raw = d
         .engine
         .transcribe(
@@ -414,14 +419,12 @@ fn run(
         })?;
     let raw = crate::transcript::parse::clean_dictation(&raw);
     if raw.is_empty() {
-        crate::overlay::show_osd(app, "mic", "Anlaşılır bir şey duyulmadı");
         return Ok(None);
     }
     let mut text = raw.clone();
     let mut tidied = false;
     if s.tidy && engine::llm_ready(dir.root()) {
         d.set_phase(app, "tidying", None);
-        crate::overlay::show_osd(app, "mic", "Toparlanıyor…");
         match d.engine.tidy(dir.root(), &raw, &s.whisper.lang) {
             Ok(t) => {
                 tidied = t != raw;

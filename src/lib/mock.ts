@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, DictationStatus, Download, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Countdown, Device, DictationStatus, Download, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
@@ -154,6 +154,9 @@ const probeResult: Probe = {
   audioLangs: [{ code: "tur", label: "Türkçe" }, { code: "eng", label: "İngilizce" }],
   subtitles: [{ code: "tr", label: "Türkçe" }, { code: "en", label: "İngilizce" }, { code: "de", label: "Almanca" }],
 };
+
+// ---- Kendi çalma listeleri ----
+const userPlaylists: UserPlaylist[] = [];
 
 // ---- Sesle yazma ----
 const dictation: DictationStatus = {
@@ -472,6 +475,29 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         ? ["Bu dünya hepimizin.", "Onu korumak zorundayız.", "Bak, denizler ağlıyor.", "Peki ya biz ne yapıyoruz?"]
         : ["This world belongs to all of us.", "We have to protect it.", "Look, the seas are crying.", "And what are we doing?"];
       return Array.from({ length: 40 }, (_, i) => ({ start: 1 + i * 3, end: 3.6 + i * 3, text: lines[i % 4] }));
+    }
+    case "playlists_list":
+      return userPlaylists;
+    case "playlist_save": {
+      const items = (a.items as string[]).filter((x, i, all) => all.indexOf(x) === i);
+      const existing = userPlaylists.find((p) => p.id === a.id);
+      if (existing) {
+        existing.name = String(a.name);
+        existing.items = items;
+        return existing;
+      }
+      const p = { id: id(), name: String(a.name), createdAt: now(), items };
+      userPlaylists.push(p);
+      return p;
+    }
+    case "playlist_delete":
+      userPlaylists.splice(userPlaylists.findIndex((p) => p.id === a.id), 1);
+      return;
+    case "dictation_view_state": {
+      // Tarayıcı önizlemesi: ?view=dikte&demo=listening|processing|error
+      const demo = new URLSearchParams(location.search).get("demo") ?? "listening";
+      if (demo === "listening") setInterval(() => emit("dikte-level", Math.random() * 0.8), 80);
+      return { state: demo, secs: 7 };
     }
     case "dictation_status":
     case "dictation_apply":

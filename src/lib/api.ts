@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, Download, Langs, Segment, Sidecar, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -206,6 +206,11 @@ export const api = {
       call<number>("videos_download_playlist", { url, option, ids }),
     download: (url: string, option: string, langs: Langs | null = null) =>
       call<Download>("videos_download", { url, option, langs }),
+    playlists: () => call<UserPlaylist[]>("playlists_list"),
+    /** `id` boşsa yeni liste. */
+    savePlaylist: (id: string | null, name: string, items: string[]) =>
+      call<UserPlaylist>("playlist_save", { id, name, items }),
+    deletePlaylist: (id: string) => call<void>("playlist_delete", { id }),
     /** Videonun yanındaki altyazılar ve seçilenin satırları (oynatıcı için). */
     tracks: (id: string) => call<Sidecar[]>("media_tracks", { id }),
     track: (id: string, file: string) => call<Segment[]>("media_track", { id, file }),
@@ -250,7 +255,7 @@ export const api = {
 };
 
 /** Bu pencerenin görevi: ana pencere, gösterge, uyarılar, hızlı not ya da yapışkan not. */
-export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" | "sticky"; id?: string } {
+export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" | "sticky" | "dikte"; id?: string } {
   let label = "main";
   if (inTauri) {
     const meta = (window as unknown as { __TAURI_INTERNALS__: { metadata?: { currentWindow?: { label?: string } } } })
@@ -260,7 +265,7 @@ export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" |
     label = new URLSearchParams(location.search).get("view") ?? "main";
   }
   if (label.startsWith("sticky-")) return { kind: "sticky", id: label.slice(7) };
-  if (label === "osd" || label === "alerts" || label === "quicknote") return { kind: label };
+  if (label === "osd" || label === "alerts" || label === "quicknote" || label === "dikte") return { kind: label };
   return { kind: "main" };
 }
 

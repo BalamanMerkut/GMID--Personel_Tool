@@ -1,14 +1,16 @@
 <script lang="ts">
   // Medya Oynatıcı: iki ayrı bölüm. Müzik (şarkı listesi) ve Videolar (kartlar: klipler, filmler…).
   // Çalma, ekran değişse de sürer (alttaki mini oynatıcı).
+  import { onMount } from "svelte";
   import { api, formatSize, inTauri } from "../api";
+  import PlaylistEditor from "../components/PlaylistEditor.svelte";
   import { downloads, formatDuration, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
   import { play, player } from "../player.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { Download } from "../types";
+  import type { Download, UserPlaylist } from "../types";
 
   let { onnavigate }: { onnavigate: (id: string) => void } = $props();
 
@@ -28,6 +30,58 @@
   let plFilter: string | null = $state(null);
   let armed: string | null = $state(null);
   let hovering: string | null = $state(null);
+  /** Kendi çalma listelerim. */
+  let myLists: UserPlaylist[] = $state([]);
+  let myList: string | null = $state(null);
+  let editing: UserPlaylist | "new" | null = $state(null);
+  /** Yeni liste açılırken önceden seçili gelecek şarkı. */
+  let seed: string | null = $state(null);
+  /** "Listeye ekle" menüsü açık olan şarkı. */
+  let addFor: string | null = $state(null);
+  let armedList = $state(false);
+
+  async function loadLists() {
+    myLists = await api.videos.playlists().catch(() => []);
+    if (myList && !myLists.some((p) => p.id === myList)) myList = null;
+  }
+  onMount(() => void loadLists());
+  // Şarkı silinince listelerden de düşer: sayılar tazelensin.
+  let seenCount = -1;
+  $effect(() => {
+    const n = library.length;
+    if (seenCount !== -1 && n !== seenCount) void loadLists();
+    seenCount = n;
+  });
+  const currentList = $derived(myLists.find((p) => p.id === myList) ?? null);
+
+  async function toggleInList(p: UserPlaylist, songId: string) {
+    const items = p.items.includes(songId) ? p.items.filter((x) => x !== songId) : [...p.items, songId];
+    try {
+      const saved = await api.videos.savePlaylist(p.id, p.name, items);
+      myLists = myLists.map((x) => (x.id === saved.id ? saved : x));
+      notify(items.length > p.items.length ? `"${p.name}" listesine eklendi` : `"${p.name}" listesinden çıkarıldı`, "check");
+    } catch (e) {
+      notify(String(e), "info");
+    }
+  }
+
+  async function deleteList() {
+    if (!currentList) return;
+    if (!armedList) {
+      armedList = true;
+      setTimeout(() => (armedList = false), 3000);
+      return;
+    }
+    armedList = false;
+    await api.videos.deletePlaylist(currentList.id);
+    notify(`"${currentList.name}" silindi`, "trash");
+    myList = null;
+    await loadLists();
+  }
+
+  function onWindowClick(e: MouseEvent) {
+    if (addFor && !(e.target as HTMLElement).closest(".addwrap")) addFor = null;
+  }
 
   const library = $derived(downloads.list.filter((d) => d.status === "done"));
   const music = $derived(library.filter((d) => d.audioOnly));
@@ -42,7 +96,9 @@
   const pool = $derived(section === "music" ? music : videos.filter((d) => inSite(d, site)));
   const shown = $derived.by(() => {
     const q = search.trim().toLocaleLowerCase("tr-TR");
-    return pool.filter(
+    const list = section === "music" ? (currentList as UserPlaylist | null) : null;
+    const base = list ? list.items.flatMap((id) => music.filter((d) => d.id === id)) : pool;
+    return base.filter(
       (d) =>
         (!plFilter || d.playlist === plFilter) &&
         (!q || `${d.title} ${d.uploader} ${d.playlist ?? ""}`.toLocaleLowerCase("tr-TR").includes(q)),
@@ -57,6 +113,7 @@
   function pick(s: Section) {
     section = s;
     plFilter = null;
+    myList = null;
     void setJson("media.section", s);
   }
 
@@ -129,7 +186,38 @@
         {/each}
       </div>
     {/if}
-    {#if playlists.length}
+    {#if section === "music"}
+      <div class="lists">
+        <span class="sub small">Listelerim:</span>
+        <button class="chipbtn" aria-pressed={!plFilter && !myList} onclick={() => ((plFilter = null), (myList = null))}>Tüm şarkılar</button>
+        {#each myLists as p (p.id)}
+          <button class="chipbtn mine" aria-pressed={myList === p.id} onclick={() => ((myList = myList === p.id ? null : p.id), (plFilter = null))}>
+            <Icon name="headphones" size={13} />{p.name} <span class="n">{p.items.length}</span>
+          </button>
+        {/each}
+        <button class="chipbtn add" onclick={() => ((seed = null), (editing = "new"))}><Icon name="plus" size={13} />Yeni liste</button>
+      </div>
+      {#if playlists.length}
+        <div class="lists">
+          <span class="sub small">İndirilen listeler:</span>
+          {#each playlists as p (p)}
+            <button class="chipbtn" aria-pressed={plFilter === p} onclick={() => ((plFilter = plFilter === p ? null : p), (myList = null))}><Icon name="list" size={13} />{p}</button>
+          {/each}
+        </div>
+      {/if}
+      {#if currentList}
+        <div class="listhead">
+          <div>
+            <b>{currentList.name}</b>
+            <span class="sub small tnum">{currentList.items.length} şarkı</span>
+          </div>
+          <div class="row">
+            <button class="btn ghost sm" onclick={() => (editing = currentList)}><Icon name="edit" size={15} />Düzenle</button>
+            <button class="btn ghost sm" class:danger={armedList} onclick={deleteList}><Icon name="trash" size={15} />{armedList ? "Emin misin?" : "Sil"}</button>
+          </div>
+        </div>
+      {/if}
+    {:else if playlists.length}
       <div class="lists">
         <span class="sub small">Listeler:</span>
         <button class="chipbtn" aria-pressed={!plFilter} onclick={() => (plFilter = null)}>Hepsi</button>
@@ -155,6 +243,20 @@
             <span class="sub small tpl">{d.playlist ?? ""}</span>
             <span class="sub small tnum">{formatDuration(d.duration ?? 0)}</span>
             <span class="cacts">
+              <span class="addwrap">
+                <button class="mini" title="Listeye ekle" onclick={() => (addFor = addFor === d.id ? null : d.id)}><Icon name="plus" size={16} /></button>
+                {#if addFor === d.id}
+                  <div class="addmenu">
+                    <span class="mlabel">Listeye ekle</span>
+                    {#each myLists as p (p.id)}
+                      <button class:on={p.items.includes(d.id)} onclick={() => toggleInList(p, d.id)}>
+                        <span class="ck">{#if p.items.includes(d.id)}<Icon name="check" size={13} />{/if}</span>{p.name}
+                      </button>
+                    {/each}
+                    <button class="new" onclick={() => ((seed = d.id), (addFor = null), (editing = "new"))}><Icon name="plus" size={13} />Yeni liste…</button>
+                  </div>
+                {/if}
+              </span>
               <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={16} /></button>
               <button class="mini" class:armed={armed === d.id} title="Sil" onclick={() => remove(d)}>
                 <Icon name="trash" size={16} />{#if armed === d.id}<span>Sil?</span>{/if}
@@ -218,6 +320,20 @@
   {/if}
 </div>
 
+<svelte:window onclick={onWindowClick} />
+
+{#if editing}
+  <PlaylistEditor
+    songs={music}
+    initial={editing === "new" ? (seed ? { id: "", name: "", createdAt: 0, items: [seed] } : null) : editing}
+    onclose={() => (editing = null)}
+    onsaved={(p) => {
+      editing = null;
+      void loadLists().then(() => (myList = p.id));
+    }}
+  />
+{/if}
+
 <style>
   .md { display: flex; flex-direction: column; gap: 16px; max-width: 1500px; margin: 0 auto; }
   .panel { display: flex; flex-direction: column; gap: 10px; }
@@ -263,6 +379,24 @@
   .sections button.on { border-color: var(--gold); color: var(--gold-glow); background: linear-gradient(135deg, rgba(227, 194, 112, 0.14), rgba(227, 194, 112, 0.03)); box-shadow: 0 0 22px rgba(227, 194, 112, 0.1); }
   .sections b { display: block; font-family: var(--f-display); font-size: 17px; color: var(--text); }
   .sections .on b { color: var(--gold-glow); }
+
+  .chipbtn.mine { font-family: var(--f-body); }
+  .chipbtn .n { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .chipbtn.add { border-style: dashed; color: var(--gold); font-family: var(--f-body); }
+  .listhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(227, 194, 112, 0.06); border: 1px solid rgba(227, 194, 112, 0.25); }
+  .listhead > div:first-child { display: flex; align-items: baseline; gap: 10px; }
+  .listhead b { font-family: var(--f-display); font-size: 16px; color: var(--gold-glow); }
+  .btn.danger { color: var(--bad); border-color: rgba(224, 106, 106, 0.5); }
+  .addwrap { position: relative; display: inline-flex; }
+  .addmenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 220px; padding: 8px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--coal-2); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 2px; }
+  .addmenu .mlabel { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); padding: 2px 6px 6px; }
+  .addmenu button { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--text); text-align: left; padding: 7px 8px; border-radius: 8px; font-size: 13px; }
+  .addmenu button:hover { background: rgba(255, 255, 255, 0.06); }
+  .addmenu button.on { color: var(--gold); }
+  .addmenu .ck { width: 16px; display: inline-grid; }
+  .addmenu .new { color: var(--gold); border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; }
+  .track:has(.addmenu) { position: relative; z-index: 5; }
+  .track:hover .cacts, .track:has(.addmenu) .cacts { opacity: 1; }
 
   /* Şarkı listesi */
   .tracks { display: flex; flex-direction: column; gap: 2px; }

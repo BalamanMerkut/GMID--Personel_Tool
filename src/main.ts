@@ -23,6 +23,8 @@ async function root(): Promise<{ component: Component<any>; props: Record<string
   switch (view.kind) {
     case "osd":
       return { component: (await import("./lib/windows/Osd.svelte")).default, props: {} };
+    case "dikte":
+      return { component: (await import("./lib/windows/DictationPill.svelte")).default, props: {} };
     case "alerts":
       return { component: (await import("./lib/windows/Alerts.svelte")).default, props: {} };
     case "quicknote":

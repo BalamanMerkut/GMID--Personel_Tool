@@ -618,7 +618,10 @@
             ></video>
             {#if cue}<div class="cue">{cue}</div>{/if}
             {#if !playing && !mini}<button class="bigplay show" title="Oynat" onclick={toggle}><Icon name="play" size={40} /></button>{/if}
-            {#if mini}<button class="miniexp" title="Büyüt" onclick={onexpand}><Icon name="expand" size={16} /></button>{/if}
+            {#if mini}
+              <button class="minibtn close" title="Kapat" onclick={onstop}><Icon name="x" size={16} /></button>
+              <button class="minibtn grow" title="Büyüt" onclick={onexpand}><Icon name="expand" size={16} /></button>
+            {/if}
           </div>
         {/if}
       {:else}
@@ -738,6 +741,10 @@
     {/if}
   </div>
 
+  {#if full && idle}
+    <!-- Kontroller gizliyken alt kenara gelen fare onları geri getirir. -->
+    <div class="hot" role="presentation" onpointermove={wake} onpointerenter={wake}></div>
+  {/if}
   <footer class="ctl" onpointerenter={() => (overControls = true)} onpointerleave={() => (overControls = false)}>
     <div class="playing-now">
       <button class="nthumb" title={mini ? "Oynatıcıyı aç" : playing ? "Duraklat" : "Oynat"} onclick={() => (mini ? onexpand() : toggle())}>
@@ -1000,15 +1007,18 @@
   .full .ctl { transition: opacity 0.3s; }
   .full.idle .ctl { opacity: 0; }
   .full.idle { cursor: none; }
-  /* Filmde tam ekran: görüntü bütün ekranı kaplar, kontroller üstünde süzülür. */
-  .full.isvideo { grid-template-rows: minmax(0, 1fr); background: #000; }
+  /* Filmde tam ekran: görüntü bütün ekranı kaplar; kontroller altta ayrı bir şeritte (görüntünün
+     üstüne binmez, bazı ekran kartlarında görüntünün altında kalıp görünmüyordu). Fare durunca şerit
+     kalkar, görüntü bütün ekrana yayılır; fare kıpırdayınca ya da alta gelince geri gelir. */
+  .full.isvideo { grid-template-rows: minmax(0, 1fr) auto; background: #000; }
   .full.isvideo .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "stage"; }
   .full.isvideo .text { display: none; }
   .full.isvideo .stage { padding: 0; }
   .full.isvideo .vwrap { width: 100%; height: 100%; }
   .full.isvideo video { width: 100%; height: 100%; max-height: none; object-fit: contain; border-radius: 0; }
-  .full.isvideo .ctl { position: absolute; left: 0; right: 0; bottom: 0; border-top: 0; background: linear-gradient(transparent, rgba(0, 0, 0, 0.88) 45%); padding-top: 34px; }
-  .full.isvideo:not(.idle) .cue { bottom: 120px; }
+  .full.isvideo .ctl { border-top: 1px solid rgba(255, 255, 255, 0.08); background: #0b0c0e; }
+  .full.isvideo.idle .ctl { display: none; }
+  .hot { position: fixed; left: 0; right: 0; bottom: 0; height: 140px; z-index: 40; }
 
   /* Küçültülmüş: uygulamanın altında çalma çubuğu, video köşede */
   .mini { inset: auto 0 0 var(--side-w); z-index: 20; grid-template-rows: auto; background: transparent; }
@@ -1021,8 +1031,11 @@
   .mini .cue { font-size: 13px; bottom: 6%; }
   .mini .ctl { background: rgba(23, 26, 30, 0.97); backdrop-filter: blur(10px); padding: 8px 16px; }
   .mini .nthumb { width: 46px; height: 46px; }
-  .miniexp { position: absolute; top: 8px; right: 8px; border: 0; border-radius: 8px; padding: 6px; display: grid; place-items: center; background: rgba(0, 0, 0, 0.6); color: #fff; opacity: 0; transition: opacity 0.2s; }
-  .vwrap:hover .miniexp { opacity: 1; }
+  .minibtn { position: absolute; right: 8px; border: 0; border-radius: 8px; padding: 6px; display: grid; place-items: center; background: rgba(0, 0, 0, 0.65); color: #fff; opacity: 0; transition: opacity 0.2s, background 0.15s; }
+  .minibtn.close { top: 8px; }
+  .minibtn.grow { bottom: 8px; }
+  .minibtn:hover { background: rgba(227, 194, 112, 0.9); color: #1b1608; }
+  .vwrap:hover .minibtn { opacity: 1; }
 
   @media (max-width: 1100px) {
     .mini { left: 76px; }

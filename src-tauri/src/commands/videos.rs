@@ -236,3 +236,27 @@ fn cp1254(b: u8) -> char {
         _ => char::from(b),
     }
 }
+
+#[tauri::command]
+pub fn playlists_list(db: State<'_, Db>) -> CmdResult<Vec<crate::playlists::Playlist>> {
+    crate::playlists::list(&db)
+}
+
+/// `id` boşsa yeni liste oluşturur; doluysa adını ve şarkılarını günceller.
+#[tauri::command]
+pub fn playlist_save(
+    db: State<'_, Db>,
+    id: Option<String>,
+    name: String,
+    items: Vec<String>,
+) -> CmdResult<crate::playlists::Playlist> {
+    match id {
+        Some(id) => crate::playlists::update(&db, &id, &name, &items),
+        None => crate::playlists::create(&db, &name, &items),
+    }
+}
+
+#[tauri::command]
+pub fn playlist_delete(db: State<'_, Db>, id: String) -> CmdResult<()> {
+    crate::playlists::delete(&db, &id)
+}

@@ -99,6 +99,18 @@ const MIGRATIONS: &[&str] = &[
         segments    TEXT NOT NULL,
         created_at  INTEGER NOT NULL
     );",
+    // 8 — kullanıcının kendi çalma listeleri (Medya Oynatıcı)
+    "CREATE TABLE playlists (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE playlist_items (
+        playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+        download_id TEXT NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+        position    INTEGER NOT NULL,
+        PRIMARY KEY (playlist_id, download_id)
+    );",
 ];
 
 pub struct Db(Mutex<Connection>);

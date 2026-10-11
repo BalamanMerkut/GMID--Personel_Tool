@@ -391,3 +391,12 @@ export interface DictationStatus {
   lastError: string | null;
   history: DictationEntry[];
 }
+
+/** Kullanıcının kendi çalma listesi. */
+export interface UserPlaylist {
+  id: string;
+  name: string;
+  createdAt: number;
+  /** Sıralı indirme kimlikleri. */
+  items: string[];
+}

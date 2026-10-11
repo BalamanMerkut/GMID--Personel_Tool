@@ -221,6 +221,12 @@ pub fn take_osd(overlay: State<'_, Overlay>) -> Option<OsdMessage> {
     overlay.last_osd()
 }
 
+/// Sesle yazma göstergesi yeni açıldıysa son durumu alır.
+#[tauri::command]
+pub fn dictation_view_state(overlay: State<'_, Overlay>) -> crate::overlay::DictationView {
+    overlay.last_dictation()
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Alerts {

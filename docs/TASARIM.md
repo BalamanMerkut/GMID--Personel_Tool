@@ -229,6 +229,12 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >   (Needleman–Wunsch, Türkçe harf sadeleştirme) bulunur ("lyrics-timed"). Sesle yazma: mikrofon 90 ms'de açılır
 >   (ilk hece kaçmaz), 220 ms'de başlangıç sesi; bırakınca bitiş sesi; gösterge penceresi önceden hazırlanır ve
 >   gizleme sayacı pencere göründükten sonra başlar ("Yazıya dökülüyor…" takılı kalmaz).
+> - **v0.16:** Kendi çalma listeleri (göç 8: `playlists`, `playlist_items`; şarkı silinince listeden düşer):
+>   Müzik'te "+ Yeni liste", şarkı seçme penceresi (işaretleme sırası liste sırası), şarkı satırında "listeye ekle".
+>   Tam ekranda kontroller görüntünün üstüne binmez, altta ayrı şerit; fare durunca kalkar, alt kenarda görünmez
+>   bir "uyandırma bölgesi" var. Mini videoda sağ üst kapat, sağ alt büyüt. Sesle yazmada yazılı OSD yerine
+>   ekranın alt ortasında yazısız gösterge (`dikte` penceresi): dinlerken mikrofon seviyesiyle oynayan dalga ve
+>   süre, yazıya dökerken üç nokta; zamanlayıcıyla değil durumla kapanır.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.

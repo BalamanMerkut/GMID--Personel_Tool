@@ -16,8 +16,11 @@ use tauri::{
 
 pub const OSD: &str = "osd";
 pub const ALERTS: &str = "alerts";
+/// Sesle yazma göstergesi (ekranın alt ortası).
+pub const DICTATION: &str = "dikte";
 
 const OSD_SIZE: (f64, f64) = (380.0, 76.0);
+const DICTATION_SIZE: (f64, f64) = (180.0, 64.0);
 const ALERTS_WIDTH: f64 = 380.0;
 const MARGIN: f64 = 20.0;
 
@@ -28,15 +31,33 @@ pub struct OsdMessage {
     pub text: String,
 }
 
+/// Sesle yazma göstergesinin durumu: "listening" | "processing" | "error" | "hidden".
+#[derive(Serialize, Clone, Default)]
+pub struct DictationView {
+    pub state: String,
+    pub secs: u32,
+}
+
 #[derive(Default)]
 pub struct Overlay {
     osd_gen: AtomicU64,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    dictation_gen: AtomicU64,
+    last_dictation: Mutex<DictationView>,
     last_osd: Mutex<Option<OsdMessage>>,
     /// Uyarı penceresinin son yüksekliği (mantıksal piksel).
     alerts_height: Mutex<Option<f64>>,
 }
 
 impl Overlay {
+    /// Gösterge penceresi yeni açıldıysa son durumu buradan alır.
+    pub fn last_dictation(&self) -> DictationView {
+        self.last_dictation
+            .lock()
+            .map(|d| d.clone())
+            .unwrap_or_default()
+    }
+
     /// OSD penceresi yeni açıldıysa son mesajı buradan alır.
     pub fn last_osd(&self) -> Option<OsdMessage> {
         self.last_osd.lock().ok().and_then(|m| m.clone())
@@ -123,25 +144,69 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
     });
 }
 
+/// Sesle yazma göstergesi: dinlerken ses dalgası ve süre, yazıya dökerken bekleme işareti.
+/// Zamanlayıcıyla değil durumla kapanır ("hidden"); yine de yazıya dökme çok uzarsa kendiliğinden gizlenir.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn dictation_view(app: &AppHandle, state: &str, secs: u32) {
+    let overlay = app.state::<Overlay>();
+    let id = overlay.dictation_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let view = DictationView {
+        state: state.into(),
+        secs,
+    };
+    if let Ok(mut last) = overlay.last_dictation.lock() {
+        *last = view.clone();
+    }
+    let hide = state == "hidden";
+    crate::window::on_ui_thread(app, "Dikte göstergesi", move |app| {
+        // Bu arada daha yeni bir durum geldiyse eskisini uygulama (iş parçacıkları sırasız çalışabilir).
+        if app.state::<Overlay>().dictation_gen.load(Ordering::SeqCst) != id {
+            return Ok(());
+        }
+        if hide {
+            if let Some(w) = app.get_webview_window(DICTATION) {
+                let _ = w.hide();
+            }
+            return Ok(());
+        }
+        let w = match app.get_webview_window(DICTATION) {
+            Some(w) => w,
+            None => tool_window(app, DICTATION, DICTATION_SIZE)?,
+        };
+        let _ = app.emit_to(DICTATION, "dikte", &view);
+        place(&w, DICTATION_SIZE, Corner::BottomCenter);
+        show_no_activate(&w);
+        let _ = w.set_ignore_cursor_events(true);
+        Ok(())
+    });
+    // Takılı kalmasın: hata 2 sn, yazıya dökme en fazla 2 dk görünür.
+    let limit = match state {
+        "error" => Some(Duration::from_secs(2)),
+        "processing" => Some(Duration::from_secs(120)),
+        _ => None,
+    };
+    if let Some(limit) = limit {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(limit);
+            if app.state::<Overlay>().dictation_gen.load(Ordering::SeqCst) == id {
+                dictation_view(&app, "hidden", 0);
+            }
+        });
+    }
+}
+
+/// Dinlerken mikrofon seviyesi (0..1); gösterge dalgayı buna göre çizer.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn dictation_level(app: &AppHandle, level: f32) {
+    let _ = app.emit_to(DICTATION, "dikte-level", level);
+}
+
 /// Gösterge penceresini görünmez olarak önceden oluşturur.
 pub fn prepare_osd(app: &AppHandle) {
     crate::window::on_ui_thread(app, "Gösterge", |app| {
-        if app.get_webview_window(OSD).is_none() {
-            tool_window(app, OSD, OSD_SIZE)?;
-        }
-        Ok(())
-    });
-}
-
-/// Göstergeyi hemen gizler (sesle yazma bitince "Yazıya dökülüyor…" beklemesin).
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn hide_osd(app: &AppHandle) {
-    app.state::<Overlay>()
-        .osd_gen
-        .fetch_add(1, Ordering::SeqCst);
-    crate::window::on_ui_thread(app, "Gösterge", |app| {
-        if let Some(w) = app.get_webview_window(OSD) {
-            let _ = w.hide();
+        if app.get_webview_window(DICTATION).is_none() {
+            tool_window(app, DICTATION, DICTATION_SIZE)?;
         }
         Ok(())
     });
@@ -222,6 +287,9 @@ pub fn close_alerts(app: &AppHandle) {
 enum Corner {
     TopRight,
     BottomRight,
+    /// Ekranın alt ortası (görev çubuğunun biraz üstü).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    BottomCenter,
 }
 
 /// Pencereyi birincil ekranın köşesine yerleştirir. Boyut, pencereden okunmaz (yeni açılmış
@@ -244,6 +312,13 @@ fn place(w: &WebviewWindow, size: (f64, f64), corner: Corner) {
             PhysicalPosition::new(
                 area.position.x + area.size.width as i32 - width - margin,
                 area.position.y + area.size.height as i32 - height - margin,
+            )
+        }
+        Corner::BottomCenter => {
+            let area = m.work_area();
+            PhysicalPosition::new(
+                area.position.x + (area.size.width as i32 - width) / 2,
+                area.position.y + area.size.height as i32 - height - margin * 3,
             )
         }
     };
