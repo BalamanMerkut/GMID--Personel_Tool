@@ -212,11 +212,13 @@ fn ffmpeg(root: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(exe))
 }
 
-/// Dosyayı yazıya döker. `lang`: "auto" (ya da "orig"), "tr", "en"… `progress`: 0..1
+/// Dosyayı yazıya döker. `lang`: "auto" (ya da "orig"), "tr", "en"… `prompt`: başlık gibi ipucu
+/// (sanatçı ve özel adlar doğru yazılsın). `progress`: 0..1
 pub fn transcribe(
     root: &Path,
     file: &Path,
     lang: &str,
+    prompt: &str,
     model: &str,
     progress: impl Fn(&'static str, f64),
 ) -> Result<Vec<Segment>, String> {
@@ -266,9 +268,21 @@ pub fn transcribe(
         .map(|n| n.get().clamp(1, 8))
         .unwrap_or(4)
         .to_string();
+    let detected;
     let lang = match lang {
         "tr" | "en" => lang,
-        _ => "auto",
+        _ => {
+            // Whisper dili ilk 30 saniyeden anlar; şarkıların girişi çoğu zaman yalnızca müzik
+            // olduğundan yanlış dil seçip uydurabiliyor. Dil, kaydın ortasındaki parçadan bulunur.
+            detected = detect_language(
+                root,
+                &model_file,
+                &wav,
+                &tmp.join(format!("{name}-dil.wav")),
+                &threads,
+            );
+            detected.as_deref().unwrap_or("auto")
+        }
     };
     let mut cmd = Command::new(cli(root));
     cmd.arg("-m")
@@ -278,10 +292,16 @@ pub fn transcribe(
         .args(["-l", lang, "-t", &threads])
         // Tam JSON (kelime zamanlarıyla), satırlar en fazla ~50 karakter ve kelime sınırında bölünür.
         .args(["-ojf", "-ml", "50", "-sow", "-pp"])
+        // Konuşma dışı simgeleri ([Müzik], ♪…) bastır: müzikte uydurma satırları azaltır.
+        .arg("--suppress-nst")
         .arg("-of")
         .arg(&out_base)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    let prompt = prompt.trim();
+    if !prompt.is_empty() {
+        cmd.arg("--prompt").arg(prompt);
+    }
     if let Some(d) = cli(root).parent() {
         cmd.current_dir(d);
     }
@@ -323,4 +343,87 @@ pub fn transcribe(
     };
     cleanup();
     result
+}
+
+/// Kaydın ortasından 30 saniyelik bir parça alıp dilini Whisper'a sorar ("en", "tr"…).
+fn detect_language(
+    root: &Path,
+    model_file: &Path,
+    wav: &Path,
+    clip: &Path,
+    threads: &str,
+) -> Option<String> {
+    // 16 kHz, tek kanal, 16 bit → saniyede 32 000 bayt.
+    let secs = std::fs::metadata(wav).ok()?.len().saturating_sub(44) / 32_000;
+    if secs < 60 {
+        return None;
+    }
+    let mut cmd = Command::new(ffmpeg(root));
+    cmd.args(["-nostdin", "-y", "-loglevel", "error", "-ss"])
+        .arg((secs * 2 / 5).to_string())
+        .args(["-t", "30", "-i"])
+        .arg(wav)
+        .args(["-c", "copy"])
+        .arg(clip)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    hide_console(&mut cmd);
+    let ok = cmd.status().is_ok_and(|s| s.success());
+    let found = ok
+        .then(|| {
+            let mut cmd = Command::new(cli(root));
+            cmd.arg("-m")
+                .arg(model_file)
+                .arg("-f")
+                .arg(clip)
+                .args(["-l", "auto", "-dl", "-t", threads])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            if let Some(d) = cli(root).parent() {
+                cmd.current_dir(d);
+            }
+            hide_console(&mut cmd);
+            cmd.output().ok()
+        })
+        .flatten()
+        .and_then(|out| {
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stderr),
+                String::from_utf8_lossy(&out.stdout)
+            );
+            parse_detected(&text)
+        });
+    let _ = std::fs::remove_file(clip);
+    crate::log!("Whisper dil tespiti: {found:?}");
+    found
+}
+
+/// "whisper_full_with_state: auto-detected language: en (p = 0.958)" → "en"
+fn parse_detected(log: &str) -> Option<String> {
+    let rest = log.split("auto-detected language:").nth(1)?.trim_start();
+    let code: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect();
+    let p: f64 = rest
+        .split("p =")
+        .nth(1)?
+        .split(')')
+        .next()?
+        .trim()
+        .parse()
+        .ok()?;
+    (!code.is_empty() && p >= 0.5).then_some(code)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn detected_language() {
+        let log = "whisper_full_with_state: auto-detected language: en (p = 0.958340)\nmain: done";
+        assert_eq!(super::parse_detected(log).as_deref(), Some("en"));
+        let unsure = "auto-detected language: tr (p = 0.21)";
+        assert_eq!(super::parse_detected(unsure), None);
+    }
 }

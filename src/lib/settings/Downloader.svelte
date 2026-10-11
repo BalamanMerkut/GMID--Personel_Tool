@@ -10,6 +10,7 @@
   let { onnavigate }: { onnavigate: (id: string) => void } = $props();
 
   let parallel = $state(getJson("videos.parallel", 2));
+  let lyricsDb = $state(getJson("transcript.lyricsDb", true));
   let tools: ToolsState | null = $state(null);
   let bridge: BridgeStatus | null = $state(null);
   let busy: "update" | "reinstall" | null = $state(null);
@@ -115,10 +116,24 @@
 </section>
 
 <section class="panel">
-  <h3 class="h2"><Icon name="note" />Yazıya dökme (Whisper)</h3>
+  <h3 class="h2"><Icon name="note" />Şarkı sözleri ve yazıya dökme</h3>
+  <div class="line">
+    <div>
+      <b>Şarkı sözü veritabanı (LRCLIB)</b>
+      <span class="sub small">
+        Şarkılarda önce lrclib.net'in satır satır zamanlanmış sözlerine bakılır; en doğru sonuç budur. Yalnızca şarkının
+        adı, sanatçısı ve süresi gönderilir.
+      </span>
+    </div>
+    <div class="seg">
+      {#each [[true, "Açık"], [false, "Kapalı"]] as const as [v, l] (l)}
+        <button aria-pressed={lyricsDb === v} onclick={() => ((lyricsDb = v), void setJson("transcript.lyricsDb", v))}>{l}</button>
+      {/each}
+    </div>
+  </div>
   <p class="sub small">
-    Altyazısı olmayan videoların konuşmalarını ve şarkı sözlerini tamamen bu bilgisayarda yazıya döker. Program ve
-    model ilk kullanımda bir kez iner; ses hiçbir yere gönderilmez.
+    <b>Whisper</b>: sözü ya da altyazısı bulunamayan videoların konuşmalarını ve şarkı sözlerini tamamen bu bilgisayarda
+    yazıya döker. Program ve model ilk kullanımda bir kez iner; ses hiçbir yere gönderilmez.
   </p>
   {#if whisper}
     {#each whisper.models as m (m.id)}

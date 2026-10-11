@@ -259,7 +259,7 @@ export interface PlaylistProbe {
 /** Bağlantı tek video mu, çalma listesi mi? */
 export type Parsed = ({ kind: "video" } & Probe) | ({ kind: "playlist" } & PlaylistProbe);
 
-export type DownloadStatus = "queued" | "downloading" | "processing" | "paused" | "done" | "error";
+export type DownloadStatus = "queued" | "retrying" | "downloading" | "processing" | "paused" | "done" | "error";
 
 export interface Download {
   id: string;
@@ -316,7 +316,7 @@ export interface Segment {
 
 export interface Transcript {
   downloadId: string;
-  source: "subtitles" | "whisper";
+  source: "lyrics" | "subtitles" | "whisper";
   language: string;
   segments: Segment[];
   createdAt: number;
@@ -339,6 +339,6 @@ export interface WhisperStatus {
 
 export interface TranscriptProgress {
   id: string;
-  stage: "subtitles" | "audio" | "whisper";
+  stage: "lyrics" | "subtitles" | "audio" | "whisper";
   progress: number;
 }

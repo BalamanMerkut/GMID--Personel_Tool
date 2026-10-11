@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.11 (taslak)
+## Tasarım Dokümanı · v0.12 (taslak)
 
 > **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -182,6 +182,21 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 > - **Oynatıcı ve yazılar (v0.11):** uygulama içi oynatıcı (MP4/WebM; MKV dışarıda açılır), sağda senkron yazılar,
 >   o anki satır/kelime işaretli. Kaynak: sitenin altyazısı (YouTube'da önce videonun kendi dilindeki kelime zamanlı
 >   otomatik altyazı) ya da yerel Whisper (whisper.cpp; model `Araclar\whisper\models`). `.srt`/`.lrc` dosyası yazılır.
+> - **v0.12 (geri bildirim turu):**
+>   - *Kendiliğinden yeniden deneme:* geçici hatalar (403, 5xx, zaman aşımı, bağlantı kopması) 3 kez, artan aralıkla
+>     (5/10/20 sn) yeniden denenir; durum "Tekrar deneniyor (n/3)". Hata mesajları sebebe göre (internet ≠ site reddi).
+>   - *Gizli yayın listeleri:* eklenti sayfanın kendi dünyasında (`sniff.js`, MAIN world) oynatıcının indirdiği
+>     yanıtların içeriğine bakar; `#EXTM3U` ile başlayan her yanıt (adı `.txt`/`.png` olsa da) HLS olarak yakalanır.
+>     Gömülü oynatıcıda (iframe) Referer olarak iframe'in adresi kullanılır. X/Instagram akışında videonun kendi
+>     gönderi bağlantısı önce denenir.
+>   - *Şarkı sözü veritabanı:* "Otomatik" kaynakta önce LRCLIB (lrclib.net; satır zamanlı sözler; yalnızca şarkı adı,
+>     sanatçı ve süre gönderilir, süre ±6 sn tutmalı), sonra site altyazısı, sonra Whisper. Ayardan kapatılabilir.
+>   - *Whisper uydurmaları:* dil kaydın ortasındaki 30 sn'den bulunur (girişteki müzik yanıltmasın), başlık ipucu
+>     (`--prompt`) verilir, konuşma dışı simgeler bastırılır; "Altyazı M.K.", "Thanks for watching" gibi eğitim
+>     verisi imzaları ve uzun sessizliğe yayılmış, aynen tekrarlanan kısa satırlar atılır.
+>   - *Yeni oynatıcı:* özel kontroller (oynat/duraklat, önceki/sonraki, karıştır, tekrar: kapalı/liste/parça,
+>     ilerleme, hız menüsü, ses kaydırıcısı + sessiz, tam ekran), kapağa/videoya tıklayınca durur, **Sahne** ve
+>     **Liste** görünümü (solda parçalar, sağda sözler), Spotify benzeri alt çubuk, Windows medya tuşları.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -943,6 +958,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.12 | 2026-10-11 | Geri bildirim turu: indirmelerde kendiliğinden yeniden deneme ve doğru hata mesajları, eklentide gizli HLS yakalama + iframe Referer + X/Instagram akışı, şarkı sözü veritabanı (LRCLIB), Whisper uydurma süzgeci ve dil tespiti, oynatıcı yeniden yazıldı (özel kontroller, liste görünümü, alt çalma çubuğu) |
 | v0.11 | 2026-10-11 | Video İndirici genişledi: YouTube çalma listeleri (seçerek toplu indirme, liste klasörü), eklenti her sitede video yakalama (HLS/DASH/mp4 + Referer), video üstü düğme ve sağ tık kalite menüsü, uygulama içi oynatıcı ve senkron yazılar (site altyazısı ya da yerel Whisper; .srt/.lrc), parçalı hızlı indirme |
 | v0.10 | 2026-10-11 | Kontrol Odası sekmeli ayarlar merkezine dönüştü (arama, kısayollar burada, gruplu); yeni kısayollar: pencereyi aç, panodaki bağlantıyı indir; ekran göstergesi ayarı; Video İndirici'de Türkçe Windows dosya adı hatası giderildi |
 | v0.9 | 2026-10-11 | Faz 5 kodlandı: Video İndirici (§3.1 özet kutusu), yerel eklenti köprüsü ve eşleştirme, Chrome/Opera eklentisi; kararlılık: Windows'ta pencere açarken kilitlenme giderildi, hatırlatıcılara Windows bildirimi, `gmid.log`; sıra değişikliği (3b/4/3c sonraya) |

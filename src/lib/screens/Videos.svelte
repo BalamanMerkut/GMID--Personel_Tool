@@ -228,6 +228,7 @@
     const l = downloads.live[d.id];
     switch (d.status) {
       case "queued": return "Sırada bekliyor";
+      case "retrying": return d.error ?? "Birazdan tekrar denenecek";
       case "paused": return `Duraklatıldı · %${Math.round(d.progress * 100)}`;
       case "error": return d.error ?? "Hata";
       case "processing": return "Görüntü ve ses birleştiriliyor…";
@@ -418,7 +419,7 @@
                 </span>
               </div>
               <div class="jacts">
-                {#if d.status === "downloading" || d.status === "queued"}
+                {#if d.status === "downloading" || d.status === "queued" || d.status === "retrying"}
                   <button class="mini" title="Duraklat" onclick={() => act(api.videos.pause(d.id))}><Icon name="pause" size={17} /></button>
                 {:else if d.status === "paused" || d.status === "error"}
                   <button class="mini" title={d.status === "error" ? "Tekrar dene" : "Devam et"} onclick={() => act(api.videos.resume(d.id))}>

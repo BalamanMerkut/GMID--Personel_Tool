@@ -1,9 +1,10 @@
 //! Videodaki konuşmanın ya da şarkı sözlerinin yazısı (transkript).
 //!
-//! Önce sitenin kendi altyazısı denenir (YouTube'un otomatik altyazısında kelime zamanları da var);
-//! yoksa Whisper bilgisayarda çalışır. Sonuç veritabanında durur ve dosyanın yanına `.srt`
+//! Önce şarkı sözü veritabanı (LRCLIB; şarkılarda en doğrusu), sonra sitenin kendi altyazısı
+//! (YouTube'un otomatik altyazısında kelime zamanları da var) denenir; yoksa Whisper bilgisayarda çalışır. Sonuç veritabanında durur ve dosyanın yanına `.srt`
 //! (video) ya da `.lrc` (müzik) olarak da yazılır: başka oynatıcılarda da görünsün.
 
+pub mod lrclib;
 pub mod parse;
 pub mod whisper;
 
@@ -24,7 +25,7 @@ use tauri::{AppHandle, Emitter, Manager};
 #[serde(rename_all = "camelCase")]
 pub struct Transcript {
     pub download_id: String,
-    /// "subtitles" (sitenin altyazısı) | "whisper"
+    /// "lyrics" (şarkı sözü veritabanı) | "subtitles" (sitenin altyazısı) | "whisper"
     pub source: String,
     pub language: String,
     pub segments: Vec<Segment>,
@@ -86,12 +87,12 @@ pub struct Transcriber {
 #[serde(rename_all = "camelCase")]
 struct Progress<'a> {
     id: &'a str,
-    /// "subtitles" | "audio" | "whisper"
+    /// "lyrics" | "subtitles" | "audio" | "whisper"
     stage: &'a str,
     progress: f64,
 }
 
-/// Yazıyı çıkarır. `mode`: "auto" (önce altyazı, yoksa Whisper) | "subtitles" | "whisper".
+/// Yazıyı çıkarır. `mode`: "auto" (söz veritabanı → altyazı → Whisper) | "lyrics" | "subtitles" | "whisper".
 /// `lang`: "orig" (videonun kendi dili) | "tr" | "en".
 pub fn create(app: &AppHandle, id: &str, mode: &str, lang: &str) -> Result<Transcript, String> {
     let state = app.state::<Transcriber>();
@@ -134,7 +135,17 @@ fn run(app: &AppHandle, id: &str, mode: &str, lang: &str) -> Result<Transcript, 
     };
 
     let mut found: Option<(String, String, Vec<Segment>)> = None;
-    if mode != "whisper" {
+    let lyrics_db = db.setting_json::<bool>(lrclib::ENABLED_KEY).unwrap_or(true);
+    if mode == "lyrics" || (mode == "auto" && lyrics_db) {
+        emit("lyrics", 0.0);
+        match lrclib::find(&d.title, &d.uploader, d.duration) {
+            Ok(Some(segs)) => found = Some(("lyrics".into(), lang.into(), segs)),
+            Ok(None) => {}
+            Err(e) if mode == "lyrics" => return Err(e),
+            Err(e) => crate::log!("{e}"),
+        }
+    }
+    if found.is_none() && (mode == "auto" || mode == "subtitles") {
         emit("subtitles", 0.0);
         let ctx: Context = db
             .conn()
@@ -151,13 +162,12 @@ fn run(app: &AppHandle, id: &str, mode: &str, lang: &str) -> Result<Transcript, 
             Err(e) => crate::log!("Altyazı alınamadı: {e}"),
         }
     }
-    if found.is_none() && mode != "subtitles" {
+    if found.is_none() && (mode == "auto" || mode == "whisper") {
         let model: String = db
             .setting_json(whisper::MODEL_KEY)
             .unwrap_or_else(|| "turbo".into());
-        let segs = whisper::transcribe(dir.root(), Path::new(&file), lang, &model, |stage, p| {
-            emit(stage, p)
-        })?;
+        let prompt = lrclib::clean_title(&d.title);
+        let segs = whisper::transcribe(dir.root(), Path::new(&file), lang, &prompt, &model, emit)?;
         found = Some((
             "whisper".into(),
             if lang == "orig" {
@@ -169,10 +179,10 @@ fn run(app: &AppHandle, id: &str, mode: &str, lang: &str) -> Result<Transcript, 
         ));
     }
     let Some((source, language, segments)) = found.filter(|f| !f.2.is_empty()) else {
-        return Err(if mode == "subtitles" {
-            "Bu videonun sitede altyazısı yok. Whisper ile dene.".into()
-        } else {
-            "Videoda yazıya dökülecek konuşma bulunamadı.".into()
+        return Err(match mode {
+            "subtitles" => "Bu videonun sitede altyazısı yok. Whisper ile dene.".into(),
+            "lyrics" => "Bu şarkının zamanlı sözleri veritabanında bulunamadı. Altyazı ya da Whisper ile dene.".into(),
+            _ => "Whisper bu kayıtta anlaşılır bir söz duyamadı; müzik çok baskın olabilir.".into(),
         });
     };
 

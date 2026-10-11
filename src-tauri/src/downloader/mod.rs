@@ -130,7 +130,8 @@ fn set_status(db: &Db, id: &str, status: &str, error: Option<&str>) {
 /// Uygulama kapanırken inmekte olanlar açılışta "duraklatıldı" olur.
 pub fn recover(db: &Db) {
     let _ = db.conn().execute(
-        "UPDATE downloads SET status = 'paused' WHERE status IN ('downloading', 'processing')",
+        "UPDATE downloads SET status = CASE status WHEN 'retrying' THEN 'queued' ELSE 'paused' END
+         WHERE status IN ('downloading', 'processing', 'retrying')",
         [],
     );
 }
@@ -153,7 +154,12 @@ pub struct Downloader {
     probes: Mutex<Vec<(Instant, String, Parsed)>>,
     /// İş kimliği → eklentiden gelen geçici çerez dosyası.
     cookies: Mutex<HashMap<String, PathBuf>>,
+    /// İş kimliği → kaçıncı kendiliğinden yeniden deneme.
+    attempts: Mutex<HashMap<String, u8>>,
 }
+
+/// Geçici hatalarda en fazla bu kadar kez kendiliğinden yeniden denenir.
+const AUTO_RETRIES: u8 = 3;
 
 fn emit_changed(app: &AppHandle) {
     let _ = app.emit("downloads-changed", ());
@@ -220,30 +226,44 @@ impl Downloader {
         if !tools::ytdlp_path(root).is_file() {
             return Err("TOOLS_MISSING".into());
         }
-        let mut cmd = tools::ytdlp(root);
-        cmd.args([
-            "-J",
-            if whole_list {
-                "--yes-playlist"
-            } else {
-                "--no-playlist"
-            },
-            "--flat-playlist",
-            "--no-warnings",
-        ])
-        .args(ctx.args())
-        .arg("--")
-        .arg(url)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .stdin(Stdio::null());
-        let child = cmd
-            .spawn()
-            .map_err(|e| format!("yt-dlp başlatılamadı: {e}"))?;
-        let out = wait_with_timeout(child, PROBE_TIMEOUT)?;
-        if !out.status.success() || out.stdout.is_empty() {
-            return Err(ytdlp::friendly_error(&String::from_utf8_lossy(&out.stderr)));
-        }
+        // Geçici engellerde (403, kopan bağlantı) iki kez daha dene.
+        let mut attempt = 0;
+        let out = loop {
+            attempt += 1;
+            let mut cmd = tools::ytdlp(root);
+            cmd.args([
+                "-J",
+                if whole_list {
+                    "--yes-playlist"
+                } else {
+                    "--no-playlist"
+                },
+                "--flat-playlist",
+                "--no-warnings",
+            ])
+            .args(ctx.args())
+            .arg("--")
+            .arg(url)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
+            let child = cmd
+                .spawn()
+                .map_err(|e| format!("yt-dlp başlatılamadı: {e}"))?;
+            let out = wait_with_timeout(child, PROBE_TIMEOUT)?;
+            if out.status.success() && !out.stdout.is_empty() {
+                break out;
+            }
+            let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+            if attempt >= 3 || !ytdlp::is_transient(&stderr) {
+                crate::log!(
+                    "Çözümlenemedi ({url}): {}",
+                    stderr.lines().rev().take(3).collect::<Vec<_>>().join(" | ")
+                );
+                return Err(ytdlp::friendly_error(&stderr));
+            }
+            std::thread::sleep(Duration::from_millis(1500 * attempt));
+        };
         let mut parsed = ytdlp::parse_any(&out.stdout, url)?;
         // Site videoyu tanımıyorsa (eklentinin yakaladığı doğrudan dosya) başlık sayfadan gelir.
         if let (Parsed::Video(p), Some(t)) = (&mut parsed, ctx.title.as_deref()) {
@@ -672,7 +692,6 @@ impl Downloader {
                 self.drop_cookies(id);
             }
             None => {
-                self.drop_cookies(id);
                 // Yazılan ad okunamadıysa dosyayı video kimliğiyle bul.
                 let file = file.filter(|f| Path::new(f).is_file()).or_else(|| {
                     find_finished(
@@ -693,6 +712,11 @@ impl Downloader {
                             thumbnail = ?4, error = NULL, finished_at = ?5 WHERE id = ?1",
                         params![id, f, size, thumb, now_ms()],
                     );
+                    self.drop_cookies(id);
+                    self.attempts
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(id);
                     crate::overlay::system_notification(
                         app,
                         "videos.notify",
@@ -708,12 +732,42 @@ impl Downloader {
                     crate::log!(
                         "İndirme başarısız ({}): {}",
                         d.url,
-                        stderr.lines().rev().take(3).collect::<Vec<_>>().join(" | ")
+                        stderr.lines().rev().take(4).collect::<Vec<_>>().join(" | ")
                     );
-                    let _ = db.conn().execute(
-                        "UPDATE downloads SET status = 'error', error = ?2, progress = ?3 WHERE id = ?1",
-                        params![id, msg, progress],
-                    );
+                    let attempt = {
+                        let mut a = self.attempts.lock().unwrap_or_else(|e| e.into_inner());
+                        let n = a.entry(id.to_string()).or_insert(0);
+                        *n += 1;
+                        *n
+                    };
+                    if !ok && attempt <= AUTO_RETRIES && ytdlp::is_transient(stderr) {
+                        // Biraz bekleyip kendiliğinden yeniden dene (5 sn, 10 sn, 20 sn).
+                        let _ = db.conn().execute(
+                            "UPDATE downloads SET status = 'retrying', error = ?2, progress = ?3 WHERE id = ?1",
+                            params![id, format!("Tekrar deneniyor ({attempt}/{AUTO_RETRIES}): {msg}"), progress],
+                        );
+                        let (app2, id2) = (app.clone(), id.to_string());
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_secs(5 << (attempt - 1)));
+                            let db = app2.state::<Db>();
+                            let _ = db.conn().execute(
+                                "UPDATE downloads SET status = 'queued' WHERE id = ?1 AND status = 'retrying'",
+                                [&id2],
+                            );
+                            emit_changed(&app2);
+                            app2.state::<Downloader>().pump(&app2);
+                        });
+                    } else {
+                        self.drop_cookies(id);
+                        self.attempts
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(id);
+                        let _ = db.conn().execute(
+                            "UPDATE downloads SET status = 'error', error = ?2, progress = ?3 WHERE id = ?1",
+                            params![id, msg, progress],
+                        );
+                    }
                 }
             }
         }
@@ -751,7 +805,7 @@ impl Downloader {
             // Sırada bekliyorsa sadece durumunu değiştir.
             let db = app.state::<Db>();
             let _ = db.conn().execute(
-                "UPDATE downloads SET status = 'paused' WHERE id = ?1 AND status = 'queued'",
+                "UPDATE downloads SET status = 'paused' WHERE id = ?1 AND status IN ('queued', 'retrying')",
                 [id],
             );
             emit_changed(app);
@@ -762,7 +816,7 @@ impl Downloader {
         let db = app.state::<Db>();
         let _ = db.conn().execute(
             "UPDATE downloads SET status = 'queued', error = NULL, created_at = ?2
-             WHERE id = ?1 AND status IN ('paused', 'error')",
+             WHERE id = ?1 AND status IN ('paused', 'error', 'retrying')",
             params![id, now_ms()],
         );
         emit_changed(app);

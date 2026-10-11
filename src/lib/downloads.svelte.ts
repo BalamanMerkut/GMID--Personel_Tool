@@ -6,7 +6,7 @@ import type { Download, Live } from "./types";
 
 export const downloads = $state({ list: [] as Download[], live: {} as Record<string, Live>, loaded: false });
 
-const ACTIVE = new Set(["queued", "downloading", "processing"]);
+const ACTIVE = new Set(["queued", "retrying", "downloading", "processing"]);
 
 export function isActive(d: Download): boolean {
   return ACTIVE.has(d.status);

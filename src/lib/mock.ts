@@ -432,7 +432,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "transcript_get": {
       const d = downloadsList.find((x) => x.id === a.id);
       if (d && d.title === "Gece Sürüşü" && !transcripts[d.id])
-        transcripts[d.id] = { downloadId: d.id, source: "whisper", language: "tr", createdAt: now(), segments: demoLyrics.map((t, i) => lyric(1 + i * 3.2, t)) };
+        transcripts[d.id] = { downloadId: d.id, source: "lyrics", language: "tr", createdAt: now(), segments: demoLyrics.map((t, i) => lyric(1 + i * 3.2, t)) };
       return transcripts[a.id as string] ?? null;
     }
     case "transcript_create": {
@@ -440,7 +440,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         await new Promise((r) => setTimeout(r, 300));
         emit("transcript-progress", { id: a.id, stage: "whisper", progress: p });
       }
-      transcripts[a.id as string] = { downloadId: a.id as string, source: a.mode === "whisper" ? "whisper" : "subtitles", language: "tr", createdAt: now(),
+      transcripts[a.id as string] = { downloadId: a.id as string, source: a.mode === "whisper" ? "whisper" : a.mode === "lyrics" ? "lyrics" : "subtitles", language: "tr", createdAt: now(),
         segments: ["Merhaba, malikâneye hoş geldin.", "Bugün yeni bir oyuna bakıyoruz.", "Önce ayarları açalım.", "Grafikler gerçekten çok güzel."].map((t, i) => lyric(0.5 + i * 3.4, t)) };
       return transcripts[a.id as string];
     }

@@ -95,12 +95,7 @@ chrome.webRequest.onHeadersReceived.addListener(
     const size = Number(header("content-range").split("/")[1] || header("content-length")) || 0;
     // Reklam ve önizleme gibi çok küçük dosyalar sayılmaz.
     if (kind === "file" && size && size < 400 * 1024) return;
-    const list = media.get(d.tabId) || [];
-    if (!list.some((m) => m.url === d.url)) {
-      list.push({ url: d.url, kind, size, frameUrl: d.initiator || "", time: Date.now() });
-      media.set(d.tabId, list.slice(-30));
-      updateBadge(d.tabId);
-    }
+    addMedia(d.tabId, { url: d.url, kind, size, frameId: d.frameId, time: Date.now() });
   },
   { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "other"] },
   ["responseHeaders"],
@@ -121,10 +116,35 @@ function updateBadge(tabId) {
   chrome.action.setBadgeText({ text: n ? String(n) : "", tabId }).catch(() => {});
 }
 
+/** Kaynağı isteyen çerçevenin (iframe) adresi: gömülü oynatıcılar Referer olarak bunu bekler. */
+async function frameUrl(tabId, frameId) {
+  if (!frameId) return null;
+  try {
+    const f = await chrome.webNavigation.getFrame({ tabId, frameId });
+    return f && /^https?:/.test(f.url) ? f.url : null;
+  } catch {
+    return null;
+  }
+}
+
 /** En umut verici kaynak önce: ana yayın listesi (HLS/DASH), sonra en büyük dosya. */
 function candidates(tabId) {
   const rank = { hls: 3, dash: 2, file: 1 };
-  return [...(media.get(tabId) || [])].sort((a, b) => rank[b.kind] - rank[a.kind] || b.size - a.size || b.time - a.time);
+  return [...(media.get(tabId) || [])].sort(
+    (a, b) => rank[b.kind] - rank[a.kind] || !!b.master - !!a.master || b.size - a.size || b.time - a.time,
+  );
+}
+
+function addMedia(tabId, item) {
+  const list = media.get(tabId) || [];
+  const old = list.find((m) => m.url === item.url);
+  if (old) {
+    if (item.master) old.master = true;
+    return;
+  }
+  list.push(item);
+  media.set(tabId, list.slice(-30));
+  updateBadge(tabId);
 }
 
 // ---------------------------------------------------------------- çözümleme ve indirme
@@ -162,37 +182,54 @@ async function cookiesFor(url, fromMedia) {
  * Önce sayfa adresini dener; tanınmazsa yakalanan kaynakları sırayla dener.
  * Dönen: { kind, …probe, url, context, from: "page"|"media", mediaCount }
  */
-async function smartProbe({ tabId, pageUrl, frameUrl, title, wholeList, src }) {
+async function smartProbe({ tabId, pageUrl, frameUrl: senderFrame, title, wholeList, src, hint }) {
   const tries = [];
+  const fail = (e) => {
+    if (["APP_CLOSED", "NOT_PAIRED"].includes(e.message) || e.message.includes("araçları kur")) throw e;
+    tries.push(e.message);
+  };
+  // Akıştaki videonun kendi gönderisi (X, Instagram, YouTube ana sayfa): en güvenilir yol.
+  if (hint && /^https?:/.test(hint)) {
+    try {
+      const p = await api("/v1/probe", { url: hint, wholeList: !!wholeList });
+      return { ...p, url: p.url || hint, context: null, from: "page", mediaCount: (media.get(tabId) || []).length };
+    } catch (e) {
+      fail(e);
+    }
+  }
   // Üstünde durulan videonun kendi dosyası görünüyorsa (blob değilse) önce o.
   if (src && /^https?:/.test(src) && !wholeList) {
-    const context = { referer: frameUrl || pageUrl, userAgent: navigator.userAgent, title };
+    const context = { referer: senderFrame || pageUrl, userAgent: navigator.userAgent, title };
     try {
       const p = await api("/v1/probe", { url: src, context });
       return { ...p, url: src, context, from: "media", mediaCount: (media.get(tabId) || []).length, pageLink: true };
     } catch (e) {
-      if (["APP_CLOSED", "NOT_PAIRED"].includes(e.message)) throw e;
-      tries.push(e.message);
+      fail(e);
     }
   }
-  const embed = frameUrl && frameUrl !== pageUrl && /^https?:/.test(frameUrl) ? frameUrl : null;
+  const embed = senderFrame && senderFrame !== pageUrl && /^https?:/.test(senderFrame) ? senderFrame : null;
   for (const u of [pageUrl, embed]) {
     if (!u || !/^https?:/.test(u)) continue;
     try {
       const p = await api("/v1/probe", { url: u, wholeList: !!wholeList });
       return { ...p, url: p.url || u, context: null, from: "page", mediaCount: (media.get(tabId) || []).length };
     } catch (e) {
-      if (["APP_CLOSED", "NOT_PAIRED"].includes(e.message) || e.message.includes("araçları kur")) throw e;
-      tries.push(e.message);
+      fail(e);
     }
   }
-  const context = { referer: pageUrl, userAgent: navigator.userAgent, title };
+  // Yakalanan kaynaklar: önce kaynağı isteyen iframe'in adresiyle (gömülü oynatıcılar bunu bekler),
+  // sonra sayfanın adresiyle.
   for (const m of candidates(tabId).slice(0, 3)) {
-    try {
-      const p = await api("/v1/probe", { url: m.url, context });
-      return { ...p, url: m.url, context, from: "media", mediaCount: (media.get(tabId) || []).length };
-    } catch (e) {
-      tries.push(e.message);
+    const frame = await frameUrl(tabId, m.frameId);
+    const referers = [...new Set([frame, pageUrl].filter(Boolean))];
+    for (const referer of referers) {
+      const context = { referer, userAgent: navigator.userAgent, title };
+      try {
+        const p = await api("/v1/probe", { url: m.url, context });
+        return { ...p, url: m.url, context, from: "media", mediaCount: (media.get(tabId) || []).length };
+      } catch (e) {
+        tries.push(e.message);
+      }
     }
   }
   throw new Error(tries.length && !candidates(tabId).length
@@ -232,16 +269,34 @@ async function handle(msg, sender) {
       return { ok: true };
     }
     case "smart-probe":
-      return smartProbe({ ...(await tabInfo(msg, sender)), wholeList: msg.wholeList, src: msg.src });
+      return smartProbe({ ...(await tabInfo(msg, sender)), wholeList: msg.wholeList, src: msg.src, hint: msg.hint });
+    case "found-media": {
+      // sniff.js: adresi/türü gizlenmiş yayın listesi (içeriği "#EXTM3U" ile başlıyor).
+      if (!sender.tab || !/^https?:/.test(msg.url || "")) return null;
+      const host = hostOf(msg.url);
+      if (SKIP_MEDIA_HOSTS.some((h) => host === h || host.endsWith("." + h))) return null;
+      addMedia(sender.tab.id, { url: msg.url, kind: "hls", size: 0, master: !!msg.master, frameId: sender.frameId, time: Date.now() });
+      return null;
+    }
     case "media": {
       const { tabId } = await tabInfo(msg, sender);
       return candidates(tabId);
     }
     case "probe-media": {
-      const { pageUrl, title } = await tabInfo(msg, sender);
-      const context = { referer: pageUrl, userAgent: navigator.userAgent, title };
-      const p = await api("/v1/probe", { url: msg.url, context });
-      return { ...p, url: msg.url, context, from: "media" };
+      const { tabId, pageUrl, title } = await tabInfo(msg, sender);
+      const m = (media.get(tabId) || []).find((x) => x.url === msg.url);
+      const frame = m ? await frameUrl(tabId, m.frameId) : null;
+      let last;
+      for (const referer of [...new Set([frame, pageUrl].filter(Boolean))]) {
+        const context = { referer, userAgent: navigator.userAgent, title };
+        try {
+          const p = await api("/v1/probe", { url: msg.url, context });
+          return { ...p, url: msg.url, context, from: "media" };
+        } catch (e) {
+          last = e;
+        }
+      }
+      throw last || new Error("Video bulunamadı.");
     }
     case "download":
       return download(msg);
@@ -301,7 +356,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       // Videonun kendi dosyası görünüyorsa (blob değilse) doğrudan o.
       await download({ url: direct, option, context: { referer: info.pageUrl, userAgent: navigator.userAgent, title: tab?.title } });
     } else {
-      const p = await smartProbe({ tabId, pageUrl: info.pageUrl, frameUrl: info.frameUrl, title: tab?.title });
+      // Akış sayfalarında sağ tıklanan videonun gönderisi (içerik betiğinden).
+      const hint = await chrome.tabs.sendMessage(tabId, { type: "hint" }, { frameId: info.frameId ?? 0 }).catch(() => null);
+      const p = await smartProbe({ tabId, pageUrl: info.pageUrl, frameUrl: info.frameUrl, title: tab?.title, hint });
       if (p.kind === "playlist") await api("/v1/playlist", { url: p.url, option, ids: null });
       else await download({ url: p.url, option, context: p.context });
     }

@@ -235,7 +235,7 @@ pub fn parse_whisper(json: &str) -> Result<Vec<Segment>, String> {
             }
         })
         .collect();
-    Ok(drop_noise(segs))
+    Ok(drop_hallucinations(drop_noise(segs)))
 }
 
 /// "[Müzik]", "♪", "(alkış)" gibi sözsüz satırlar.
@@ -249,6 +249,85 @@ fn drop_noise(segs: Vec<Segment>) -> Vec<Segment> {
                 || (t.starts_with('[') && t.ends_with(']'))
                 || (t.starts_with('(') && t.ends_with(')')))
         })
+        .collect()
+}
+
+/// Karşılaştırma için: küçük harf, noktalama yok, tek boşluk.
+fn normalize(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Whisper'ın sessiz ya da yalnızca müzik olan yerlerde uydurduğu, eğitim verisindeki
+/// altyazı imzalarından kalma satırlar. İçinde geçmesi yeter.
+const HALLUCINATION_MARKS: &[&str] = &[
+    "altyazı m k",
+    "altyazi m k",
+    "alt yazı m k",
+    "subtitles by",
+    "subtitled by",
+    "transcription by",
+    "transcript by",
+    "captions by",
+    "amara org",
+    "untertitel",
+    "sottotitoli",
+    "sous titres",
+    "sous titrage",
+];
+
+/// Bunlar ancak satırın tamamıysa atılır (gerçek konuşmanın içinde geçebilirler).
+const HALLUCINATION_LINES: &[&str] = &[
+    "altyazı",
+    "izlediğiniz için teşekkürler",
+    "izlediğiniz için teşekkür ederim",
+    "izlediğiniz için teşekkür ederiz",
+    "abone olmayı unutmayın",
+    "abone olun",
+    "kanalıma abone olmayı unutmayın",
+    "thanks for watching",
+    "thank you for watching",
+    "thank you so much for watching",
+    "please subscribe",
+    "like and subscribe",
+];
+
+/// Şarkıda gerçekten de geçebilecek kısa satırlar: yalnızca uzun bir sessizliğe yayılmışlarsa atılır.
+const HALLUCINATION_SHORT: &[&str] = &["you", "thank you", "teşekkürler", "bye"];
+
+/// Whisper uydurmalarını ayıklar: bilinen imzalar ve uzun bir süreye yayılmış, birkaç kez aynen
+/// tekrarlanan kısa satırlar (müzik arasında her 30 saniyede bir çıkan "Altyazı M.K." gibi).
+fn drop_hallucinations(segs: Vec<Segment>) -> Vec<Segment> {
+    let norm: Vec<String> = segs.iter().map(|s| normalize(&s.text)).collect();
+    let suspicious = |i: usize| {
+        let s = &segs[i];
+        s.end - s.start >= 10.0 && norm[i].split(' ').count() <= 4
+    };
+    let mut repeats: std::collections::HashMap<&str, usize> = Default::default();
+    for (i, n) in norm.iter().enumerate() {
+        if suspicious(i) {
+            *repeats.entry(n.as_str()).or_default() += 1;
+        }
+    }
+    let drop: Vec<bool> = norm
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            n.is_empty()
+                || HALLUCINATION_MARKS.iter().any(|m| n.contains(m))
+                || HALLUCINATION_LINES.contains(&n.as_str())
+                || (suspicious(i) && HALLUCINATION_SHORT.contains(&n.as_str()))
+                || (suspicious(i) && repeats.get(n.as_str()).copied().unwrap_or(0) >= 3)
+        })
+        .collect();
+    segs.into_iter()
+        .zip(drop)
+        .filter_map(|(s, d)| (!d).then_some(s))
         .collect()
 }
 
@@ -358,6 +437,44 @@ mod tests {
                     end: 2.4,
                     text: "dünya".into()
                 },
+            ]
+        );
+    }
+
+    #[test]
+    fn whisper_hallucinations() {
+        let seg = |start: f64, end: f64, text: &str| Segment {
+            start,
+            end,
+            text: text.into(),
+            words: vec![],
+        };
+        let segs = vec![
+            seg(0.0, 30.0, "Altyazı M.K."),
+            seg(30.0, 33.0, "I'm the king of the world"),
+            seg(33.0, 63.0, "Altyazı: M.K."),
+            seg(63.0, 64.5, "Thank you"),
+            seg(64.5, 90.0, "Thank you."),
+            seg(90.0, 92.0, "Thanks for watching!"),
+            seg(92.0, 94.0, "Na na na"),
+            seg(94.0, 96.0, "Na na na"),
+            seg(96.0, 98.0, "Na na na"),
+            seg(100.0, 120.0, "Ooh"),
+            seg(130.0, 150.0, "Ooh"),
+            seg(160.0, 180.0, "Ooh"),
+        ];
+        let kept: Vec<String> = drop_hallucinations(segs)
+            .into_iter()
+            .map(|s| s.text)
+            .collect();
+        assert_eq!(
+            kept,
+            [
+                "I'm the king of the world",
+                "Thank you",
+                "Na na na",
+                "Na na na",
+                "Na na na"
             ]
         );
     }

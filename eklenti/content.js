@@ -63,6 +63,33 @@
   const size = (b) => (!b ? "" : b < 1024 ** 3 ? `~${Math.round(b / 1024 / 1024)} MB` : `~${(b / 1024 ** 3).toFixed(1)} GB`);
   const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
 
+  // ---- videonun kendi bağlantısı ----
+  // Akış sayfalarında (X ana sayfa, Instagram, YouTube ana sayfa) sayfanın adresi videonun değil akışın
+  // adresidir; videonun gönderisinin bağlantısı bulunur.
+  function linkHint(v) {
+    if (!v) return null;
+    const host = location.hostname;
+    const abs = (a) => (a && a.href && /^https?:/.test(a.href) ? a.href : null);
+    if (/(^|\.)(x|twitter)\.com$/.test(host)) {
+      const art = v.closest("article");
+      return abs(art?.querySelector('a[href*="/status/"] time')?.closest("a")) || abs(art?.querySelector('a[href*="/status/"]'));
+    }
+    if (/(^|\.)instagram\.com$/.test(host)) {
+      const art = v.closest("article") || v.closest("div[role=dialog]");
+      return abs(art?.querySelector('a[href*="/reel/"], a[href*="/p/"]'));
+    }
+    if (/(^|\.)youtube\.com$/.test(host) && !/\/(watch|shorts)/.test(location.pathname)) {
+      const item = v.closest("ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-reel-item-renderer");
+      return abs(item?.querySelector('a#thumbnail, a[href*="/watch"], a[href*="/shorts/"]'))
+        || abs(document.querySelector('ytd-video-preview a[href*="/watch"], #video-preview a[href*="/watch"]'));
+    }
+    if (/(^|\.)facebook\.com$/.test(host)) {
+      const art = v.closest('[role="article"]');
+      return abs(art?.querySelector('a[href*="/videos/"], a[href*="/reel/"], a[href*="/watch"]'));
+    }
+    return null;
+  }
+
   // ---- videoları izle ----
   let videos = [];
   function scan() {
@@ -111,7 +138,15 @@
   window.addEventListener("scroll", () => hovered && pill.style.display !== "none" && placePill(hovered), { passive: true });
 
   let lastClick = { x: 0, y: 0 };
-  document.addEventListener("contextmenu", (e) => (lastClick = { x: e.clientX, y: e.clientY }), true);
+  let lastTarget = null;
+  document.addEventListener("contextmenu", (e) => {
+    lastClick = { x: e.clientX, y: e.clientY };
+    // Sağ tıklanan yerin altındaki video (oynatıcı katmanları üstte olsa da).
+    lastTarget = videos.find((v) => {
+      const r = v.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    }) || null;
+  }, true);
 
   function placePanel(x, y) {
     if (!host.isConnected) (document.body || document.documentElement).append(host);
@@ -167,10 +202,10 @@
     }
   }
 
-  async function load(wholeList = false, src = null) {
+  async function load(wholeList = false, src = null, hint = null) {
     body.replaceChildren(el("div", "m", "Video aranıyor…"));
     try {
-      render(await send({ type: "smart-probe", wholeList, src }));
+      render(await send({ type: "smart-probe", wholeList, src, hint }));
     } catch (e) {
       body.replaceChildren(el("div", "e", explain(e)));
     }
@@ -180,13 +215,14 @@
     const r = pill.getBoundingClientRect();
     placePanel(r.right - 310, r.bottom + 6);
     const src = hovered?.currentSrc || hovered?.src || "";
-    void load(false, /^https?:/.test(src) ? src : null);
+    void load(false, /^https?:/.test(src) ? src : null, linkHint(hovered));
   });
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (msg.type === "open-panel") {
       placePanel(lastClick.x, lastClick.y);
-      void load();
+      void load(false, null, linkHint(lastTarget));
     }
+    if (msg.type === "hint") reply(linkHint(lastTarget));
   });
 })();

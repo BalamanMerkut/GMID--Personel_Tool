@@ -38,13 +38,20 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
   tek tek seç, kalite (1080p/720p/480p/MP3) seç, toplu indir. Dosyalar liste adıyla ayrı klasöre iner;
   Videolarım'da listeye göre süzgeç.
 - **Eklenti her sitede:** yt-dlp'nin tanıdığı 1800+ site sayfa adresinden; tanınmayan sitelerde oynatıcının
-  yüklediği video (mp4, m3u8, mpd) yakalanır ve sayfa bilgisiyle indirilir. Videonun üstüne gelince sağ üstte
+  yüklediği video (mp4, m3u8, mpd) yakalanır ve sayfa bilgisiyle indirilir; adı/türü gizlenmiş yayın listeleri de
+  (içeriğinden) tanınır. Videonun üstüne gelince sağ üstte
   **GMID ile indir** düğmesi; videoya sağ tık → **GMID Tool ile indir** → kalite.
-- **Uygulama içi oynatıcı:** Videolarım'da çift tıkla. Video ya da müzik (kapakla) solda, **yazılar sağda zamanla
-  akar**; o an söylenen satır altınla, kelime zamanları varsa kelime kelime işaretlenir. Satıra tıkla → oraya git.
-  Büyük yazı (şarkı sözü) modu, bitince sıradakine geç.
-- **Yazıya dök:** önce sitenin kendi altyazısı (YouTube'da kelime zamanlı), yoksa **Whisper** tamamen bu bilgisayarda
-  (model bir kez iner, ~190–550 MB). Yazılar dosyanın yanına `.srt` (video) / `.lrc` (müzik) olarak da kaydedilir.
+- **Uygulama içi oynatıcı:** Videolarım'da çift tıkla. **Sahne** görünümü (video/kapak solda, yazılar sağda) ya da
+  **Liste** görünümü (parçalar solda, sözler sağda). Altta çalma çubuğu: oynat/duraklat, önceki/sonraki, karıştır,
+  tekrar (liste/parça), ilerleme, hız (0.5×–2×), ses kaydırıcısı, tam ekran; kapağa ya da videoya tıklayınca durur.
+  O an söylenen satır altınla, kelime zamanları varsa kelime kelime işaretlenir; satıra tıkla → oraya git.
+  Kısayollar: Boşluk, ←/→ (5 sn), ↑/↓ (ses), M (sessiz), F (tam ekran), N/P (sonraki/önceki); Windows medya tuşları.
+- **Yazıya dök:** önce **şarkı sözü veritabanı** (LRCLIB; satır satır zamanlı, şarkılarda en doğrusu), sonra sitenin
+  kendi altyazısı (YouTube'da kelime zamanlı), yoksa **Whisper** tamamen bu bilgisayarda (model bir kez iner,
+  ~190–550 MB; müzik aralarında uydurduğu satırlar ayıklanır). Yazılar dosyanın yanına `.srt` (video) / `.lrc`
+  (müzik) olarak da kaydedilir.
+- **Kendiliğinden yeniden deneme:** sitenin anlık reddi ya da kopan bağlantıda indirme 3 kez kendi kendine yeniden
+  denenir ("Tekrar deneniyor").
 
 ### Kontrol Odası (ayarlar merkezi)
 

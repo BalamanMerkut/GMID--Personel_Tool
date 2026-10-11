@@ -13,7 +13,9 @@ Kullanım:
  - Herhangi bir sitede videonun üstüne gel: sağ üstte "GMID ile indir" düğmesi çıkar.
  - Videoya sağ tıkla → "GMID Tool ile indir" → kaliteyi seç.
  - Eklenti simgesi: sayfadaki video(lar), kaliteler ve inen işlerin ilerlemesi.
- - Eklenti, sayfa tanınmasa bile oynatıcının yüklediği videoyu (mp4, m3u8, mpd) yakalar.
+ - Eklenti, sayfa tanınmasa bile oynatıcının yüklediği videoyu (mp4, m3u8, mpd) yakalar;
+   adı gizlenmiş yayın listelerini de içeriğinden tanır. Bulamazsa videoyu birkaç saniye
+   oynatıp tekrar dene.
 
 GMID Tool güncellenince bu klasör de kendiliğinden güncellenir; chrome://extensions
 sayfasında GMID'nin yenile (⟳) düğmesine bir kez basman yeterli.

@@ -14,6 +14,8 @@ const FILES: &[(&str, &[u8])] = files![
     "manifest.json",
     "background.js",
     "content.js",
+    "sniff.js",
+    "relay.js",
     "popup.html",
     "popup.css",
     "popup.js",

@@ -551,6 +551,15 @@ pub fn download_args(
         // Parçalı yayınlarda (HLS/DASH) 4 parça birden: IDM'deki gibi daha hızlı.
         "--concurrent-fragments".into(),
         "4".into(),
+        // Kopan bağlantılarda ve geçici engellerde yt-dlp kendisi de birkaç kez dener (artan bekleme).
+        "--retries".into(),
+        "10".into(),
+        "--fragment-retries".into(),
+        "10".into(),
+        "--retry-sleep".into(),
+        "exp=1:15".into(),
+        "--retry-sleep".into(),
+        "fragment:exp=1:15".into(),
         "-f".into(),
         option.format.clone(),
         "-o".into(),
@@ -672,11 +681,27 @@ pub fn friendly_error(stderr: &str) -> String {
         "Site çok fazla istek aldığını söylüyor. Birkaç dakika sonra tekrar dene."
     } else if l.contains("no space left") {
         "Diskte yer kalmadı."
-    } else if l.contains("unable to download")
-        || l.contains("timed out")
-        || l.contains("getaddrinfo")
+    } else if l.contains("403") || l.contains("forbidden") {
+        "Site indirmeyi geçici olarak reddetti (403). YouTube bunu sık yapar; tekrar denenince iner."
+    } else if l.contains("http error 5")
+        || l.contains("bad gateway")
+        || l.contains("service unavailable")
     {
-        "İnternet bağlantısında sorun var."
+        "Site geçici bir hata verdi. Tekrar denenince iner."
+    } else if l.contains("getaddrinfo")
+        || l.contains("name or service not known")
+        || l.contains("no address")
+    {
+        "İnternet bağlantısında sorun var (site adresi bulunamadı)."
+    } else if l.contains("timed out")
+        || l.contains("connection reset")
+        || l.contains("remote end closed")
+    {
+        "Bağlantı yarıda kesildi. Tekrar denenince iner."
+    } else if l.contains("unable to download webpage") {
+        "Siteye ulaşılamadı ya da site erişimi reddetti."
+    } else if l.contains("unable to download") {
+        "Video verisi indirilemedi. Tekrar denenince iner."
     } else if last.is_empty() {
         "Bilinmeyen bir hata oluştu."
     } else {
@@ -688,6 +713,30 @@ pub fn friendly_error(stderr: &str) -> String {
             .collect();
     };
     msg.to_string()
+}
+
+/// Tekrar denenince düzelme ihtimali olan hata mı (geçici engel, kopan bağlantı)?
+pub fn is_transient(stderr: &str) -> bool {
+    let l = stderr.to_ascii_lowercase();
+    [
+        "403",
+        "forbidden",
+        "429",
+        "too many requests",
+        "http error 5",
+        "timed out",
+        "connection reset",
+        "remote end closed",
+        "unable to download",
+        "incomplete",
+        "fragment",
+        "temporarily",
+    ]
+    .iter()
+    .any(|k| l.contains(k))
+        && !l.contains("private video")
+        && !l.contains("video unavailable")
+        && !l.contains("unsupported url")
 }
 
 #[cfg(test)]
@@ -849,6 +898,19 @@ mod tests {
             Line::File("C:\\Videolar\\a [x].mp4".into())
         );
         assert_eq!(parse_line("[youtube] abc: Downloading"), Line::Other);
+    }
+
+    #[test]
+    fn transient_errors() {
+        assert!(is_transient(
+            "ERROR: unable to download video data: HTTP Error 403: Forbidden"
+        ));
+        assert!(
+            friendly_error("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+                .contains("403")
+        );
+        assert!(!is_transient("ERROR: [youtube] x: Private video"));
+        assert!(!is_transient("ERROR: Unsupported URL: https://a"));
     }
 
     #[test]
