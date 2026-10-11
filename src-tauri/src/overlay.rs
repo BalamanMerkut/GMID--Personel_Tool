@@ -127,13 +127,13 @@ pub fn raise_alerts(app: &AppHandle) {
     play_notification_sound(app);
 }
 
-/// Windows'un kendi bildirimi (bildirim merkezinde de kalır). Uyarı kartına ek olarak gönderilir;
-/// ayarlardan kapatılabilir (`reminders.toast`).
-pub fn system_notification(app: &AppHandle, title: &str, body: &str) {
+/// Windows'un kendi bildirimi (bildirim merkezinde de kalır). `setting` ayarı `false` ise gönderilmez
+/// (hatırlatıcılar: `reminders.toast`, indirmeler: `videos.notify`).
+pub fn system_notification(app: &AppHandle, setting: &str, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     let enabled = app
         .state::<crate::db::Db>()
-        .setting_json::<bool>("reminders.toast")
+        .setting_json::<bool>(setting)
         .unwrap_or(true);
     if !enabled {
         return;

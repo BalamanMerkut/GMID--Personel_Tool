@@ -1,0 +1,36 @@
+:root { color-scheme: dark; --gold: #e3c270; --glow: #f0d878; --teal: #35a0a2; --neon: #60d8d8; --line: #363a40; --muted: #a4a8ac; --bad: #e06a6a; --good: #5cc08a; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 340px; background: #121417; color: #ece7da; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
+header { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+header img { width: 28px; height: 28px; }
+header b { display: block; color: var(--gold); letter-spacing: 0.04em; }
+header span { font-size: 11px; color: var(--muted); }
+main { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-height: 80px; }
+footer { padding: 8px 14px 12px; border-top: 1px solid var(--line); }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.err { color: var(--bad); }
+.title { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #22252a; }
+.opts { display: flex; flex-direction: column; gap: 6px; }
+.opt { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: #22252a; border: 1px solid var(--line); color: inherit; border-radius: 9px; padding: 8px 10px; cursor: pointer; font: inherit; }
+.opt:hover { border-color: var(--gold); }
+.opt.rec { border-color: rgba(227, 194, 112, 0.6); }
+.opt b { font-weight: 600; }
+.opt small { color: var(--muted); }
+.tag { font-size: 10px; font-weight: 700; color: var(--gold); border: 1px solid rgba(227, 194, 112, 0.5); border-radius: 99px; padding: 0 6px; margin-left: 6px; }
+input { width: 100%; background: #22252a; border: 1px solid var(--line); color: inherit; border-radius: 9px; padding: 9px 10px;
+  font: 600 18px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.3em; text-align: center; }
+.btn { background: var(--gold); color: #1b1608; border: 0; border-radius: 9px; padding: 9px 12px; font: inherit; font-weight: 700; cursor: pointer; }
+.btn:hover { background: var(--glow); }
+.btn:disabled { opacity: 0.5; }
+.link { background: none; border: 0; color: var(--teal); font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
+.link:hover { color: var(--neon); }
+.job { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
+.job .row { display: flex; justify-content: space-between; gap: 8px; }
+.job .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 5px; border-radius: 99px; background: #2f3235; overflow: hidden; }
+.bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--neon)); }
+.done { color: var(--good); }
+ol { margin: 0; padding-left: 18px; color: var(--muted); }

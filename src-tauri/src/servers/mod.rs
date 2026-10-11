@@ -262,12 +262,7 @@ pub fn list_url(db: &Db) -> String {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(10)))
-        .http_status_as_error(false)
-        .user_agent(concat!("GMID-Tool/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .into()
+    crate::net::agent(Duration::from_secs(10), Duration::from_secs(10))
 }
 
 /// Topluluk listesini indirir ve veritabanına işler. `force` değilse kısa sürede tekrar indirmez.

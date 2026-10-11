@@ -58,6 +58,31 @@ const MIGRATIONS: &[&str] = &[
         created_at    INTEGER NOT NULL,
         updated_at    INTEGER NOT NULL
     );",
+    // 5 — video indirmeleri (Videolarım)
+    "CREATE TABLE downloads (
+        id            TEXT PRIMARY KEY,
+        url           TEXT NOT NULL,
+        video_id      TEXT NOT NULL DEFAULT '',
+        title         TEXT NOT NULL DEFAULT '',
+        uploader      TEXT NOT NULL DEFAULT '',
+        site          TEXT NOT NULL DEFAULT '',
+        thumbnail     TEXT,
+        duration      REAL,
+        quality       TEXT NOT NULL,
+        -- yt-dlp biçim seçimi ve parça sayısı (yeniden başlatınca tekrar çözümlemeye gerek kalmasın)
+        option_format TEXT NOT NULL,
+        parts         INTEGER NOT NULL DEFAULT 1,
+        audio_only    INTEGER NOT NULL DEFAULT 0,
+        status        TEXT NOT NULL,
+        progress      REAL NOT NULL DEFAULT 0,
+        size          INTEGER,
+        file_path     TEXT,
+        error         TEXT,
+        source        TEXT NOT NULL DEFAULT 'app',
+        created_at    INTEGER NOT NULL,
+        finished_at   INTEGER
+    );
+    CREATE INDEX downloads_status ON downloads (status, created_at);",
 ];
 
 pub struct Db(Mutex<Connection>);

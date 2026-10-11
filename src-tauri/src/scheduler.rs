@@ -53,6 +53,7 @@ fn run(app: AppHandle) {
             for r in &due {
                 overlay::system_notification(
                     &app,
+                    "reminders.toast",
                     &format!("⏰ {}", r.title),
                     if r.note.is_empty() {
                         "Hatırlatıcının zamanı geldi"
@@ -64,6 +65,7 @@ fn run(app: AppHandle) {
             for t in &finished {
                 overlay::system_notification(
                     &app,
+                    "reminders.toast",
                     &format!("⏱ Süre doldu: {}", t.label),
                     "Geri sayım bitti",
                 );

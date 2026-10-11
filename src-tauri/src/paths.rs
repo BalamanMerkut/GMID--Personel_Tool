@@ -13,6 +13,7 @@ const SUBFOLDERS: &[&str] = &[
     "Yedekler",
     "Araclar",
     "Sunucular",
+    "Eklenti",
 ];
 
 #[derive(Clone)]

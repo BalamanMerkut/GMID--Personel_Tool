@@ -3,6 +3,7 @@
 pub mod servers;
 pub mod sound;
 pub mod tools;
+pub mod videos;
 
 use crate::{backup, db::Db, paths::DataDir, Launch};
 use serde::Serialize;

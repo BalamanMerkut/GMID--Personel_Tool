@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, GameInfo, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Countdown, Device, Download, GameInfo, Live, Probe, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
@@ -106,6 +106,47 @@ const statuses: Record<string, ServerStatus> = {
   "l-1": { id: "l-1", state: "online", error: null, checkedAt: now(), stale: false, info: {
     name: "Kuzenler", map: "", mode: "valheim", version: "0.219.14", players: 2, maxPlayers: 10, bots: 0, password: true,
     playerList: [], favicon: null, pingMs: 63 } },
+};
+
+// ---- Video İndirici ----
+const thumb = (a: string, b: string, t: string) =>
+  "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><text x="20" y="160" font-family="Segoe UI,sans-serif" font-size="22" font-weight="700" fill="rgba(255,255,255,.85)">${t}</text></svg>`);
+const toolsReady = !new URLSearchParams(location.search).has("tools");
+const dl = (o: Partial<Download>): Download => ({
+  id: id(), url: "https://www.youtube.com/watch?v=x", videoId: "x", title: "", uploader: "", site: "Youtube", thumbnail: null,
+  duration: 300, quality: "1080p", audioOnly: false, status: "done", progress: 1, size: 120_000_000, filePath: "C:\\Videolar\\a.mp4",
+  error: null, source: "app", createdAt: now() - 3_600_000, finishedAt: now() - 3_000_000, ...o,
+});
+const downloadsList: Download[] = [
+  dl({ title: "Hades II — Tüm silahlar ve en iyi build'ler (Rehber)", uploader: "Supergiant Rehber", status: "downloading", progress: 0.47, size: 412_000_000, finishedAt: null, thumbnail: thumb("#7848a8", "#121417", "HADES II") }),
+  dl({ title: "Elden Ring Nightreign ilk bakış", uploader: "Oyun Günlüğü", status: "queued", progress: 0, quality: "720p", size: 180_000_000, finishedAt: null, thumbnail: thumb("#8a7646", "#121417", "NIGHTREIGN") }),
+  dl({ title: "Bu clip efsane 😂", uploader: "@merkut", site: "Twitter", status: "error", progress: 0.1, quality: "720p", error: "Bu site giriş istiyor. Tarayıcı eklentisinden indirirsen giriş bilgin kullanılır.", finishedAt: null, thumbnail: thumb("#0b203e", "#35a0a2", "X") }),
+  dl({ title: "CoD2 Toujane 1v5 clutch", uploader: "GMID Klipler", duration: 74, size: 48_200_000, thumbnail: thumb("#c9a35a", "#2f3235", "CoD2"), finishedAt: now() - 600_000 }),
+  dl({ title: "Lofi oyun müzikleri · 1 saat", uploader: "Chill Malikâne", quality: "MP3", audioOnly: true, duration: 3600, size: 86_000_000, thumbnail: thumb("#35a0a2", "#121417", "LOFI"), finishedAt: now() - 86_400_000 }),
+  dl({ title: "Minecraft sunucumuzun turu", uploader: "@gmid", site: "Instagram", quality: "1080p", duration: 45, size: 22_000_000, thumbnail: thumb("#e06a6a", "#7848a8", "REELS"), finishedAt: now() - 2 * 86_400_000 }),
+  dl({ title: "Stardew Valley ortak çiftlik planı", uploader: "Çiftçi Abi", quality: "1440p", duration: 1260, size: 640_000_000, thumbnail: thumb("#5cc08a", "#0b203e", "STARDEW"), finishedAt: now() - 3 * 86_400_000 }),
+];
+const liveMap: Record<string, Live> = {};
+setInterval(() => {
+  const d = downloadsList.find((x) => x.status === "downloading");
+  if (!d) return;
+  const l = (liveMap[d.id] ??= { id: d.id, progress: d.progress, speed: 6_400_000, eta: 0, downloaded: 0, total: d.size, phase: "download" });
+  l.progress = Math.min(0.97, l.progress + 0.004);
+  l.speed = 5_800_000 + Math.random() * 1_400_000;
+  l.eta = Math.round(((1 - l.progress) * (d.size ?? 0)) / l.speed);
+  emit("downloads-progress", Object.values(liveMap));
+}, 1000);
+const probeResult: Probe = {
+  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ", title: "GMID Malikâne turu — 4K", uploader: "Merkut Studios", site: "Youtube",
+  duration: 212, thumbnail: thumb("#e3c270", "#0b203e", "GMID TOOL"),
+  options: [
+    { id: "2160", label: "2160p · 4K", detail: "MKV", size: 912_000_000, audioOnly: false, recommended: false },
+    { id: "1440", label: "1440p · 2K", detail: "MKV", size: 402_000_000, audioOnly: false, recommended: false },
+    { id: "1080", label: "1080p", detail: "60 fps · MP4", size: 168_000_000, audioOnly: false, recommended: true },
+    { id: "720", label: "720p", detail: "MP4", size: 74_000_000, audioOnly: false, recommended: false },
+    { id: "480", label: "480p", detail: "MP4", size: 31_000_000, audioOnly: false, recommended: false },
+    { id: "mp3", label: "Sadece ses", detail: "MP3", size: 3_400_000, audioOnly: true, recommended: false },
+  ],
 };
 
 function preview(body: string) {
@@ -318,6 +359,59 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     }
     case "server_set_exe":
       return;
+    case "videos_tools":
+      return {
+        ready: toolsReady, installing: false, version: toolsReady ? "2026.08.19" : null,
+        tools: [
+          { id: "yt-dlp", name: "yt-dlp", purpose: "Videoyu bulur ve indirir", installed: toolsReady, sizeMb: 18 },
+          { id: "ffmpeg", name: "FFmpeg", purpose: "Görüntü ile sesi birleştirir, MP3'e çevirir", installed: toolsReady, sizeMb: 89 },
+          { id: "deno", name: "Deno", purpose: "YouTube'un doğrulamasını çözer", installed: toolsReady, sizeMb: 43 },
+        ],
+      };
+    case "videos_install_tools":
+    case "videos_update":
+      return handle("videos_tools", {});
+    case "videos_probe":
+      await new Promise((r) => setTimeout(r, 900));
+      if (!/^https?:\/\//.test(String(a.url))) throw "Geçerli bir bağlantı yapıştır (https://… ile başlamalı).";
+      return probeResult;
+    case "videos_download": {
+      const o = probeResult.options.find((x) => x.id === a.option)!;
+      const d = dl({ title: probeResult.title, uploader: probeResult.uploader, thumbnail: probeResult.thumbnail, status: "queued", progress: 0,
+        quality: o.audioOnly ? "MP3" : `${o.id}p`, audioOnly: o.audioOnly, size: o.size, finishedAt: null, createdAt: now() });
+      downloadsList.unshift(d);
+      emit("downloads-changed");
+      return d;
+    }
+    case "videos_list":
+      return downloadsList.map((x) => ({ ...x, progress: liveMap[x.id]?.progress ?? x.progress }));
+    case "videos_live":
+      return Object.values(liveMap);
+    case "videos_pause":
+    case "videos_resume":
+    case "videos_cancel":
+    case "videos_remove": {
+      const d = downloadsList.find((x) => x.id === a.id);
+      if (d) {
+        if (cmd === "videos_pause") { d.status = "paused"; delete liveMap[d.id]; }
+        if (cmd === "videos_resume") d.status = "queued";
+        if (cmd === "videos_cancel" || cmd === "videos_remove") downloadsList.splice(downloadsList.indexOf(d), 1);
+      }
+      emit("downloads-changed");
+      emit("downloads-progress", Object.values(liveMap));
+      return;
+    }
+    case "videos_open":
+    case "videos_reveal":
+      return;
+    case "bridge_status":
+      return { port: 47913, paired: true, lastSeen: now() - 120_000, browser: "Chrome" };
+    case "bridge_pair":
+      return "482915";
+    case "bridge_unpair":
+      return;
+    case "extension_install":
+      return "C:\\Users\\Sen\\Documents\\GMID Tool\\Eklenti";
     default:
       throw new Error(`Taklit katmanda tanımsız komut: ${cmd}`);
   }

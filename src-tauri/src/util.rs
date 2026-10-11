@@ -23,3 +23,35 @@ pub fn new_id() -> String {
         nanos & 0xffff
     )
 }
+
+/// Windows'ta arka planda çalışan programlar için siyah konsol penceresi açılmasın.
+pub fn hide_console(cmd: &mut std::process::Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
+/// Bir programı ve başlattığı alt programları (yt-dlp → ffmpeg) kapatır.
+pub fn kill_tree(pid: u32) {
+    #[cfg(windows)]
+    {
+        let mut cmd = std::process::Command::new("taskkill");
+        cmd.args(["/PID", &pid.to_string(), "/T", "/F"]);
+        hide_console(&mut cmd);
+        let _ = cmd.status();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-TERM", "-P", &pid.to_string()])
+            .status();
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status();
+    }
+}

@@ -2,8 +2,10 @@ mod audio;
 mod backup;
 mod commands;
 mod db;
+mod downloader;
 mod hotkeys;
 mod log;
+mod net;
 mod notes;
 mod overlay;
 mod paths;
@@ -66,6 +68,11 @@ pub fn run() {
                 .allow_directory(dir.backgrounds(), true)?;
             app.asset_protocol_scope()
                 .allow_directory(dir.servers(), false)?;
+            // Videolarım: küçük resimler ve üzerine gelince oynayan önizleme.
+            app.asset_protocol_scope()
+                .allow_directory(dir.folder(Some("Videolar")), true)?;
+            app.asset_protocol_scope()
+                .allow_directory(dir.folder(Some("Kapaklar")), true)?;
 
             // Mikrofon kilidi açılışta da etkin olsun.
             let mic_lock: Option<f32> = db.setting_json("audio.micLock");
@@ -73,6 +80,7 @@ pub fn run() {
                 log!("Çöp kutusu temizlenemedi: {e}");
             }
 
+            downloader::recover(&db);
             app.manage(db);
             app.manage(dir);
             app.manage(overlay::Overlay::default());
@@ -80,6 +88,9 @@ pub fn run() {
             app.manage(scheduler::Scheduler::default());
             app.manage(hotkeys::Hotkeys::default());
             app.manage(servers::Servers::default());
+            app.manage(downloader::Downloader::default());
+            app.manage(downloader::tools::Tools::default());
+            app.manage(downloader::bridge::Bridge::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -89,6 +100,10 @@ pub fn run() {
             tray::create(handle)?;
             hotkeys::register_all(handle);
             scheduler::start(handle.clone());
+            downloader::bridge::start(handle.clone());
+            // Önceki oturumdan sırada kalanlar varsa devam et.
+            let h = handle.clone();
+            std::thread::spawn(move || h.state::<downloader::Downloader>().pump(&h));
             window::restore_stickies(handle);
 
             // Günlük yedek açılışı yavaşlatmasın diye arka planda.
@@ -156,19 +171,40 @@ pub fn run() {
             commands::servers::servers_query,
             commands::servers::server_join,
             commands::servers::server_set_exe,
+            commands::videos::videos_tools,
+            commands::videos::videos_install_tools,
+            commands::videos::videos_update,
+            commands::videos::videos_probe,
+            commands::videos::videos_download,
+            commands::videos::videos_list,
+            commands::videos::videos_live,
+            commands::videos::videos_pause,
+            commands::videos::videos_resume,
+            commands::videos::videos_cancel,
+            commands::videos::videos_remove,
+            commands::videos::videos_open,
+            commands::videos::videos_reveal,
+            commands::videos::bridge_status,
+            commands::videos::bridge_pair,
+            commands::videos::bridge_unpair,
+            commands::videos::extension_install,
         ])
         .build(tauri::generate_context!())
         .expect("GMID Tool başlatılamadı")
         .run(|app, event| {
             // Son pencere kapanınca uygulama kapanmasın, tepside çalışmaya devam etsin.
             // Tepsideki "Çıkış" ise (code = Some) gerçekten kapatır.
-            if let RunEvent::ExitRequested {
-                code: None, api, ..
-            } = event
-            {
-                if close_to_tray(app) {
-                    api.prevent_exit();
+            match event {
+                RunEvent::ExitRequested {
+                    code: None, api, ..
+                } if close_to_tray(app) => api.prevent_exit(),
+                // Gerçekten kapanırken inen videoları durdur (açılışta kaldığı yerden devam eder).
+                RunEvent::Exit => {
+                    if let Some(d) = app.try_state::<downloader::Downloader>() {
+                        d.shutdown();
+                    }
                 }
+                _ => {}
             }
         });
 }

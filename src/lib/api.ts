@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, GameInfo, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, Download, GameInfo, Live, Probe, ToolsState, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -190,6 +190,26 @@ export const api = {
       });
       return typeof picked === "string" ? picked : null;
     },
+  },
+
+  videos: {
+    tools: () => call<ToolsState>("videos_tools"),
+    installTools: (force = false) => call<ToolsState>("videos_install_tools", { force }),
+    update: (force = false) => call<ToolsState>("videos_update", { force }),
+    probe: (url: string) => call<Probe>("videos_probe", { url }),
+    download: (url: string, option: string) => call<Download>("videos_download", { url, option }),
+    list: () => call<Download[]>("videos_list"),
+    live: () => call<Live[]>("videos_live"),
+    pause: (id: string) => call<void>("videos_pause", { id }),
+    resume: (id: string) => call<void>("videos_resume", { id }),
+    cancel: (id: string) => call<void>("videos_cancel", { id }),
+    remove: (id: string, deleteFile: boolean) => call<void>("videos_remove", { id, deleteFile }),
+    open: (id: string) => call<void>("videos_open", { id }),
+    reveal: (id: string) => call<void>("videos_reveal", { id }),
+    bridge: () => call<BridgeStatus>("bridge_status"),
+    pair: () => call<string>("bridge_pair"),
+    unpair: () => call<void>("bridge_unpair"),
+    installExtension: () => call<string>("extension_install"),
   },
 
   overlay: {

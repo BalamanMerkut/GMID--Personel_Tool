@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar) ve Faz 3a (Sunucular) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -18,6 +18,26 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 **Ek bilgi → Yine de çalıştır**.
 
 ## Neler var?
+
+### Faz 5 — Video İndirici
+
+- **Bağlantı yapıştır → kaliteyi seç → indir:** YouTube, X (Twitter), Instagram, TikTok ve yt-dlp'nin desteklediği
+  yüzlerce site. Her kalitenin tahmini boyutu görünür; 1080p önerilir; "Sadece ses (MP3)" da var.
+- **İndirmeler:** aynı anda 1–4 indirme, hız ve kalan süre, duraklat / devam ettir / iptal, hata olursa "Tekrar dene".
+  Üst çubukta ve menüde her ekrandan görünen indirme göstergesi; bitince Windows bildirimi.
+- **Videolarım:** küçük resimli kartlar, siteye göre sekmeler (YouTube · X · Instagram · Sesler · Diğer), arama,
+  üzerine gelince önizleme, çift tıkla oynat, klasörde göster, sil. Dosyalar `Videolar\<Site>\` altında.
+- **İlk kullanımda** yt-dlp, FFmpeg ve Deno (toplam ~150 MB) bir kez `Araclar\` klasörüne iner; yt-dlp kendini günceller.
+- **Chrome / Opera eklentisi:** video sayfalarında "GMID ile indir" düğmesi, eklenti penceresinde kalite kartları,
+  sağ tık menüsü. Kurulum: Video İndirici → Tarayıcı eklentisi → adımlar (klasörü hazırla → `chrome://extensions` →
+  Geliştirici modu → Paketlenmemiş öğe yükle → 6 haneli kodla eşleştir).
+
+### Kararlılık düzeltmeleri
+
+- Windows'ta tepsiden pencere açarken / hızlı not açarken uygulamanın **kilitlenmesi** giderildi (hatırlatıcıların
+  çalmamasının sebebi buydu).
+- Hatırlatıcı ve geri sayımlar artık **Windows bildirimi** de gönderiyor; Hatırlatıcılar ekranında **Uyarıyı dene** düğmesi var.
+- Sorun olursa `Belgeler\GMID Tool\gmid.log` dosyasında ne olduğu yazar.
 
 ### Faz 3a — Sunucular
 

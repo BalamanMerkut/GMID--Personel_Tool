@@ -11,6 +11,9 @@
   import Placeholder from "./lib/screens/Placeholder.svelte";
   import Reminders from "./lib/screens/Reminders.svelte";
   import Servers from "./lib/screens/Servers.svelte";
+  import Videos from "./lib/screens/Videos.svelte";
+  import { activeSummary, startDownloadsSync } from "./lib/downloads.svelte";
+  import Icon from "./lib/Icon.svelte";
   import Settings from "./lib/screens/Settings.svelte";
   import Timer from "./lib/screens/Timer.svelte";
   import { effectiveQuality, loadSettings, settings } from "./lib/settings.svelte";
@@ -27,6 +30,7 @@
 
   const quality = $derived(effectiveQuality(settings.quality));
   const screen = $derived(findScreen(route) ?? SCREENS[0]);
+  const dl = $derived(activeSummary());
 
   function navigate(id: string) {
     route = findScreen(id) ? id : "home";
@@ -75,12 +79,14 @@
       });
       void refreshInfo();
     })();
+    const stopDownloads = startDownloadsSync();
 
     const update = () => (active = document.visibilityState === "visible" && document.hasFocus());
     window.addEventListener("focus", update);
     window.addEventListener("blur", update);
     document.addEventListener("visibilitychange", update);
     return () => {
+      stopDownloads();
       unlisten();
       window.removeEventListener("focus", update);
       window.removeEventListener("blur", update);
@@ -96,8 +102,17 @@
     <Sidebar current={route} version={info?.version ?? ""} onnavigate={navigate} />
     <div class="content">
       <header class="topbar">
-        <span class="crumb">{roomOf(route) ?? "GMID Tool"}</span>
-        <h1>{screen.label}</h1>
+        <div class="titles">
+          <span class="crumb">{roomOf(route) ?? "GMID Tool"}</span>
+          <h1>{screen.label}</h1>
+        </div>
+        {#if dl.count}
+          <button class="dlind" onclick={() => navigate("videos")} title="Video İndirici">
+            <Icon name="download" size={17} />
+            <span class="tnum">{dl.count} indiriliyor · %{dl.percent}</span>
+            <span class="ibar"><i style:width="{dl.percent}%"></i></span>
+          </button>
+        {/if}
       </header>
       <main bind:this={main}>
         {#if route === "home"}
@@ -108,6 +123,8 @@
           <Audio />
         {:else if route === "reminders"}
           <Reminders />
+        {:else if route === "videos"}
+          <Videos />
         {:else if route === "servers"}
           <Servers />
         {:else if route === "timer"}
@@ -142,10 +159,19 @@
   .app.pre { opacity: 0; transform: scale(0.99); }
   .content { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
   .topbar {
-    display: flex; flex-direction: column; gap: 2px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
     padding: 14px 28px; border-bottom: 1px solid var(--line);
     background: rgba(18, 20, 23, 0.55);
   }
+  .titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .dlind {
+    display: inline-flex; align-items: center; gap: 8px; flex: none;
+    border: 1px solid rgba(53, 160, 162, 0.55); background: rgba(53, 160, 162, 0.1); color: var(--neon);
+    border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+  }
+  .dlind:hover { background: rgba(53, 160, 162, 0.18); }
+  .ibar { width: 60px; height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+  .ibar i { display: block; height: 100%; background: var(--neon); transition: width 0.4s; }
   .crumb {
     font-family: var(--f-display); font-size: 10.5px; font-weight: 700;
     letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-dim);

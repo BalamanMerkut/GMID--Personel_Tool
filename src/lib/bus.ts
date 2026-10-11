@@ -10,7 +10,11 @@ export type AppEvent =
   | "reminders-changed"
   | "timers-changed"
   | "alerts-changed"
-  | "osd";
+  | "osd"
+  | "downloads-changed"
+  | "downloads-progress"
+  | "tools-progress"
+  | "bridge-changed";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

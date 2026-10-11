@@ -1,7 +1,7 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.8 (taslak)
+## Tasarım Dokümanı · v0.9 (taslak)
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar) ve Faz 3a (Sunucular) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
 > hepsinin özeti **Bölüm 11**'de.
 
@@ -151,7 +151,30 @@ odaları, sekmeler düz isimli:
 
 Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki sürümler) → Teknik not.**
 
-### 3.1 Video İndirici + Chrome/Opera Eklentisi (IDM benzeri)
+### 3.1 Video İndirici + Chrome/Opera Eklentisi (IDM benzeri) ✅ *(Faz 5 — kodlandı)*
+
+> **Kodlanan hâli (özet):**
+> - **Araçlar ilk kullanımda iner:** yt-dlp (~18 MB), FFmpeg (~89 MB, sadece ffmpeg/ffprobe ve kütüphaneleri) ve
+>   Deno (~43 MB) resmî GitHub sürümlerinden `Araclar\` klasörüne. Kurulum dosyası küçük kalır. yt-dlp günde en fazla
+>   bir kez, boştayken kendini günceller; "Şimdi güncelle" ve "Araçları yeniden indir" düğmeleri var. İnternet
+>   bağlantıları Windows'un sertifika deposunu ve vekil sunucu ayarını kullanır (antivirüs HTTPS taraması olan
+>   bilgisayarlarda da çalışsın diye).
+> - **Kalite kartları** sitenin gerçek biçim listesinden hesaplanır: her çözünürlük için önce her yerde açılan
+>   H.264/MP4, sonra VP9, sonra AV1; doğrudan indirme parçalı yayından önce. Tahmini boyut, inecek dosyaların
+>   toplamıdır. Önerilen: 1080p ya da altındaki en yüksek. Ayrıca "Sadece ses (MP3)".
+> - **Kuyruk:** aynı anda 1–4 indirme (varsayılan 2), duraklat / devam ettir (kaldığı yerden), iptal (yarım dosyalar
+>   silinir), hata olursa anlaşılır Türkçe mesaj ve "Tekrar dene". Uygulama kapanırken inenler açılışta "duraklatıldı".
+> - **Dosya adları:** `Başlık [kimlik] 1080p.mp4`, ses için `Başlık [kimlik] (ses).mp3` — aynı videonun farklı
+>   kaliteleri birbirinin üzerine yazmaz. Küçük resimler `Kapaklar\Videolar\`.
+> - **Eklenti köprüsü:** Native Messaging yerine **sadece bu bilgisayardan erişilen küçük bir yerel sunucu**
+>   (127.0.0.1, port 47913–47917). Sebep: Native Messaging ayrı bir yardımcı program ve her tarayıcı için ayrı kayıt
+>   defteri girdisi istiyor; Opera'da çalışıp çalışmadığı belirsizdi. Güvenlik: eklenti bir kez uygulamada gösterilen
+>   **6 haneli kodla** eşleşir (10 dk geçerli, 5 deneme) ve gizli bir anahtar alır; web sitelerinden gelen istekler
+>   reddedilir.
+> - **Eklenti:** araç çubuğu penceresi (kalite kartları + inen işlerin ilerlemesi), YouTube/X/Instagram/TikTok video
+>   sayfalarında sol altta "GMID ile indir" düğmesi, sağ tık menüsünde "GMID Tool ile indir" (önerilen kaliteyle).
+>   Instagram/X/Facebook'ta o sitenin çerezleri indirme süresince geçici dosyayla verilir, iş bitince silinir.
+>   Eklenti dosyaları uygulamanın içinde gelir; "Hazırla" ile `Eklenti\` klasörüne yazılır.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -751,10 +774,12 @@ GMID Tool\
 ├─ Notlar\                  ← Notların .md kopyaları (uygulama olmadan da okunabilir)
 ├─ Arkaplanlar\
 ├─ Sunucular\              ← Sunucu logoları (topluluk listesinden indirilen ve elle seçilen)
-├─ Kapaklar\                ← Oyun/film kapak önbelleği (silinirse yeniden indirilir)
+├─ Eklenti\                ← Chrome/Opera eklentisi (tarayıcıda "Paketlenmemiş öğe yükle" ile bu klasör seçilir)
+├─ Kapaklar\                ← Oyun/film kapak önbelleği ve video küçük resimleri (Videolar\)
 ├─ Kurulum\                 ← Format sonrası kurulum listeleri + dışa aktarılan .bat
 ├─ Yedekler\                ← Veritabanının otomatik günlük yedekleri (son 7 gün)
-└─ Araclar\                 ← yt-dlp, ffmpeg, deno (uygulama kendisi günceller)
+├─ Araclar\                 ← yt-dlp, ffmpeg, deno (ilk kullanımda iner, uygulama kendisi günceller)
+└─ gmid.log                 ← Sorun olursa ne olduğunu gösteren küçük günlük dosyası
 ```
 
 Klipler ve ekran görüntüleri bu klasörde **değildir**; kaydedildikleri yerde (NVIDIA, Steam vb. klasörleri)
@@ -775,7 +800,7 @@ kalır, uygulama sadece listesini tutar (§3.12).
 | `reviews` | id, yazar (people), konu (oyun/film/dizi + id), soru_puanları (JSON: soru→puan veya "yok"), genel_puan, elle_düzeltme, tek_cümle, notlar, durum, tavsiye, tarih |
 | `titles` | id, tmdb_id, tür (film/dizi), ad, orijinal_ad, yıl, afiş, özet, yönetmen, oyuncular, sezon_sayısı |
 | `captures` | id, game_id, dosya_yolu (dosyanın kendi yerinde), tür (klip/ekran görüntüsü), kaynak (nvidia/xbox/steam…), süre, boyut, favori, küçük_resim, tarih |
-| `downloads` | id, url, site, başlık, kalite, dosya_yolu, boyut, durum, tarih |
+| `downloads` | id, url, video_kimliği, başlık, yükleyen, site, küçük_resim, süre, kalite, biçim_seçimi, parça_sayısı, sadece_ses, durum, ilerleme, boyut, dosya_yolu, hata, kaynak (uygulama/eklenti), tarihler *(Faz 5 ✅)* |
 | `notes` | id, başlık, içerik, renk, yazı_tipi, sabit, klasör, etiketler, bağlı_oyun, güncellenme |
 | `reminders` | id, başlık, zaman, tekrar_kuralı, ertelenen, tamamlandı |
 | `audio_devices` | windows_id, takma_ad, ikon, gizli, sıra, kilit_seviyesi |
@@ -839,10 +864,13 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **3b — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
-| **5 — Video İndirici** | İndirme yöneticisi, Videolar sekmesi, Chrome/Opera eklentisi | IDM benzeri indirici |
+| **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
 | **6 — Film & Dizi + Kurulum** | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
 | **7 — Öneriler** | Onaylanan ek özellikler (ücretsiz oyunlar, Wrapped, Rich Presence…) | v1.x |
 | **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet | v2.0 |
+
+**Sıra değişikliği (2026-10-11):** Önce uygulamanın tek kullanıcı için yerelde sağlam çalışması ve Video İndirici
+istendi; Faz 3b (oyun algılama, kütüphane, arşiv, klipler), Faz 4 ve sohbet (3c) sonraya kaldı.
 
 Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değişiklik notu, performans ölçümü.
 *(Sunucu beklemeden arkadaş puanları istenirse paylaşım dosyası — öneri #9 — Faz 7'de yapılabilir.)*
@@ -908,6 +936,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.9 | 2026-10-11 | Faz 5 kodlandı: Video İndirici (§3.1 özet kutusu), yerel eklenti köprüsü ve eşleştirme, Chrome/Opera eklentisi; kararlılık: Windows'ta pencere açarken kilitlenme giderildi, hatırlatıcılara Windows bildirimi, `gmid.log`; sıra değişikliği (3b/4/3c sonraya) |
 | v0.8 | 2026-10-11 | Faz 3a kodlandı: Sunucular (§3.14) — CoD/Minecraft/Steam/SA-MP sunucu sorguları, canlı oyuncu sayısı, Bağlan, GitHub'daki topluluk listesi; sohbet penceresi Faz 3c olarak plana eklendi (§8.1.1) |
 | v0.7 | 2026-10-11 | Faz 2 kodlandı: Ses & Mikrofon (Windows Core Audio, olay tabanlı mikrofon kilidi), değiştirilebilir genel kısayollar, odak çalmayan ekran göstergesi, Notlar (TipTap, .md kopyası, çöp kutusu), hızlı not ve yapışkan not pencereleri, hatırlatıcılar (tekrar, erteleme, sağ alt uyarı kartı), kronometre ve geri sayımlar |
 | v0.6 | 2026-10-11 | Faz 1 (İskelet) kodlandı: Tauri 2 + Svelte 5 projesi, açılış animasyonu, Malikâne teması, menü, Kontrol Odası, veri klasörü, SQLite, günlük yedek, tepsi, Windows ile başlatma; GitHub Actions ile otomatik Windows kurulum dosyası |

@@ -193,3 +193,87 @@ export interface JoinResult {
   kind: "launched" | "copy";
   address: string;
 }
+
+export interface ToolStatus {
+  id: string;
+  name: string;
+  purpose: string;
+  installed: boolean;
+  sizeMb: number;
+}
+
+export interface ToolsState {
+  tools: ToolStatus[];
+  ready: boolean;
+  installing: boolean;
+  version: string | null;
+}
+
+export interface ToolProgress {
+  tool: string;
+  name: string;
+  stage: "download" | "extract" | "done" | "error";
+  done: number;
+  total: number;
+  error: string | null;
+}
+
+export interface QualityOption {
+  id: string;
+  label: string;
+  detail: string;
+  size: number | null;
+  audioOnly: boolean;
+  recommended: boolean;
+}
+
+export interface Probe {
+  url: string;
+  videoId: string;
+  title: string;
+  uploader: string;
+  site: string;
+  duration: number | null;
+  thumbnail: string | null;
+  options: QualityOption[];
+}
+
+export type DownloadStatus = "queued" | "downloading" | "processing" | "paused" | "done" | "error";
+
+export interface Download {
+  id: string;
+  url: string;
+  videoId: string;
+  title: string;
+  uploader: string;
+  site: string;
+  thumbnail: string | null;
+  duration: number | null;
+  quality: string;
+  audioOnly: boolean;
+  status: DownloadStatus;
+  progress: number;
+  size: number | null;
+  filePath: string | null;
+  error: string | null;
+  source: "app" | "extension";
+  createdAt: number;
+  finishedAt: number | null;
+}
+
+export interface Live {
+  id: string;
+  progress: number;
+  speed: number | null;
+  eta: number | null;
+  downloaded: number;
+  total: number | null;
+  phase: "download" | "processing";
+}
+
+export interface BridgeStatus {
+  port: number;
+  paired: boolean;
+  lastSeen: number | null;
+  browser: string | null;
+}

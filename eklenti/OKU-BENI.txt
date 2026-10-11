@@ -1,0 +1,10 @@
+GMID Tool — Video İndirici eklentisi (Chrome / Opera)
+
+Bu klasörü silme ve taşıma: tarayıcı eklentiyi buradan çalıştırır.
+
+Kurulum:
+ Chrome: adres çubuğuna chrome://extensions yaz → sağ üstte "Geliştirici modu"nu aç →
+         "Paketlenmemiş öğe yükle" → bu klasörü seç.
+ Opera:  opera://extensions → "Geliştirici modu" → "Paketlenmemiş öğe yükle" → bu klasörü seç.
+
+Sonra eklenti simgesine tıkla, GMID Tool'daki 6 haneli eşleştirme kodunu yaz.

@@ -1,9 +1,11 @@
 <script lang="ts">
   import logo from "../../assets/gmid-logo.webp";
   import Icon from "../Icon.svelte";
+  import { activeSummary } from "../downloads.svelte";
   import { ROOMS } from "../nav";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
+  const downloading = $derived(activeSummary().count);
 </script>
 
 <aside class="side" aria-label="Malikâne odaları">
@@ -27,6 +29,7 @@
           <Icon name={s.icon} />
           <span class="label">{s.label}</span>
           {#if s.phase}<span class="soon">Faz {s.phase}</span>{/if}
+          {#if s.id === "videos" && downloading}<span class="badge tnum" title="{downloading} indirme sürüyor">{downloading}</span>{/if}
         </button>
       {/each}
     {/each}
@@ -67,6 +70,7 @@
   button.top { font-family: var(--f-display); font-weight: 700; }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .soon { font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+  .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--teal); color: #071415; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
   .foot {
     margin-top: auto; padding: 12px 18px 14px; border-top: 1px solid var(--line);
     font-size: 11px; color: var(--dim); display: flex; justify-content: space-between; gap: 8px;
@@ -78,6 +82,7 @@
     .name, .room, .label, .soon, .foot { display: none; }
     nav { padding: 6px 10px; gap: 4px; }
     .sep { display: block; height: 1px; background: var(--line); margin: 8px 6px; }
-    button { justify-content: center; padding: 11px; }
+    button { justify-content: center; padding: 11px; position: relative; }
+    .badge { position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   }
 </style>

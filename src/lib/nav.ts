@@ -42,7 +42,7 @@ export const ROOMS: Room[] = [
         description: "Oyunlarını 5 kısa soruyla puanla, yorum ve not yaz. Sağdaki filtre kutusuyla türe, etikete ve puana göre bul." },
       { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: 6,
         description: "Film ve dizileri aynı sade kartla puanla; afiş, özet ve oyuncular TMDB'den Türkçe gelir." },
-      { id: "videos", label: "Video İndirici", icon: "download", phase: 5,
+      { id: "videos", label: "Video İndirici", icon: "download", phase: null,
         description: "Bağlantı yapıştır ya da tarayıcıdaki GMID eklentisine tıkla, kaliteyi seç, indir. İndirilenler Videolarım'da toplanır." },
     ],
   },

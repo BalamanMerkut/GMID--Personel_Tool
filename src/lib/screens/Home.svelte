@@ -6,6 +6,7 @@
   import { findScreen, SCREENS } from "../nav";
   import { ago, relative, when } from "../time";
   import type { NoteSummary, Reminder, Server, ServerStatus } from "../types";
+  import { downloads, isActive } from "../downloads.svelte";
 
   let { info, onnavigate }: { info: AppInfo | null; onnavigate: (id: string) => void } = $props();
 
@@ -14,13 +15,15 @@
   const greeting = hour < 6 ? "İyi geceler" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : "İyi akşamlar";
   const today = now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
 
-  const CURRENT_PHASE = 3;
+  const CURRENT_PHASE = 5;
+  /** Sırası atlanan fazlar (sonra yapılacak). */
+  const LATER = new Set([3, 4]);
   const PHASES: { n: number; title: string; note?: string; ids?: string[] }[] = [
     { n: 1, title: "İskelet", note: "Tema, açılış, menü, Kontrol Odası, tepsi, yedekler" },
     { n: 2, title: "Günlük araçlar", ids: ["audio", "notes", "reminders", "timer"] },
     { n: 3, title: "Oyun", ids: ["servers", "library", "sessions", "clips", "archive"] },
     { n: 4, title: "Oyun içi deneyim" },
-    { n: 5, title: "Video İndirici" },
+    { n: 5, title: "Video İndirici", ids: ["videos"] },
     { n: 6, title: "Film & Dizi, Kurulum" },
   ];
   const screensOf = (p: (typeof PHASES)[number]) =>
@@ -31,6 +34,9 @@
   let notes: NoteSummary[] = $state([]);
   let servers: Server[] = $state([]);
   let statuses: Record<string, ServerStatus> = $state({});
+  const dlRecent = $derived(
+    downloads.list.filter((d) => isActive(d) || (d.status === "done" && d.finishedAt && Date.now() - d.finishedAt < 86_400_000)).slice(0, 4),
+  );
   const liveServers = $derived(
     servers
       .filter((s) => s.remote || statuses[s.id]?.state === "online")
@@ -110,10 +116,10 @@
         <h3 class="h2"><Icon name="castle" />Malikânenin odaları</h3>
         <ol>
           {#each PHASES as p (p.n)}
-            <li class:done={p.n < CURRENT_PHASE} class:now={p.n === CURRENT_PHASE}>
-              <span class="num tnum">{#if p.n < CURRENT_PHASE}<Icon name="check" size={15} />{:else}{p.n}{/if}</span>
+            <li class:done={p.n < CURRENT_PHASE && !LATER.has(p.n)} class:now={p.n === CURRENT_PHASE}>
+              <span class="num tnum">{#if p.n < CURRENT_PHASE && !LATER.has(p.n)}<Icon name="check" size={15} />{:else}{p.n}{/if}</span>
               <div class="body">
-                <b>{p.title}{#if p.n === CURRENT_PHASE}<span class="chip here">{p.n === 3 ? "Sunucular açıldı" : "Yeni açıldı"}</span>{/if}</b>
+                <b>{p.title}{#if p.n === CURRENT_PHASE}<span class="chip here">Yeni açıldı</span>{/if}{#if p.n === 3}<span class="chip">Sunucular açık · gerisi sırada</span>{/if}</b>
                 {#if p.note}
                   <span class="sub small">{p.note}</span>
                 {:else}
@@ -131,6 +137,22 @@
     </div>
 
     <div class="col">
+      <section class="panel">
+        <div class="spread">
+          <h3 class="h2"><Icon name="download" />İndirmeler</h3>
+          <button class="link" onclick={() => onnavigate("videos")}>Video İndirici</button>
+        </div>
+        {#each dlRecent as d (d.id)}
+          {@const pct = Math.round((downloads.live[d.id]?.progress ?? d.progress) * 100)}
+          <button class="li note" onclick={() => onnavigate("videos")}>
+            <span class="t">{d.title}</span>
+            <span class="m tnum">{d.status === "done" ? "indi ✓" : d.status === "queued" ? "sırada" : d.status === "error" ? "hata" : d.status === "paused" ? "duraklatıldı" : `%${pct}`}</span>
+          </button>
+        {:else}
+          <p class="sub small">Devam eden indirme yok. Bir video bağlantısını <button class="link inl" onclick={() => onnavigate("videos")}>Video İndirici</button>'ye yapıştır.</p>
+        {/each}
+      </section>
+
       {#if servers.length}
         <section class="panel">
           <div class="spread">
@@ -224,5 +246,6 @@
   .tips b { color: var(--text); font-weight: 600; }
   .link { border: 0; background: none; padding: 0; color: var(--teal); font-weight: 600; align-self: flex-start; }
   .link:hover { color: var(--neon); }
+  .link.inl { display: inline; }
   @media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

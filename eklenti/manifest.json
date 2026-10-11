@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "GMID Tool — Video İndirici",
+  "short_name": "GMID",
+  "version": "1.0.0",
+  "description": "Açık sekmedeki videoyu kalitesini seçerek GMID Tool ile indir. Merkut Studios.",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GMID ile indir",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "cookies",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:47913/*",
+    "http://127.0.0.1:47914/*",
+    "http://127.0.0.1:47915/*",
+    "http://127.0.0.1:47916/*",
+    "http://127.0.0.1:47917/*",
+    "*://*.instagram.com/*",
+    "*://*.x.com/*",
+    "*://*.twitter.com/*",
+    "*://*.facebook.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.x.com/*",
+        "*://*.twitter.com/*",
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/32.png"
+      ],
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.x.com/*",
+        "*://*.twitter.com/*",
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*"
+      ]
+    }
+  ]
+}

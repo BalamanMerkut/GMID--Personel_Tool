@@ -1,0 +1,832 @@
+//! Video İndirici: bağlantıyı çözümler, kaliteyi seçtirir, sırayla indirir; bitenler "Videolarım"da.
+//!
+//! - İndirilenler `Videolar\<Site>\` altına, küçük resimler `Kapaklar\Videolar\` altına iner.
+//! - Aynı anda en fazla `videos.parallel` (varsayılan 2) indirme yapılır, gerisi sırada bekler.
+//! - Duraklatılan indirme kaldığı yerden devam eder; uygulama kapanırken inenler açılışta "duraklatıldı" olur.
+
+pub mod bridge;
+pub mod extension;
+pub mod tools;
+pub mod ytdlp;
+
+use crate::db::Db;
+use crate::paths::DataDir;
+use crate::util::{kill_tree, new_id, now_ms};
+use rusqlite::{params, OptionalExtension, Row};
+use serde::Serialize;
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager};
+use ytdlp::{Line, Probe, QualityOption};
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(90);
+/// Çözümlenen videolar bu süre boyunca hatırlanır (kalite seçilene kadar tekrar sorulmasın).
+const PROBE_CACHE: Duration = Duration::from_secs(30 * 60);
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Download {
+    pub id: String,
+    pub url: String,
+    pub video_id: String,
+    pub title: String,
+    pub uploader: String,
+    pub site: String,
+    /// Yerel küçük resim ya da (inerken) sitenin resim adresi.
+    pub thumbnail: Option<String>,
+    pub duration: Option<f64>,
+    /// "1080p", "MP3"…
+    pub quality: String,
+    pub audio_only: bool,
+    /// queued | downloading | processing | paused | done | error
+    pub status: String,
+    pub progress: f64,
+    pub size: Option<u64>,
+    pub file_path: Option<String>,
+    pub error: Option<String>,
+    /// "app" | "extension"
+    pub source: String,
+    pub created_at: i64,
+    pub finished_at: Option<i64>,
+}
+
+/// İnmekte olan bir işin anlık durumu (veritabanına yazılmaz).
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Live {
+    pub id: String,
+    pub progress: f64,
+    pub speed: Option<f64>,
+    pub eta: Option<u64>,
+    pub downloaded: u64,
+    pub total: Option<u64>,
+    /// "download" | "processing"
+    pub phase: &'static str,
+}
+
+const COLUMNS: &str =
+    "id, url, video_id, title, uploader, site, thumbnail, duration, quality, audio_only,
+    status, progress, size, file_path, error, source, created_at, finished_at";
+
+fn from_row(r: &Row) -> rusqlite::Result<Download> {
+    Ok(Download {
+        id: r.get(0)?,
+        url: r.get(1)?,
+        video_id: r.get(2)?,
+        title: r.get(3)?,
+        uploader: r.get(4)?,
+        site: r.get(5)?,
+        thumbnail: r.get(6)?,
+        duration: r.get(7)?,
+        quality: r.get(8)?,
+        audio_only: r.get(9)?,
+        status: r.get(10)?,
+        progress: r.get(11)?,
+        size: r.get::<_, Option<i64>>(12)?.map(|v| v as u64),
+        file_path: r.get(13)?,
+        error: r.get(14)?,
+        source: r.get(15)?,
+        created_at: r.get(16)?,
+        finished_at: r.get(17)?,
+    })
+}
+
+pub fn list(db: &Db) -> rusqlite::Result<Vec<Download>> {
+    let conn = db.conn();
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLUMNS} FROM downloads ORDER BY COALESCE(finished_at, created_at) DESC LIMIT 1000"
+    ))?;
+    let rows = stmt.query_map([], from_row)?;
+    rows.collect()
+}
+
+pub fn get(db: &Db, id: &str) -> rusqlite::Result<Option<Download>> {
+    db.conn()
+        .query_row(
+            &format!("SELECT {COLUMNS} FROM downloads WHERE id = ?1"),
+            [id],
+            from_row,
+        )
+        .optional()
+}
+
+fn set_status(db: &Db, id: &str, status: &str, error: Option<&str>) {
+    let _ = db.conn().execute(
+        "UPDATE downloads SET status = ?2, error = ?3 WHERE id = ?1",
+        params![id, status, error],
+    );
+}
+
+/// Uygulama kapanırken inmekte olanlar açılışta "duraklatıldı" olur.
+pub fn recover(db: &Db) {
+    let _ = db.conn().execute(
+        "UPDATE downloads SET status = 'paused' WHERE status IN ('downloading', 'processing')",
+        [],
+    );
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Stop {
+    Pause,
+    Cancel,
+}
+
+struct Running {
+    pid: u32,
+    stop: Option<Stop>,
+    live: Live,
+}
+
+#[derive(Default)]
+pub struct Downloader {
+    running: Mutex<HashMap<String, Running>>,
+    probes: Mutex<Vec<(Instant, String, Probe)>>,
+    /// İş kimliği → eklentiden gelen geçici çerez dosyası.
+    cookies: Mutex<HashMap<String, PathBuf>>,
+}
+
+fn emit_changed(app: &AppHandle) {
+    let _ = app.emit("downloads-changed", ());
+}
+
+fn valid_url(url: &str) -> bool {
+    (url.starts_with("https://") || url.starts_with("http://"))
+        && url.len() <= 2048
+        && !url.chars().any(char::is_whitespace)
+}
+
+fn videos_dir(dir: &DataDir) -> PathBuf {
+    dir.folder(Some("Videolar"))
+}
+
+fn thumbs_dir(dir: &DataDir) -> PathBuf {
+    dir.folder(Some("Kapaklar")).join("Videolar")
+}
+
+impl Downloader {
+    pub fn live(&self) -> Vec<Live> {
+        let running = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        running.values().map(|r| r.live.clone()).collect()
+    }
+
+    fn cached_probe(&self, url: &str) -> Option<Probe> {
+        let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
+        probes.retain(|(t, _, _)| t.elapsed() < PROBE_CACHE);
+        probes
+            .iter()
+            .find(|(_, u, p)| u == url || p.url == url)
+            .map(|(_, _, p)| p.clone())
+    }
+
+    /// Bağlantıdaki videoyu çözümler: başlık, küçük resim ve kalite seçenekleri.
+    pub fn probe(&self, root: &Path, url: &str) -> Result<Probe, String> {
+        let url = url.trim();
+        if !valid_url(url) {
+            return Err("Geçerli bir bağlantı yapıştır (https://… ile başlamalı).".into());
+        }
+        if let Some(p) = self.cached_probe(url) {
+            return Ok(p);
+        }
+        if !tools::ytdlp_path(root).is_file() {
+            return Err("TOOLS_MISSING".into());
+        }
+        let mut cmd = tools::ytdlp(root);
+        cmd.args([
+            "-J",
+            "--no-playlist",
+            "--flat-playlist",
+            "--no-warnings",
+            "--",
+        ])
+        .arg(url)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null());
+        let child = cmd
+            .spawn()
+            .map_err(|e| format!("yt-dlp başlatılamadı: {e}"))?;
+        let out = wait_with_timeout(child, PROBE_TIMEOUT)?;
+        if !out.status.success() || out.stdout.is_empty() {
+            return Err(ytdlp::friendly_error(&String::from_utf8_lossy(&out.stderr)));
+        }
+        let probe = ytdlp::parse_probe(&out.stdout, url)?;
+        let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
+        probes.push((Instant::now(), url.to_string(), probe.clone()));
+        if probes.len() > 30 {
+            probes.remove(0);
+        }
+        Ok(probe)
+    }
+
+    /// Seçilen kaliteyi sıraya ekler. `cookies`: eklentinin verdiği (Netscape biçimli) çerezler.
+    pub fn enqueue(
+        &self,
+        app: &AppHandle,
+        url: &str,
+        option_id: &str,
+        cookies: Option<String>,
+        source: &str,
+    ) -> Result<Download, String> {
+        let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
+        let probe = self.probe(dir.root(), url)?;
+        let option = probe
+            .options
+            .iter()
+            .find(|o| o.id == option_id)
+            .or_else(|| probe.options.iter().find(|o| o.recommended))
+            .or(probe.options.first())
+            .ok_or("Kalite bulunamadı")?
+            .clone();
+
+        let id = new_id();
+        let quality = if option.audio_only {
+            "MP3".to_string()
+        } else if option.id.parse::<u32>().is_ok() {
+            format!("{}p", option.id)
+        } else {
+            "En iyi".to_string()
+        };
+        db.conn()
+            .execute(
+                "INSERT INTO downloads (id, url, video_id, title, uploader, site, thumbnail, duration,
+                    quality, option_format, parts, audio_only, status, progress, size, source, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 'queued', 0, ?13, ?14, ?15)",
+                params![
+                    id,
+                    probe.url,
+                    probe.video_id,
+                    probe.title,
+                    probe.uploader,
+                    probe.site,
+                    probe.thumbnail,
+                    probe.duration,
+                    quality,
+                    option.format,
+                    option.parts,
+                    option.audio_only,
+                    option.size.map(|s| s as i64),
+                    source,
+                    now_ms()
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+
+        if let Some(c) = cookies.filter(|c| !c.trim().is_empty()) {
+            let path = tools::dir(dir.root()).join(format!("cerez-{id}.txt"));
+            if std::fs::write(&path, c).is_ok() {
+                self.cookies
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(id.clone(), path);
+            }
+        }
+        emit_changed(app);
+        self.pump(app);
+        get(&db, &id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Eklenemedi".into())
+    }
+
+    /// Boşta yer varsa sıradakileri başlatır.
+    pub fn pump(&self, app: &AppHandle) {
+        let db = app.state::<Db>();
+        let dir = app.state::<DataDir>();
+        if !tools::ytdlp_path(dir.root()).is_file() {
+            return;
+        }
+        let max: usize = db
+            .setting_json::<usize>("videos.parallel")
+            .unwrap_or(2)
+            .clamp(1, 4);
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        if running.len() >= max {
+            return;
+        }
+        let queued: Vec<(String, String, String, u8, bool)> = {
+            let conn = db.conn();
+            let Ok(mut stmt) = conn.prepare(
+                "SELECT id, url, option_format, parts, audio_only FROM downloads
+                 WHERE status = 'queued' ORDER BY created_at LIMIT 8",
+            ) else {
+                return;
+            };
+            stmt.query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default()
+        };
+        for (id, url, format, parts, audio_only) in queued {
+            if running.len() >= max {
+                break;
+            }
+            if running.contains_key(&id) {
+                continue;
+            }
+            let option = QualityOption {
+                id: String::new(),
+                label: String::new(),
+                detail: String::new(),
+                size: None,
+                audio_only,
+                recommended: false,
+                format,
+                parts,
+            };
+            match self.start(app, &id, &url, &option) {
+                Ok(pid) => {
+                    running.insert(
+                        id.clone(),
+                        Running {
+                            pid,
+                            stop: None,
+                            live: Live {
+                                id: id.clone(),
+                                phase: "download",
+                                ..Default::default()
+                            },
+                        },
+                    );
+                    set_status(&db, &id, "downloading", None);
+                }
+                Err(e) => {
+                    crate::log!("İndirme başlatılamadı: {e}");
+                    set_status(&db, &id, "error", Some(&e));
+                }
+            }
+        }
+        drop(running);
+        emit_changed(app);
+    }
+
+    fn start(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        url: &str,
+        option: &QualityOption,
+    ) -> Result<u32, String> {
+        let dir = app.state::<DataDir>();
+        let db = app.state::<Db>();
+        let site: String = db
+            .conn()
+            .query_row("SELECT site FROM downloads WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap_or_default();
+        let out_dir = videos_dir(&dir).join(ytdlp::site_folder(&site));
+        let thumbs = thumbs_dir(&dir);
+        let _ = std::fs::create_dir_all(&out_dir);
+        let _ = std::fs::create_dir_all(&thumbs);
+        let cookie = self
+            .cookies
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned();
+
+        let mut cmd = tools::ytdlp(dir.root());
+        cmd.args(ytdlp::download_args(
+            url,
+            option,
+            &out_dir,
+            &thumbs,
+            cookie.as_deref(),
+        ))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null());
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("yt-dlp başlatılamadı: {e}"))?;
+        let pid = child.id();
+        let stdout = child.stdout.take().ok_or("Çıktı okunamadı")?;
+        let stderr = child.stderr.take().ok_or("Çıktı okunamadı")?;
+
+        // Hata satırlarını ayrı bir iş parçacığı toplar (yoksa tampon dolar, yt-dlp takılır).
+        let err_buf = std::sync::Arc::new(Mutex::new(String::new()));
+        let eb = err_buf.clone();
+        std::thread::spawn(move || {
+            for line in lossy_lines(stderr) {
+                let mut b = eb.lock().unwrap_or_else(|e| e.into_inner());
+                if b.len() > 16_000 {
+                    let cut = b.len() - 8_000;
+                    let cut = (cut..b.len()).find(|i| b.is_char_boundary(*i)).unwrap_or(0);
+                    b.drain(..cut);
+                }
+                b.push_str(&line);
+                b.push('\n');
+            }
+        });
+
+        let (app, id, parts) = (app.clone(), id.to_string(), option.parts.max(1));
+        std::thread::spawn(move || {
+            let mut file: Option<String> = None;
+            let mut formats: Vec<String> = Vec::new();
+            let mut last_emit = Instant::now() - Duration::from_secs(1);
+            for line in lossy_lines(stdout) {
+                let update = match ytdlp::parse_line(&line) {
+                    Line::Progress {
+                        downloaded,
+                        total,
+                        speed,
+                        eta,
+                        format_id,
+                    } => {
+                        if !formats.contains(&format_id) {
+                            formats.push(format_id.clone());
+                        }
+                        let part = formats.iter().position(|f| *f == format_id).unwrap_or(0);
+                        let frac = total
+                            .filter(|t| *t > 0)
+                            .map_or(0.0, |t| (downloaded as f64 / t as f64).min(1.0));
+                        // Görüntü genelde toplamın büyük kısmı; ses kalanı.
+                        let progress = if parts >= 2 {
+                            if part == 0 {
+                                frac * 0.85
+                            } else {
+                                0.85 + frac * 0.12
+                            }
+                        } else {
+                            frac * 0.97
+                        };
+                        Some((progress, speed, eta, downloaded, total, "download"))
+                    }
+                    Line::Processing(_) => Some((0.98, None, None, 0, None, "processing")),
+                    Line::File(f) => {
+                        file = Some(f);
+                        None
+                    }
+                    Line::Other => None,
+                };
+                if let Some((progress, speed, eta, downloaded, total, phase)) = update {
+                    let downloader = app.state::<Downloader>();
+                    let mut running = downloader.running.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(r) = running.get_mut(&id) {
+                        let phase_changed = r.live.phase != phase;
+                        r.live = Live {
+                            id: id.clone(),
+                            progress: progress.max(r.live.progress),
+                            speed,
+                            eta,
+                            downloaded,
+                            total,
+                            phase,
+                        };
+                        drop(running);
+                        if phase_changed {
+                            set_status(&app.state::<Db>(), &id, "processing", None);
+                            emit_changed(&app);
+                        }
+                        if phase_changed || last_emit.elapsed() > Duration::from_millis(400) {
+                            last_emit = Instant::now();
+                            let _ = app.emit("downloads-progress", downloader.live());
+                        }
+                    }
+                }
+            }
+            let status = child.wait();
+            let stderr = err_buf.lock().map(|b| b.clone()).unwrap_or_default();
+            app.state::<Downloader>().finish(
+                &app,
+                &id,
+                status.map(|s| s.success()).unwrap_or(false),
+                file,
+                &stderr,
+            );
+        });
+        Ok(pid)
+    }
+
+    fn finish(&self, app: &AppHandle, id: &str, ok: bool, file: Option<String>, stderr: &str) {
+        let db = app.state::<Db>();
+        let dir = app.state::<DataDir>();
+        let entry = self
+            .running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
+        let stop = entry.as_ref().and_then(|r| r.stop);
+        let progress = entry.as_ref().map_or(0.0, |r| r.live.progress);
+        let Ok(Some(d)) = get(&db, id) else {
+            self.pump(app);
+            return;
+        };
+
+        match stop {
+            Some(Stop::Pause) => {
+                let _ = db.conn().execute(
+                    "UPDATE downloads SET status = 'paused', progress = ?2 WHERE id = ?1",
+                    params![id, progress],
+                );
+            }
+            Some(Stop::Cancel) => {
+                remove_partials(
+                    &videos_dir(&dir).join(ytdlp::site_folder(&d.site)),
+                    &d.video_id,
+                );
+                let _ = db
+                    .conn()
+                    .execute("DELETE FROM downloads WHERE id = ?1", [id]);
+                self.drop_cookies(id);
+            }
+            None => {
+                self.drop_cookies(id);
+                let file = file.filter(|f| Path::new(f).is_file());
+                if let (true, Some(f)) = (ok, file) {
+                    let size = std::fs::metadata(&f).map(|m| m.len() as i64).ok();
+                    let thumb = thumbs_dir(&dir).join(format!("{}.jpg", d.video_id));
+                    let thumb = thumb
+                        .is_file()
+                        .then(|| thumb.to_string_lossy().into_owned())
+                        .or(d.thumbnail.clone());
+                    let _ = db.conn().execute(
+                        "UPDATE downloads SET status = 'done', progress = 1, file_path = ?2, size = ?3,
+                            thumbnail = ?4, error = NULL, finished_at = ?5 WHERE id = ?1",
+                        params![id, f, size, thumb, now_ms()],
+                    );
+                    crate::overlay::system_notification(
+                        app,
+                        "videos.notify",
+                        "İndirme tamamlandı",
+                        &d.title,
+                    );
+                } else {
+                    let msg = if ok {
+                        "İndirilen dosya bulunamadı.".to_string()
+                    } else {
+                        ytdlp::friendly_error(stderr)
+                    };
+                    crate::log!(
+                        "İndirme başarısız ({}): {}",
+                        d.url,
+                        stderr.lines().rev().take(3).collect::<Vec<_>>().join(" | ")
+                    );
+                    let _ = db.conn().execute(
+                        "UPDATE downloads SET status = 'error', error = ?2, progress = ?3 WHERE id = ?1",
+                        params![id, msg, progress],
+                    );
+                }
+            }
+        }
+        emit_changed(app);
+        let _ = app.emit("downloads-progress", self.live());
+        self.pump(app);
+    }
+
+    fn drop_cookies(&self, id: &str) {
+        if let Some(p) = self
+            .cookies
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id)
+        {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    fn stop(&self, id: &str, how: Stop) -> bool {
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(r) = running.get_mut(id) {
+            r.stop = Some(how);
+            let pid = r.pid;
+            drop(running);
+            kill_tree(pid);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn pause(&self, app: &AppHandle, id: &str) {
+        if !self.stop(id, Stop::Pause) {
+            // Sırada bekliyorsa sadece durumunu değiştir.
+            let db = app.state::<Db>();
+            let _ = db.conn().execute(
+                "UPDATE downloads SET status = 'paused' WHERE id = ?1 AND status = 'queued'",
+                [id],
+            );
+            emit_changed(app);
+        }
+    }
+
+    pub fn resume(&self, app: &AppHandle, id: &str) {
+        let db = app.state::<Db>();
+        let _ = db.conn().execute(
+            "UPDATE downloads SET status = 'queued', error = NULL, created_at = ?2
+             WHERE id = ?1 AND status IN ('paused', 'error')",
+            params![id, now_ms()],
+        );
+        emit_changed(app);
+        self.pump(app);
+    }
+
+    pub fn cancel(&self, app: &AppHandle, id: &str) {
+        if self.stop(id, Stop::Cancel) {
+            return;
+        }
+        let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
+        if let Ok(Some(d)) = get(&db, id) {
+            if d.status != "done" {
+                remove_partials(
+                    &videos_dir(&dir).join(ytdlp::site_folder(&d.site)),
+                    &d.video_id,
+                );
+                let _ = db
+                    .conn()
+                    .execute("DELETE FROM downloads WHERE id = ?1", [id]);
+                self.drop_cookies(id);
+            }
+        }
+        emit_changed(app);
+    }
+
+    /// Videolarım'dan kaldırır; `delete_file` ise dosyayı da siler.
+    pub fn remove(&self, app: &AppHandle, id: &str, delete_file: bool) -> Result<(), String> {
+        let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
+        let Some(d) = get(&db, id).map_err(|e| e.to_string())? else {
+            return Ok(());
+        };
+        if d.status != "done" {
+            self.cancel(app, id);
+            return Ok(());
+        }
+        // Aynı dosyayı gösteren başka bir kayıt varsa (aynı video iki kez indirildiyse) dosya kalsın.
+        let shared: i64 = db
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM downloads WHERE file_path = ?1 AND id != ?2",
+                params![d.file_path, id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if delete_file && shared == 0 {
+            if let Some(f) = d
+                .file_path
+                .as_deref()
+                .filter(|f| inside(f, &videos_dir(&dir)))
+            {
+                std::fs::remove_file(f)
+                    .or_else(|e| {
+                        if Path::new(f).exists() {
+                            Err(e)
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .map_err(|e| format!("Dosya silinemedi (açık olabilir): {e}"))?;
+            }
+        }
+        if let Some(t) = d
+            .thumbnail
+            .as_deref()
+            .filter(|t| inside(t, &thumbs_dir(&dir)))
+        {
+            let _ = std::fs::remove_file(t);
+        }
+        db.conn()
+            .execute("DELETE FROM downloads WHERE id = ?1", [id])
+            .map_err(|e| e.to_string())?;
+        emit_changed(app);
+        Ok(())
+    }
+
+    /// Uygulama kapanırken: inen işleri durdur (açılışta kaldığı yerden devam edilebilir).
+    pub fn shutdown(&self) {
+        let running = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        for r in running.values() {
+            kill_tree(r.pid);
+        }
+    }
+}
+
+/// Satır satır okur; geçersiz UTF-8 olsa bile okumayı bırakmaz (yoksa yt-dlp'nin çıktısı birikir
+/// ve indirme takılır).
+fn lossy_lines(r: impl Read) -> impl Iterator<Item = String> {
+    let mut reader = BufReader::new(r);
+    std::iter::from_fn(move || {
+        let mut buf = Vec::new();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => Some(
+                String::from_utf8_lossy(&buf)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string(),
+            ),
+        }
+    })
+}
+
+fn inside(path: &str, dir: &Path) -> bool {
+    Path::new(path).starts_with(dir)
+}
+
+/// İptal edilen indirmenin yarım parçalarını siler (`… [kimlik].f137.mp4.part` gibi).
+fn remove_partials(dir: &Path, video_id: &str) {
+    if video_id.is_empty() {
+        return;
+    }
+    let tag = format!("[{video_id}]");
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let partial = name.ends_with(".part")
+            || name.ends_with(".ytdl")
+            || name.contains(".part-Frag")
+            || name.contains(".temp.");
+        if name.contains(&tag) && partial {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
+fn wait_with_timeout(
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> Result<std::process::Output, String> {
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+    let out_t = std::thread::spawn(move || {
+        let mut v = Vec::new();
+        if let Some(s) = stdout.as_mut() {
+            let _ = s.read_to_end(&mut v);
+        }
+        v
+    });
+    let err_t = std::thread::spawn(move || {
+        let mut v = Vec::new();
+        if let Some(s) = stderr.as_mut() {
+            let _ = s.read_to_end(&mut v);
+        }
+        v
+    });
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break s,
+            Ok(None) if start.elapsed() > timeout => {
+                kill_tree(child.id());
+                let _ = child.kill();
+                return Err("Site çok geç yanıt verdi. Tekrar dene.".into());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(e) => return Err(e.to_string()),
+        }
+    };
+    Ok(std::process::Output {
+        status,
+        stdout: out_t.join().unwrap_or_default(),
+        stderr: err_t.join().unwrap_or_default(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn partials_are_removed_but_finished_files_kept() {
+        let dir = std::env::temp_dir().join(format!("gmid-dl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for f in [
+            "Video [abc].f137.mp4.part",
+            "Video [abc].f140.m4a.ytdl",
+            "Video [abc].mp4",
+            "Başka [xyz].mp4.part",
+        ] {
+            std::fs::write(dir.join(f), b"x").unwrap();
+        }
+        remove_partials(&dir, "abc");
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["Başka [xyz].mp4.part", "Video [abc].mp4"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn invalid_utf8_does_not_stop_reading() {
+        let data: &[u8] =
+            b"GMIDP 1|2|NA|NA|NA|137\r\nbozuk \xff\xfe sat\xc4\n\nGMIDFILE C:\\a.mp4\n";
+        let lines: Vec<String> = lossy_lines(data).collect();
+        assert_eq!(lines.len(), 4);
+        assert_eq!(lines[0], "GMIDP 1|2|NA|NA|NA|137");
+        assert_eq!(lines[3], "GMIDFILE C:\\a.mp4");
+    }
+
+    #[test]
+    fn url_validation() {
+        assert!(valid_url("https://www.youtube.com/watch?v=abc"));
+        assert!(!valid_url("file:///C:/x"));
+        assert!(!valid_url("https://a b"));
+        assert!(!valid_url("--exec calc"));
+    }
+}
