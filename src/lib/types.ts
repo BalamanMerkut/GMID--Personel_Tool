@@ -239,6 +239,26 @@ export interface Probe {
   options: QualityOption[];
 }
 
+export interface PlaylistEntry {
+  id: string;
+  url: string;
+  title: string;
+  duration: number | null;
+  uploader: string;
+  thumbnail: string | null;
+}
+
+export interface PlaylistProbe {
+  url: string;
+  title: string;
+  uploader: string;
+  site: string;
+  entries: PlaylistEntry[];
+}
+
+/** Bağlantı tek video mu, çalma listesi mi? */
+export type Parsed = ({ kind: "video" } & Probe) | ({ kind: "playlist" } & PlaylistProbe);
+
 export type DownloadStatus = "queued" | "downloading" | "processing" | "paused" | "done" | "error";
 
 export interface Download {
@@ -260,6 +280,8 @@ export interface Download {
   source: "app" | "extension";
   createdAt: number;
   finishedAt: number | null;
+  /** Çalma listesinden geldiyse listenin adı. */
+  playlist: string | null;
 }
 
 export interface Live {

@@ -117,14 +117,15 @@ const toolsReady = !new URLSearchParams(location.search).has("tools");
 const dl = (o: Partial<Download>): Download => ({
   id: id(), url: "https://www.youtube.com/watch?v=x", videoId: "x", title: "", uploader: "", site: "Youtube", thumbnail: null,
   duration: 300, quality: "1080p", audioOnly: false, status: "done", progress: 1, size: 120_000_000, filePath: "C:\\Videolar\\a.mp4",
-  error: null, source: "app", createdAt: now() - 3_600_000, finishedAt: now() - 3_000_000, ...o,
+  error: null, source: "app", createdAt: now() - 3_600_000, finishedAt: now() - 3_000_000, playlist: null, ...o,
 });
 const downloadsList: Download[] = [
   dl({ title: "Hades II — Tüm silahlar ve en iyi build'ler (Rehber)", uploader: "Supergiant Rehber", status: "downloading", progress: 0.47, size: 412_000_000, finishedAt: null, thumbnail: thumb("#7848a8", "#121417", "HADES II") }),
   dl({ title: "Elden Ring Nightreign ilk bakış", uploader: "Oyun Günlüğü", status: "queued", progress: 0, quality: "720p", size: 180_000_000, finishedAt: null, thumbnail: thumb("#8a7646", "#121417", "NIGHTREIGN") }),
   dl({ title: "Bu clip efsane 😂", uploader: "@merkut", site: "Twitter", status: "error", progress: 0.1, quality: "720p", error: "Bu site giriş istiyor. Tarayıcı eklentisinden indirirsen giriş bilgin kullanılır.", finishedAt: null, thumbnail: thumb("#0b203e", "#35a0a2", "X") }),
   dl({ title: "CoD2 Toujane 1v5 clutch", uploader: "GMID Klipler", duration: 74, size: 48_200_000, thumbnail: thumb("#c9a35a", "#2f3235", "CoD2"), finishedAt: now() - 600_000 }),
-  dl({ title: "Lofi oyun müzikleri · 1 saat", uploader: "Chill Malikâne", quality: "MP3", audioOnly: true, duration: 3600, size: 86_000_000, thumbnail: thumb("#35a0a2", "#121417", "LOFI"), finishedAt: now() - 86_400_000 }),
+  dl({ title: "Lofi oyun müzikleri · 1 saat", uploader: "Chill Malikâne", quality: "MP3", audioOnly: true, duration: 3600, size: 86_000_000, thumbnail: thumb("#35a0a2", "#121417", "LOFI"), finishedAt: now() - 86_400_000, playlist: "GMID Lofi" }),
+  dl({ title: "Gece Sürüşü", uploader: "Chill Malikâne", quality: "MP3", audioOnly: true, duration: 186, size: 7_400_000, thumbnail: thumb("#7848a8", "#121417", "2"), finishedAt: now() - 86_400_000, playlist: "GMID Lofi" }),
   dl({ title: "Minecraft sunucumuzun turu", uploader: "@gmid", site: "Instagram", quality: "1080p", duration: 45, size: 22_000_000, thumbnail: thumb("#e06a6a", "#7848a8", "REELS"), finishedAt: now() - 2 * 86_400_000 }),
   dl({ title: "Stardew Valley ortak çiftlik planı", uploader: "Çiftçi Abi", quality: "1440p", duration: 1260, size: 640_000_000, thumbnail: thumb("#5cc08a", "#0b203e", "STARDEW"), finishedAt: now() - 3 * 86_400_000 }),
 ];
@@ -373,10 +374,22 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "videos_install_tools":
     case "videos_update":
       return handle("videos_tools", {});
-    case "videos_probe":
+    case "videos_probe": {
       await new Promise((r) => setTimeout(r, 900));
-      if (!/^https?:\/\//.test(String(a.url))) throw "Geçerli bir bağlantı yapıştır (https://… ile başlamalı).";
-      return probeResult;
+      const u = String(a.url);
+      if (!/^https?:\/\//.test(u)) throw "Geçerli bir bağlantı yapıştır (https://… ile başlamalı).";
+      if (u.includes("/playlist") || (a.wholeList && u.includes("list="))) {
+        const songs = ["Lo-fi Malikâne", "Gece Sürüşü", "Yağmurlu Kütüphane", "Şömine Başında", "Kale Bahçesi", "Ay Işığı Sonatı (lofi)", "Sabah Kahvesi", "Kuzey Rüzgârı"];
+        return {
+          kind: "playlist", url: u, title: "GMID Lofi · Çalışma ve Oyun", uploader: "Chill Malikâne", site: "YoutubeTab",
+          entries: songs.map((t, i) => ({ id: `s${i}`, url: `https://www.youtube.com/watch?v=s${i}`, title: t, duration: 140 + i * 23, uploader: "Chill Malikâne",
+            thumbnail: thumb(["#35a0a2", "#7848a8", "#e3c270", "#0b203e"][i % 4], "#121417", String(i + 1)) })),
+        };
+      }
+      return { kind: "video", ...probeResult };
+    }
+    case "videos_download_playlist":
+      return (a.ids as string[] | null)?.length ?? 8;
     case "videos_download": {
       const o = probeResult.options.find((x) => x.id === a.option)!;
       const d = dl({ title: probeResult.title, uploader: probeResult.uploader, thumbnail: probeResult.thumbnail, status: "queued", progress: 0,

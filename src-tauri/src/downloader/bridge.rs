@@ -6,6 +6,7 @@
 //!   sonraki her istek bu anahtarı taşır. Kod 10 dakika geçerli, en fazla 5 deneme.
 //! - Web sayfalarından gelen istekler (`Origin: https://…`) reddedilir; sadece eklentiler konuşabilir.
 
+use super::ytdlp::Context;
 use super::Downloader;
 use crate::db::Db;
 use crate::util::now_ms;
@@ -168,16 +169,33 @@ struct PairBody {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ProbeBody {
     url: String,
+    #[serde(default)]
+    context: Context,
+    #[serde(default)]
+    whole_list: bool,
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DownloadBody {
     url: String,
     option: String,
     cookies: Option<String>,
+    #[serde(default)]
+    context: Context,
 }
+
+#[derive(Deserialize)]
+struct PlaylistBody {
+    url: String,
+    option: String,
+    ids: Option<Vec<String>>,
+}
+
+const TOOLS_MISSING: &str = "GMID Tool'da Video İndirici'yi bir kez açıp araçları kur.";
 
 fn handle(app: &AppHandle, mut req: Request) {
     // Web sayfaları buraya istek gönderemesin: sadece eklenti kökenleri (ya da kökensiz) kabul.
@@ -234,13 +252,14 @@ fn handle(app: &AppHandle, mut req: Request) {
                 return reply(req, 400, json!({ "error": "Bağlantı eksik" }));
             };
             let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
-            match app.state::<Downloader>().probe(&root, &b.url) {
+            match app
+                .state::<Downloader>()
+                .probe(&root, &b.url, &b.context, b.whole_list)
+            {
                 Ok(p) => reply(req, 200, json!(p)),
-                Err(e) if e == "TOOLS_MISSING" => reply(
-                    req,
-                    409,
-                    json!({ "error": "GMID Tool'da Video İndirici'yi bir kez açıp araçları kur." }),
-                ),
+                Err(e) if e == "TOOLS_MISSING" => {
+                    reply(req, 409, json!({ "error": TOOLS_MISSING }))
+                }
                 Err(e) => reply(req, 422, json!({ "error": e })),
             }
         }
@@ -248,11 +267,33 @@ fn handle(app: &AppHandle, mut req: Request) {
             let Ok(b) = serde_json::from_str::<DownloadBody>(&body) else {
                 return reply(req, 400, json!({ "error": "Eksik bilgi" }));
             };
-            match app
-                .state::<Downloader>()
-                .enqueue(app, &b.url, &b.option, b.cookies, "extension")
-            {
+            match app.state::<Downloader>().enqueue(
+                app,
+                &b.url,
+                &b.option,
+                b.cookies,
+                "extension",
+                &b.context,
+            ) {
                 Ok(d) => reply(req, 200, json!(d)),
+                Err(e) if e == "TOOLS_MISSING" => {
+                    reply(req, 409, json!({ "error": TOOLS_MISSING }))
+                }
+                Err(e) => reply(req, 422, json!({ "error": e })),
+            }
+        }
+        (Method::Post, "/v1/playlist") => {
+            let Ok(b) = serde_json::from_str::<PlaylistBody>(&body) else {
+                return reply(req, 400, json!({ "error": "Eksik bilgi" }));
+            };
+            match app.state::<Downloader>().enqueue_playlist(
+                app,
+                &b.url,
+                &b.option,
+                b.ids,
+                "extension",
+            ) {
+                Ok(n) => reply(req, 200, json!({ "added": n })),
                 Err(e) => reply(req, 422, json!({ "error": e })),
             }
         }

@@ -83,6 +83,13 @@ const MIGRATIONS: &[&str] = &[
         finished_at   INTEGER
     );
     CREATE INDEX downloads_status ON downloads (status, created_at);",
+    // 6 — çalma listeleri ve eklentinin yakaladığı videolar
+    "ALTER TABLE downloads ADD COLUMN playlist TEXT;
+    ALTER TABLE downloads ADD COLUMN playlist_index INTEGER;
+    -- Videolar\\<Site>\\<alt klasör>: çalma listesinin adı
+    ALTER TABLE downloads ADD COLUMN subdir TEXT;
+    -- Eklentiden: sayfa adresi, tarayıcı kimliği, sayfa başlığı (JSON)
+    ALTER TABLE downloads ADD COLUMN context TEXT;",
 ];
 
 pub struct Db(Mutex<Connection>);

@@ -8,7 +8,7 @@
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { BridgeStatus, Download, Probe, QualityOption, ToolProgress, ToolsState } from "../types";
+  import type { BridgeStatus, Download, PlaylistProbe, Probe, QualityOption, ToolProgress, ToolsState } from "../types";
 
   type Tab = "all" | "YouTube" | "X" | "Instagram" | "audio" | "other";
   const TABS: [Tab, string][] = [["all", "Tümü"], ["YouTube", "YouTube"], ["X", "X"], ["Instagram", "Instagram"], ["audio", "Sesler"], ["other", "Diğer"]];
@@ -17,6 +17,18 @@
   let probing = $state(false);
   let probe: Probe | null = $state(null);
   let probeError: string | null = $state(null);
+  let playlist: PlaylistProbe | null = $state(null);
+  let selected: string[] = $state([]);
+  let plQuality = $state("1080");
+  let plBusy = $state(false);
+  let plFilter: string | null = $state(null);
+  const PL_QUALITIES: [string, string][] = [["1080", "1080p"], ["720", "720p"], ["480", "480p"], ["mp3", "MP3 (sadece ses)"]];
+  /** Video bağlantısı bir çalma listesinin içinden mi açılmış? */
+  const inList = $derived(!!probe && /[?&]list=/.test(url));
+  const plDuration = $derived.by(() => {
+    const p = playlist as PlaylistProbe | null;
+    return p ? p.entries.reduce((sum, e) => sum + (e.duration ?? 0), 0) : 0;
+  });
   let tools: ToolsState | null = $state(null);
   let toolProgress: Record<string, ToolProgress> = $state({});
   let installing = $state(false);
@@ -43,9 +55,13 @@
   const shown = $derived.by(() => {
     const q = search.trim().toLocaleLowerCase("tr-TR");
     return library.filter(
-      (d) => (tab === "all" || tabOf(d) === tab) && (!q || `${d.title} ${d.uploader}`.toLocaleLowerCase("tr-TR").includes(q)),
+      (d) =>
+        (tab === "all" || tabOf(d) === tab) &&
+        (!plFilter || d.playlist === plFilter) &&
+        (!q || `${d.title} ${d.uploader} ${d.playlist ?? ""}`.toLocaleLowerCase("tr-TR").includes(q)),
     );
   });
+  const playlists = $derived([...new Set(library.map((d) => d.playlist).filter((p): p is string => !!p))]);
   const totalSize = $derived(library.reduce((s, d) => s + (d.size ?? 0), 0));
 
   async function loadTools() {
@@ -82,14 +98,21 @@
 
   // ---- bağlantı ve kalite ----
 
-  async function getQualities() {
+  async function getQualities(wholeList = false) {
     const u = url.trim();
     if (!u) return;
     probing = true;
     probe = null;
+    playlist = null;
     probeError = null;
     try {
-      probe = await api.videos.probe(u);
+      const r = await api.videos.probe(u, wholeList);
+      if (r.kind === "playlist") {
+        playlist = r;
+        selected = r.entries.map((e) => e.id);
+      } else {
+        probe = r;
+      }
     } catch (e) {
       const msg = String(e);
       probeError = msg === "TOOLS_MISSING" ? "Önce aşağıdaki indirme araçlarını kur (bir kez)." : msg;
@@ -127,6 +150,26 @@
       url = "";
     } catch (e) {
       notify(String(e), "info");
+    }
+  }
+
+  function toggleEntry(id: string) {
+    selected = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+  }
+
+  async function startPlaylist() {
+    if (!playlist || !selected.length) return;
+    plBusy = true;
+    try {
+      const all = selected.length === playlist.entries.length;
+      const n = await api.videos.downloadPlaylist(playlist.url, plQuality, all ? null : selected);
+      notify(`${n} ${plQuality === "mp3" ? "şarkı" : "video"} sıraya eklendi · ${playlist.title}`, "download");
+      playlist = null;
+      url = "";
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      plBusy = false;
     }
   }
 
@@ -238,11 +281,11 @@
         placeholder="Video bağlantısını yapıştır — YouTube, X, Instagram, TikTok…"
         bind:value={url}
         onpaste={onPaste}
-        onkeydown={(e) => e.key === "Enter" && getQualities()}
+        onkeydown={(e) => e.key === "Enter" && void getQualities()}
         aria-label="Video bağlantısı"
       />
       <button class="btn ghost" onclick={pasteFromClipboard} title="Panodan yapıştır"><Icon name="copy" size={18} />Yapıştır</button>
-      <button class="btn" onclick={getQualities} disabled={probing || !url.trim()}>
+      <button class="btn" onclick={() => getQualities()} disabled={probing || !url.trim()}>
         {#if probing}<span class="spin"><Icon name="refresh" size={18} /></span>Bakılıyor…{:else}<Icon name="search" size={18} />Kaliteleri getir{/if}
       </button>
     </div>
@@ -267,7 +310,49 @@
               </button>
             {/each}
           </div>
+          {#if inList}
+            <button class="btn ghost sm listbtn" onclick={() => getQualities(true)}><Icon name="list" size={16} />Bu çalma listesinin tamamını getir</button>
+          {/if}
         </div>
+      </div>
+    {:else if playlist}
+      <div class="pl">
+        <div class="plhead">
+          <div class="pltitle">
+            <b class="ptitle">{playlist.title}</b>
+            <span class="sub small tnum">
+              {[playlist.uploader, siteLabel(playlist.site), `${playlist.entries.length} video`, plDuration ? formatDuration(plDuration) : ""].filter(Boolean).join(" · ")}
+            </span>
+          </div>
+          <div class="seg">
+            {#each PL_QUALITIES as [q, label] (q)}
+              <button aria-pressed={plQuality === q} onclick={() => (plQuality = q)}>{label}</button>
+            {/each}
+          </div>
+        </div>
+        <div class="spread">
+          <span class="row">
+            <button class="link" onclick={() => (selected = playlist?.entries.map((e) => e.id) ?? [])}>Tümünü seç</button>
+            <button class="link" onclick={() => (selected = [])}>Hiçbiri</button>
+            <span class="sub small">Dosyalar listenin adıyla ayrı bir klasöre iner.</span>
+          </span>
+          <button class="btn" onclick={startPlaylist} disabled={plBusy || !selected.length}>
+            <Icon name="download" size={18} />Seçilenleri indir ({selected.length})
+          </button>
+        </div>
+        <ol class="entries">
+          {#each playlist.entries as e, i (e.id)}
+            <li class:off={!selected.includes(e.id)}>
+              <label>
+                <input type="checkbox" checked={selected.includes(e.id)} onchange={() => toggleEntry(e.id)} />
+                <span class="idx tnum">{i + 1}</span>
+                <span class="ethumb">{#if thumbSrc(e.thumbnail)}<img src={thumbSrc(e.thumbnail)} alt="" loading="lazy" />{/if}</span>
+                <span class="etxt"><span class="et">{e.title}</span><span class="sub small">{e.uploader}</span></span>
+                <span class="sub small tnum">{formatDuration(e.duration)}</span>
+              </label>
+            </li>
+          {/each}
+        </ol>
       </div>
     {:else if !probing && !probeError}
       <p class="sub small hint">
@@ -358,6 +443,15 @@
             {/if}
           {/each}
         </div>
+        {#if playlists.length}
+          <div class="lists">
+            <span class="sub small">Listeler:</span>
+            <button class="chipbtn" aria-pressed={!plFilter} onclick={() => (plFilter = null)}>Hepsi</button>
+            {#each playlists as p (p)}
+              <button class="chipbtn" aria-pressed={plFilter === p} onclick={() => (plFilter = plFilter === p ? null : p)}><Icon name="list" size={13} />{p}</button>
+            {/each}
+          </div>
+        {/if}
         <div class="grid">
           {#each shown as d (d.id)}
             <article
@@ -521,6 +615,23 @@
   .qgo { grid-area: g; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--gold); }
   .tag { font-family: var(--f-body); font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 999px; padding: 0 6px; }
 
+  .listbtn { align-self: flex-start; margin-top: 8px; }
+  .pl { display: flex; flex-direction: column; gap: 12px; }
+  .plhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+  .pltitle { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .entries { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 12px; padding: 6px; }
+  .entries li label { display: grid; grid-template-columns: auto 28px 64px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+  .entries li label:hover { background: rgba(255, 255, 255, 0.04); }
+  .entries li.off { opacity: 0.45; }
+  .entries input { accent-color: var(--gold); width: 16px; height: 16px; }
+  .idx { color: var(--dim); text-align: right; font-size: 12px; }
+  .ethumb { aspect-ratio: 16 / 9; border-radius: 5px; overflow: hidden; background: var(--coal-2); }
+  .ethumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .etxt { display: flex; flex-direction: column; min-width: 0; }
+  .et { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lists { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .lists .chipbtn { font-family: var(--f-body); }
+  .chipbtn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
   .tools { display: flex; flex-direction: column; gap: 10px; border-color: rgba(53, 160, 162, 0.5); }
   .tool { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
   .tn { display: flex; flex-direction: column; }

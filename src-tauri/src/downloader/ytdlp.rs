@@ -55,10 +55,31 @@ struct RawFormat {
     format_note: Option<String>,
 }
 
+#[derive(Deserialize, Default)]
+struct RawThumb {
+    url: Option<String>,
+    width: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct RawEntry {
+    id: Option<String>,
+    url: Option<String>,
+    title: Option<String>,
+    duration: Option<f64>,
+    channel: Option<String>,
+    uploader: Option<String>,
+    #[serde(default)]
+    thumbnails: Vec<RawThumb>,
+}
+
 #[derive(Deserialize)]
 struct RawInfo {
     #[serde(rename = "_type")]
     kind: Option<String>,
+    #[serde(default)]
+    entries: Vec<RawEntry>,
+    playlist_count: Option<u32>,
     id: Option<String>,
     title: Option<String>,
     uploader: Option<String>,
@@ -136,13 +157,155 @@ impl RawFormat {
     }
 }
 
-/// `yt-dlp -J` çıktısını kalite seçeneklerine çevirir.
-pub fn parse_probe(json: &[u8], fallback_url: &str) -> Result<Probe, String> {
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistEntry {
+    pub id: String,
+    pub url: String,
+    pub title: String,
+    pub duration: Option<f64>,
+    pub uploader: String,
+    pub thumbnail: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistProbe {
+    pub url: String,
+    pub title: String,
+    pub uploader: String,
+    pub site: String,
+    pub entries: Vec<PlaylistEntry>,
+}
+
+/// Bağlantı tek bir video mu, bir çalma listesi mi?
+#[derive(Serialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Parsed {
+    Video(Probe),
+    Playlist(PlaylistProbe),
+}
+
+/// Video ayrıca çözümlenmeden kullanılan kalite: "1080" → en fazla 1080p, "mp3" → sadece ses.
+/// Önce MP4+M4A, sonra WebM+Opus eşleşmesi aranır (uygulama içinde oynatılabilsin diye).
+pub fn generic_option(id: &str) -> QualityOption {
+    if id == "mp3" {
+        return QualityOption {
+            id: "mp3".into(),
+            label: "Sadece ses".into(),
+            detail: "MP3".into(),
+            size: None,
+            audio_only: true,
+            recommended: false,
+            format: "ba/b".into(),
+            parts: 1,
+        };
+    }
+    let h: u32 = id.parse().unwrap_or(1080).clamp(144, 4320);
+    QualityOption {
+        id: h.to_string(),
+        label: height_label(h),
+        detail: String::new(),
+        size: None,
+        audio_only: false,
+        recommended: h == 1080,
+        format: format!(
+            "bv*[height<={h}][ext=mp4]+ba[ext=m4a]/bv*[height<={h}][ext=webm]+ba[ext=webm]/bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/b"
+        ),
+        parts: 2,
+    }
+}
+
+/// İstenen kaliteyi seçer; tam yoksa istenenin altındaki en yükseği, o da yoksa en düşüğü.
+/// "auto" (ya da bilinmeyen) önerileni seçer. Eklentinin sağ tık menüsündeki sabit kaliteler için.
+pub fn choose(options: &[QualityOption], id: &str) -> Option<QualityOption> {
+    if let Some(o) = options.iter().find(|o| o.id == id) {
+        return Some(o.clone());
+    }
+    if id == "mp3" {
+        return options.iter().find(|o| o.audio_only).cloned();
+    }
+    let videos = options.iter().filter(|o| !o.audio_only);
+    if let Ok(want) = id.parse::<u32>() {
+        let height = |o: &&QualityOption| o.id.parse::<u32>().ok();
+        let below = videos
+            .clone()
+            .filter(|o| height(o).is_some_and(|h| h <= want))
+            .max_by_key(|o| height(o));
+        if let Some(o) = below.or_else(|| videos.clone().min_by_key(|o| height(o))) {
+            return Some(o.clone());
+        }
+    }
+    options
+        .iter()
+        .find(|o| o.recommended)
+        .or(options.first())
+        .cloned()
+}
+
+/// `yt-dlp -J` çıktısını ayrıştırır: tek video ya da (düz) çalma listesi.
+pub fn parse_any(json: &[u8], fallback_url: &str) -> Result<Parsed, String> {
     let info: RawInfo =
         serde_json::from_slice(json).map_err(|_| "Video bilgisi okunamadı".to_string())?;
     if info.kind.as_deref() == Some("playlist") {
-        return Err("Bu bir oynatma listesi. Şimdilik videolar tek tek indirilebiliyor.".into());
+        return parse_playlist(info, fallback_url).map(Parsed::Playlist);
     }
+    parse_info(info, fallback_url).map(Parsed::Video)
+}
+
+fn parse_playlist(info: RawInfo, fallback_url: &str) -> Result<PlaylistProbe, String> {
+    let entries: Vec<PlaylistEntry> = info
+        .entries
+        .into_iter()
+        .filter_map(|e| {
+            let id = e.id?;
+            let url = e
+                .url
+                .filter(|u| u.starts_with("http"))
+                .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={id}"));
+            // Silinmiş / gizli videolar listede başlıksız durur.
+            let title = e
+                .title
+                .filter(|t| !t.starts_with('[') || !t.ends_with(" video]"))?;
+            let thumbnail = e
+                .thumbnails
+                .iter()
+                .filter(|t| t.url.is_some())
+                .min_by_key(|t| t.width.unwrap_or(0).abs_diff(480))
+                .and_then(|t| t.url.clone());
+            Some(PlaylistEntry {
+                id,
+                url,
+                title,
+                duration: e.duration,
+                uploader: e.channel.or(e.uploader).unwrap_or_default(),
+                thumbnail,
+            })
+        })
+        .collect();
+    if entries.is_empty() {
+        return Err("Çalma listesi boş ya da videoları gizli.".into());
+    }
+    let _ = info.playlist_count;
+    Ok(PlaylistProbe {
+        url: info.webpage_url.unwrap_or_else(|| fallback_url.to_string()),
+        title: info.title.unwrap_or_else(|| "Çalma listesi".into()),
+        uploader: info.uploader.or(info.channel).unwrap_or_default(),
+        site: info.extractor_key.unwrap_or_else(|| "Youtube".into()),
+        entries,
+    })
+}
+
+/// Tek video için (testlerde ve eski çağrılarda) kısa yol.
+#[cfg(test)]
+pub fn parse_probe(json: &[u8], fallback_url: &str) -> Result<Probe, String> {
+    match parse_any(json, fallback_url)? {
+        Parsed::Video(p) => Ok(p),
+        Parsed::Playlist(_) => Err("Bu bir çalma listesi.".into()),
+    }
+}
+
+fn parse_info(info: RawInfo, fallback_url: &str) -> Result<Probe, String> {
     if info.is_live == Some(true) {
         return Err("Canlı yayın indirilemez. Yayın bitince tekrar dene.".into());
     }
@@ -163,6 +326,13 @@ pub fn parse_probe(json: &[u8], fallback_url: &str) -> Result<Probe, String> {
         .iter()
         .filter(|f| !f.has_video())
         .max_by_key(|f| f.audio_rank())
+        .copied();
+    // WebM (VP9) görüntüyle WebM (Opus) ses: dosya WebM olur ve uygulama içinde oynatılabilir
+    // (VP9 + M4A ancak MKV'ye sığar, MKV de uygulamada oynamaz).
+    let webm_audio = usable
+        .iter()
+        .filter(|f| !f.has_video() && f.ext.as_deref() == Some("webm"))
+        .max_by_key(|f| (f.abr.or(f.tbr).unwrap_or(0.0) * 10.0) as u64)
         .copied();
 
     let mut heights: Vec<u32> = usable
@@ -189,7 +359,12 @@ pub fn parse_probe(json: &[u8], fallback_url: &str) -> Result<Probe, String> {
         };
         let vid = v.format_id.as_deref().unwrap_or_default();
         let generic = format!("bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/b");
-        let (format, size, parts) = match audio {
+        let pair = if v.ext.as_deref() == Some("webm") {
+            webm_audio.or(audio)
+        } else {
+            audio
+        };
+        let (format, size, parts) = match pair {
             Some(a) if !v.has_audio() || v.acodec.is_none() && v.vcodec.is_some() => {
                 let aid = a.format_id.as_deref().unwrap_or_default();
                 let size = v.size(duration).zip(a.size(duration)).map(|(x, y)| x + y);
@@ -201,10 +376,11 @@ pub fn parse_probe(json: &[u8], fallback_url: &str) -> Result<Probe, String> {
             .fps
             .filter(|f| *f > 31.0)
             .map(|f| format!("{} fps", f.round()));
-        let container = if v.codec().starts_with("avc") || v.ext.as_deref() == Some("mp4") {
-            "MP4"
-        } else {
-            "MKV"
+        let container = match (v.ext.as_deref(), pair.and_then(|a| a.ext.as_deref())) {
+            (Some("webm"), Some("webm")) | (Some("webm"), None) => "WebM",
+            (Some("mp4"), _) => "MP4",
+            _ if v.codec().starts_with("avc") => "MP4",
+            _ => "MKV",
         };
         let detail = [fps, Some(container.to_string())]
             .into_iter()
@@ -297,28 +473,93 @@ pub fn site_folder(site: &str) -> &'static str {
 }
 
 /// İndirme komutunun argümanları.
+/// Eklentinin yakaladığı videolar için: sayfa adresi, tarayıcı kimliği ve sayfa başlığı.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Context {
+    pub referer: Option<String>,
+    pub user_agent: Option<String>,
+    /// Dosya adı için sayfa başlığı (site videoyu tanımıyorsa).
+    pub title: Option<String>,
+}
+
+impl Context {
+    /// yt-dlp argümanları (çözümleme ve indirme için ortak).
+    pub fn args(&self) -> Vec<String> {
+        let mut a = Vec::new();
+        if let Some(r) = self.referer.as_deref().filter(|r| r.starts_with("http")) {
+            a.push("--referer".into());
+            a.push(r.to_string());
+            if let Some(origin) = origin_of(r) {
+                a.push("--add-header".into());
+                a.push(format!("Origin:{origin}"));
+            }
+        }
+        if let Some(ua) = self.user_agent.as_deref().filter(|u| !u.is_empty()) {
+            a.push("--user-agent".into());
+            a.push(ua.chars().filter(|c| !c.is_control()).take(400).collect());
+        }
+        a
+    }
+}
+
+fn origin_of(url: &str) -> Option<String> {
+    let rest = url.split_once("://")?;
+    let host = rest.1.split(['/', '?', '#']).next()?;
+    Some(format!("{}://{host}", rest.0))
+}
+
+/// Dosya/klasör adında Windows'un kabul etmediği karakterleri temizler.
+pub fn safe_name(name: &str, max: usize) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .take(max)
+        .collect();
+    let trimmed = cleaned.trim().trim_end_matches(['.', ' ']).to_string();
+    if trimmed.is_empty() {
+        "Video".into()
+    } else {
+        trimmed
+    }
+}
+
 pub fn download_args(
     url: &str,
     option: &QualityOption,
     out_dir: &Path,
     thumbs_dir: &Path,
     cookies: Option<&Path>,
+    ctx: &Context,
 ) -> Vec<String> {
+    // Sayfa başlığı verildiyse (tanınmayan site) dosya adı o olur; yoksa sitenin başlığı.
+    let name = ctx
+        .title
+        .as_deref()
+        .map(|t| safe_name(t, 150).replace('%', "%%"))
+        .unwrap_or_else(|| "%(title).150B".into());
     let mut a: Vec<String> = vec![
         "--no-playlist".into(),
         "--newline".into(),
         "--progress".into(),
         "--no-mtime".into(),
         "--windows-filenames".into(),
+        // Parçalı yayınlarda (HLS/DASH) 4 parça birden: IDM'deki gibi daha hızlı.
+        "--concurrent-fragments".into(),
+        "4".into(),
         "-f".into(),
         option.format.clone(),
         "-o".into(),
         out_dir
             .join(if option.audio_only {
                 // Ses ayrı adla: aynı videonun MP4'ü varsa yt-dlp onu ses için kullanıp silmesin.
-                "%(title).150B [%(id)s] (ses).%(ext)s"
+                format!("{name} [%(id)s] (ses).%(ext)s")
             } else {
-                "%(title).150B [%(id)s]%(height& {}p|)s.%(ext)s"
+                format!("{name} [%(id)s]%(height& {{}}p|)s.%(ext)s")
             })
             .to_string_lossy()
             .into_owned(),
@@ -344,12 +585,14 @@ pub fn download_args(
                 .map(|s| s.to_string()),
         );
     } else {
-        a.extend(["--merge-output-format".into(), "mp4/mkv".into()]);
+        // MP4 ya da WebM: ikisi de uygulama içinde oynar; uymazsa MKV.
+        a.extend(["--merge-output-format".into(), "mp4/webm/mkv".into()]);
     }
     if let Some(c) = cookies {
         a.push("--cookies".into());
         a.push(c.to_string_lossy().into_owned());
     }
+    a.extend(ctx.args());
     a.push("--".into());
     a.push(url.into());
     a
@@ -520,8 +763,68 @@ mod tests {
     }
 
     #[test]
+    fn playlists_are_parsed() {
+        let json = r#"{"_type":"playlist","id":"PL1","title":"Lofi 🎧","channel":"Chill","extractor_key":"YoutubeTab",
+            "webpage_url":"https://www.youtube.com/playlist?list=PL1","entries":[
+            {"id":"a1","url":"https://www.youtube.com/watch?v=a1","title":"Bir","duration":120,"channel":"X",
+             "thumbnails":[{"url":"https://i.ytimg.com/a1/s.jpg","width":168},{"url":"https://i.ytimg.com/a1/m.jpg","width":480}]},
+            {"id":"a2","url":null,"title":"[Private video]"},
+            {"id":"a3","title":"Üç"}]}"#;
+        let Parsed::Playlist(p) = parse_any(json.as_bytes(), "x").unwrap() else {
+            panic!()
+        };
+        assert_eq!(p.title, "Lofi 🎧");
+        assert_eq!(p.entries.len(), 2, "gizli video atlanır");
+        assert_eq!(
+            p.entries[0].thumbnail.as_deref(),
+            Some("https://i.ytimg.com/a1/m.jpg")
+        );
+        assert_eq!(p.entries[1].url, "https://www.youtube.com/watch?v=a3");
+        assert_eq!(site_folder(&p.site), "YouTube");
+    }
+
+    #[test]
+    fn nearest_quality_is_chosen() {
+        let p = parse_probe(YT.as_bytes(), "x").unwrap();
+        assert_eq!(choose(&p.options, "1440").unwrap().id, "1080");
+        assert_eq!(choose(&p.options, "720").unwrap().id, "720");
+        assert_eq!(choose(&p.options, "240").unwrap().id, "360");
+        assert_eq!(choose(&p.options, "mp3").unwrap().id, "mp3");
+        assert_eq!(choose(&p.options, "auto").unwrap().id, "1080");
+        assert!(generic_option("720").format.contains("height<=720"));
+        assert!(generic_option("mp3").audio_only);
+    }
+
+    #[test]
+    fn names_and_context() {
+        assert_eq!(safe_name(" Film: Bölüm 1/2? ", 50), "Film_ Bölüm 1_2_");
+        assert_eq!(safe_name("...", 10), "Video");
+        let ctx = Context {
+            referer: Some("https://site.example/izle/1".into()),
+            user_agent: Some("UA".into()),
+            title: Some("%100 Gerçek".into()),
+        };
+        let a = download_args(
+            "https://cdn.example/v.m3u8",
+            &generic_option("720"),
+            Path::new("/v"),
+            Path::new("/t"),
+            None,
+            &ctx,
+        );
+        assert!(a
+            .windows(2)
+            .any(|w| w[0] == "--referer" && w[1] == "https://site.example/izle/1"));
+        assert!(a
+            .windows(2)
+            .any(|w| w[0] == "--add-header" && w[1] == "Origin:https://site.example"));
+        assert!(a.iter().any(|x| x.contains("%%100 Gerçek [%(id)s]")));
+        assert_eq!(a.last().unwrap(), "https://cdn.example/v.m3u8");
+    }
+
+    #[test]
     fn playlists_and_live_are_rejected() {
-        assert!(parse_probe(br#"{"_type":"playlist","entries":[]}"#, "x").is_err());
+        assert!(parse_any(br#"{"_type":"playlist","entries":[]}"#, "x").is_err());
         assert!(parse_probe(br#"{"is_live":true,"formats":[]}"#, "x").is_err());
     }
 

@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, Download, GameInfo, Live, Probe, ToolsState, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, Download, GameInfo, Live, Parsed, ToolsState, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -199,7 +199,11 @@ export const api = {
     tools: () => call<ToolsState>("videos_tools"),
     installTools: (force = false) => call<ToolsState>("videos_install_tools", { force }),
     update: (force = false) => call<ToolsState>("videos_update", { force }),
-    probe: (url: string) => call<Probe>("videos_probe", { url }),
+    /** `wholeList`: video bağlantısındaki çalma listesinin tamamını getir. */
+    probe: (url: string, wholeList = false) => call<Parsed>("videos_probe", { url, wholeList }),
+    /** `ids` boşsa listenin tamamı. Eklenen video sayısını döner. */
+    downloadPlaylist: (url: string, option: string, ids: string[] | null) =>
+      call<number>("videos_download_playlist", { url, option, ids }),
     download: (url: string, option: string) => call<Download>("videos_download", { url, option }),
     list: () => call<Download[]>("videos_list"),
     live: () => call<Live[]>("videos_live"),

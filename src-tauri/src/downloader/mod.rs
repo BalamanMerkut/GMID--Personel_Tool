@@ -21,7 +21,7 @@ use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
-use ytdlp::{Line, Probe, QualityOption};
+use ytdlp::{Context, Line, Parsed, PlaylistProbe, QualityOption};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(90);
 /// Çözümlenen videolar bu süre boyunca hatırlanır (kalite seçilene kadar tekrar sorulmasın).
@@ -52,6 +52,10 @@ pub struct Download {
     pub source: String,
     pub created_at: i64,
     pub finished_at: Option<i64>,
+    /// Çalma listesinden geldiyse listenin adı.
+    pub playlist: Option<String>,
+    #[serde(skip)]
+    pub subdir: Option<String>,
 }
 
 /// İnmekte olan bir işin anlık durumu (veritabanına yazılmaz).
@@ -70,7 +74,7 @@ pub struct Live {
 
 const COLUMNS: &str =
     "id, url, video_id, title, uploader, site, thumbnail, duration, quality, audio_only,
-    status, progress, size, file_path, error, source, created_at, finished_at";
+    status, progress, size, file_path, error, source, created_at, finished_at, playlist, subdir";
 
 fn from_row(r: &Row) -> rusqlite::Result<Download> {
     Ok(Download {
@@ -92,6 +96,8 @@ fn from_row(r: &Row) -> rusqlite::Result<Download> {
         source: r.get(15)?,
         created_at: r.get(16)?,
         finished_at: r.get(17)?,
+        playlist: r.get(18)?,
+        subdir: r.get(19)?,
     })
 }
 
@@ -144,7 +150,7 @@ struct Running {
 #[derive(Default)]
 pub struct Downloader {
     running: Mutex<HashMap<String, Running>>,
-    probes: Mutex<Vec<(Instant, String, Probe)>>,
+    probes: Mutex<Vec<(Instant, String, Parsed)>>,
     /// İş kimliği → eklentiden gelen geçici çerez dosyası.
     cookies: Mutex<HashMap<String, PathBuf>>,
 }
@@ -163,6 +169,15 @@ fn videos_dir(dir: &DataDir) -> PathBuf {
     dir.folder(Some("Videolar"))
 }
 
+/// İndirmenin klasörü: `Videolar\<Site>\[<Çalma listesi>]`.
+fn out_dir(dir: &DataDir, site: &str, subdir: Option<&str>) -> PathBuf {
+    let base = videos_dir(dir).join(ytdlp::site_folder(site));
+    match subdir.filter(|s| !s.is_empty()) {
+        Some(s) => base.join(ytdlp::safe_name(s, 80)),
+        None => base,
+    }
+}
+
 fn thumbs_dir(dir: &DataDir) -> PathBuf {
     dir.folder(Some("Kapaklar")).join("Videolar")
 }
@@ -173,22 +188,33 @@ impl Downloader {
         running.values().map(|r| r.live.clone()).collect()
     }
 
-    fn cached_probe(&self, url: &str) -> Option<Probe> {
+    fn cached_probe(&self, key: &str) -> Option<Parsed> {
         let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
         probes.retain(|(t, _, _)| t.elapsed() < PROBE_CACHE);
         probes
             .iter()
-            .find(|(_, u, p)| u == url || p.url == url)
+            .find(|(_, k, _)| k == key)
             .map(|(_, _, p)| p.clone())
     }
 
-    /// Bağlantıdaki videoyu çözümler: başlık, küçük resim ve kalite seçenekleri.
-    pub fn probe(&self, root: &Path, url: &str) -> Result<Probe, String> {
+    /// Bağlantıyı çözümler: tek videoysa başlık ve kalite seçenekleri, çalma listesiyse videoları.
+    /// `whole_list`: `watch?v=…&list=…` gibi bağlantılarda videonun değil listenin tamamını getir.
+    pub fn probe(
+        &self,
+        root: &Path,
+        url: &str,
+        ctx: &Context,
+        whole_list: bool,
+    ) -> Result<Parsed, String> {
         let url = url.trim();
         if !valid_url(url) {
             return Err("Geçerli bir bağlantı yapıştır (https://… ile başlamalı).".into());
         }
-        if let Some(p) = self.cached_probe(url) {
+        let key = format!(
+            "{whole_list}|{url}|{}",
+            ctx.referer.as_deref().unwrap_or("")
+        );
+        if let Some(p) = self.cached_probe(&key) {
             return Ok(p);
         }
         if !tools::ytdlp_path(root).is_file() {
@@ -197,11 +223,16 @@ impl Downloader {
         let mut cmd = tools::ytdlp(root);
         cmd.args([
             "-J",
-            "--no-playlist",
+            if whole_list {
+                "--yes-playlist"
+            } else {
+                "--no-playlist"
+            },
             "--flat-playlist",
             "--no-warnings",
-            "--",
         ])
+        .args(ctx.args())
+        .arg("--")
         .arg(url)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -213,13 +244,19 @@ impl Downloader {
         if !out.status.success() || out.stdout.is_empty() {
             return Err(ytdlp::friendly_error(&String::from_utf8_lossy(&out.stderr)));
         }
-        let probe = ytdlp::parse_probe(&out.stdout, url)?;
+        let mut parsed = ytdlp::parse_any(&out.stdout, url)?;
+        // Site videoyu tanımıyorsa (eklentinin yakaladığı doğrudan dosya) başlık sayfadan gelir.
+        if let (Parsed::Video(p), Some(t)) = (&mut parsed, ctx.title.as_deref()) {
+            if p.site.eq_ignore_ascii_case("generic") && !t.trim().is_empty() {
+                p.title = t.trim().chars().take(200).collect();
+            }
+        }
         let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
-        probes.push((Instant::now(), url.to_string(), probe.clone()));
+        probes.push((Instant::now(), key, parsed.clone()));
         if probes.len() > 30 {
             probes.remove(0);
         }
-        Ok(probe)
+        Ok(parsed)
     }
 
     /// Seçilen kaliteyi sıraya ekler. `cookies`: eklentinin verdiği (Netscape biçimli) çerezler.
@@ -230,17 +267,29 @@ impl Downloader {
         option_id: &str,
         cookies: Option<String>,
         source: &str,
+        ctx: &Context,
     ) -> Result<Download, String> {
         let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
-        let probe = self.probe(dir.root(), url)?;
-        let option = probe
-            .options
-            .iter()
-            .find(|o| o.id == option_id)
-            .or_else(|| probe.options.iter().find(|o| o.recommended))
-            .or(probe.options.first())
-            .ok_or("Kalite bulunamadı")?
-            .clone();
+        let probe = match self.probe(dir.root(), url, ctx, false)? {
+            Parsed::Video(p) => p,
+            Parsed::Playlist(_) => return Err("PLAYLIST".into()),
+        };
+        let option = ytdlp::choose(&probe.options, option_id).ok_or("Kalite bulunamadı")?;
+        // Sayfa bilgisi sadece site videoyu tanımıyorsa saklanır (dosya adı ve erişim için).
+        let ctx = if probe.site.eq_ignore_ascii_case("generic") {
+            Context {
+                title: Some(probe.title.clone()),
+                ..ctx.clone()
+            }
+        } else {
+            Context {
+                title: None,
+                ..ctx.clone()
+            }
+        };
+        let context = (ctx != Context::default())
+            .then(|| serde_json::to_string(&ctx).ok())
+            .flatten();
 
         let id = new_id();
         let quality = if option.audio_only {
@@ -253,8 +302,8 @@ impl Downloader {
         db.conn()
             .execute(
                 "INSERT INTO downloads (id, url, video_id, title, uploader, site, thumbnail, duration,
-                    quality, option_format, parts, audio_only, status, progress, size, source, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 'queued', 0, ?13, ?14, ?15)",
+                    quality, option_format, parts, audio_only, status, progress, size, source, created_at, context)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 'queued', 0, ?13, ?14, ?15, ?16)",
                 params![
                     id,
                     probe.url,
@@ -270,7 +319,8 @@ impl Downloader {
                     option.audio_only,
                     option.size.map(|s| s as i64),
                     source,
-                    now_ms()
+                    now_ms(),
+                    context
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -291,6 +341,81 @@ impl Downloader {
             .ok_or_else(|| "Eklenemedi".into())
     }
 
+    /// Çalma listesindeki videoları (ya da seçilenleri) sıraya ekler. Her video ayrıca çözümlenmez;
+    /// kalite "en fazla 1080p" gibi genel bir seçimle iner. Dosyalar listenin adıyla bir klasöre gider.
+    pub fn enqueue_playlist(
+        &self,
+        app: &AppHandle,
+        url: &str,
+        option_id: &str,
+        ids: Option<Vec<String>>,
+        source: &str,
+    ) -> Result<usize, String> {
+        let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
+        let list: PlaylistProbe = match self.probe(dir.root(), url, &Context::default(), true)? {
+            Parsed::Playlist(p) => p,
+            Parsed::Video(_) => return Err("Bu bağlantı bir çalma listesi değil.".into()),
+        };
+        let option = ytdlp::generic_option(option_id);
+        let quality = if option.audio_only {
+            "MP3".to_string()
+        } else {
+            format!("{}p", option.id)
+        };
+        let folder = ytdlp::safe_name(&list.title, 80);
+        let site = if list.site.to_ascii_lowercase().starts_with("youtube") {
+            "Youtube".to_string()
+        } else {
+            list.site.clone()
+        };
+        let now = now_ms();
+        let mut added = 0usize;
+        {
+            let mut conn = db.conn();
+            let tx = conn.transaction().map_err(|e| e.to_string())?;
+            for (i, e) in list.entries.iter().enumerate() {
+                if ids.as_ref().is_some_and(|ids| !ids.contains(&e.id)) {
+                    continue;
+                }
+                tx.execute(
+                    "INSERT INTO downloads (id, url, video_id, title, uploader, site, thumbnail, duration,
+                        quality, option_format, parts, audio_only, status, progress, source, created_at,
+                        playlist, subdir, playlist_index)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 'queued', 0, ?13, ?14, ?15, ?16, ?17)",
+                    params![
+                        new_id(),
+                        e.url,
+                        e.id,
+                        e.title,
+                        e.uploader,
+                        site,
+                        e.thumbnail,
+                        e.duration,
+                        quality,
+                        option.format,
+                        option.parts,
+                        option.audio_only,
+                        source,
+                        // Sıra korunsun diye her biri bir milisaniye sonra.
+                        now + i as i64,
+                        list.title,
+                        folder,
+                        i as i64 + 1
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+                added += 1;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        if added == 0 {
+            return Err("Hiç video seçilmedi.".into());
+        }
+        emit_changed(app);
+        self.pump(app);
+        Ok(added)
+    }
+
     /// Boşta yer varsa sıradakileri başlatır.
     pub fn pump(&self, app: &AppHandle) {
         let db = app.state::<Db>();
@@ -306,21 +431,32 @@ impl Downloader {
         if running.len() >= max {
             return;
         }
-        let queued: Vec<(String, String, String, u8, bool)> = {
+        type Row = (String, String, String, u8, bool, Option<String>);
+        let queued: Vec<Row> = {
             let conn = db.conn();
             let Ok(mut stmt) = conn.prepare(
-                "SELECT id, url, option_format, parts, audio_only FROM downloads
+                "SELECT id, url, option_format, parts, audio_only, context FROM downloads
                  WHERE status = 'queued' ORDER BY created_at LIMIT 8",
             ) else {
                 return;
             };
             stmt.query_map([], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
             })
             .map(|rows| rows.filter_map(Result::ok).collect())
             .unwrap_or_default()
         };
-        for (id, url, format, parts, audio_only) in queued {
+        for (id, url, format, parts, audio_only, context) in queued {
+            let ctx: Context = context
+                .and_then(|c| serde_json::from_str(&c).ok())
+                .unwrap_or_default();
             if running.len() >= max {
                 break;
             }
@@ -337,7 +473,7 @@ impl Downloader {
                 format,
                 parts,
             };
-            match self.start(app, &id, &url, &option) {
+            match self.start(app, &id, &url, &option, &ctx) {
                 Ok(pid) => {
                     running.insert(
                         id.clone(),
@@ -369,16 +505,19 @@ impl Downloader {
         id: &str,
         url: &str,
         option: &QualityOption,
+        ctx: &Context,
     ) -> Result<u32, String> {
         let dir = app.state::<DataDir>();
         let db = app.state::<Db>();
-        let site: String = db
+        let (site, subdir): (String, Option<String>) = db
             .conn()
-            .query_row("SELECT site FROM downloads WHERE id = ?1", [id], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT site, subdir FROM downloads WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .unwrap_or_default();
-        let out_dir = videos_dir(&dir).join(ytdlp::site_folder(&site));
+        let out_dir = out_dir(&dir, &site, subdir.as_deref());
         let thumbs = thumbs_dir(&dir);
         let _ = std::fs::create_dir_all(&out_dir);
         let _ = std::fs::create_dir_all(&thumbs);
@@ -396,6 +535,7 @@ impl Downloader {
             &out_dir,
             &thumbs,
             cookie.as_deref(),
+            ctx,
         ))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -525,10 +665,7 @@ impl Downloader {
                 );
             }
             Some(Stop::Cancel) => {
-                remove_partials(
-                    &videos_dir(&dir).join(ytdlp::site_folder(&d.site)),
-                    &d.video_id,
-                );
+                remove_partials(&out_dir(&dir, &d.site, d.subdir.as_deref()), &d.video_id);
                 let _ = db
                     .conn()
                     .execute("DELETE FROM downloads WHERE id = ?1", [id]);
@@ -539,7 +676,7 @@ impl Downloader {
                 // Yazılan ad okunamadıysa dosyayı video kimliğiyle bul.
                 let file = file.filter(|f| Path::new(f).is_file()).or_else(|| {
                     find_finished(
-                        &videos_dir(&dir).join(ytdlp::site_folder(&d.site)),
+                        &out_dir(&dir, &d.site, d.subdir.as_deref()),
                         &d.video_id,
                         d.audio_only,
                     )
@@ -639,10 +776,7 @@ impl Downloader {
         let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
         if let Ok(Some(d)) = get(&db, id) {
             if d.status != "done" {
-                remove_partials(
-                    &videos_dir(&dir).join(ytdlp::site_folder(&d.site)),
-                    &d.video_id,
-                );
+                remove_partials(&out_dir(&dir, &d.site, d.subdir.as_deref()), &d.video_id);
                 let _ = db
                     .conn()
                     .execute("DELETE FROM downloads WHERE id = ?1", [id]);

@@ -1,6 +1,6 @@
 //! Video İndirici komutları. Ağa ya da yt-dlp'ye giden her şey arka planda çalışır.
 
-use crate::downloader::{self, bridge::Bridge, tools, Download, Downloader, Live};
+use crate::downloader::{self, bridge::Bridge, tools, ytdlp::Context, Download, Downloader, Live};
 use crate::{db::Db, paths::DataDir};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -59,11 +59,17 @@ pub async fn videos_update(app: AppHandle, force: bool) -> CmdResult<tools::Tool
     .await
 }
 
+/// Bağlantıyı çözümler. `whole_list`: video bağlantısındaki çalma listesinin tamamını getir.
 #[tauri::command]
-pub async fn videos_probe(app: AppHandle, url: String) -> CmdResult<downloader::ytdlp::Probe> {
+pub async fn videos_probe(
+    app: AppHandle,
+    url: String,
+    whole_list: bool,
+) -> CmdResult<downloader::ytdlp::Parsed> {
     blocking(app, move |app| {
         let root = app.state::<DataDir>().root().to_path_buf();
-        app.state::<Downloader>().probe(&root, &url)
+        app.state::<Downloader>()
+            .probe(&root, &url, &Context::default(), whole_list)
     })
     .await?
 }
@@ -72,7 +78,22 @@ pub async fn videos_probe(app: AppHandle, url: String) -> CmdResult<downloader::
 pub async fn videos_download(app: AppHandle, url: String, option: String) -> CmdResult<Download> {
     blocking(app, move |app| {
         app.state::<Downloader>()
-            .enqueue(app, &url, &option, None, "app")
+            .enqueue(app, &url, &option, None, "app", &Context::default())
+    })
+    .await?
+}
+
+/// Çalma listesinin (`ids` verilirse sadece seçilen) videolarını sıraya ekler; eklenen sayısını döner.
+#[tauri::command]
+pub async fn videos_download_playlist(
+    app: AppHandle,
+    url: String,
+    option: String,
+    ids: Option<Vec<String>>,
+) -> CmdResult<usize> {
+    blocking(app, move |app| {
+        app.state::<Downloader>()
+            .enqueue_playlist(app, &url, &option, ids, "app")
     })
     .await?
 }

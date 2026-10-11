@@ -235,11 +235,23 @@ fn download_clipboard(app: &AppHandle) {
         return show_osd(app, "info", "Panoda video bağlantısı yok");
     }
     show_osd(app, "download", "Video aranıyor…");
-    match app
-        .state::<crate::downloader::Downloader>()
-        .enqueue(app, url, "auto", None, "app")
-    {
+    match app.state::<crate::downloader::Downloader>().enqueue(
+        app,
+        url,
+        "auto",
+        None,
+        "app",
+        &crate::downloader::ytdlp::Context::default(),
+    ) {
         Ok(d) => show_osd(app, "download", format!("Sıraya eklendi: {}", d.title)),
+        Err(e) if e == "PLAYLIST" => {
+            show_osd(
+                app,
+                "download",
+                "Bu bir çalma listesi; Video İndirici'de seç",
+            );
+            crate::window::show_main_at(app, "videos".into());
+        }
         Err(e) if e == "TOOLS_MISSING" => {
             show_osd(app, "info", "Önce Video İndirici'de araçları kur")
         }
