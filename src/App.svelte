@@ -32,10 +32,15 @@
   const screen = $derived(findScreen(route) ?? SCREENS[0]);
   const dl = $derived(activeSummary());
 
-  function navigate(id: string) {
+  /** Ayarlar ekranında açık bölüm ("settings/kisayollar" gibi adreslerle de seçilir). */
+  let settingsTab = $state("genel");
+
+  function navigate(target: string) {
+    const [id, sub] = target.split("/");
     route = findScreen(id) ? id : "home";
+    if (route === "settings" && sub) settingsTab = sub;
     try {
-      history.replaceState(null, "", `#${route}`);
+      history.replaceState(null, "", `#${route === "settings" ? `settings/${settingsTab}` : route}`);
     } catch {
       /* önemsiz */
     }
@@ -57,7 +62,7 @@
 
   onMount(() => {
     const fromHash = location.hash.slice(1);
-    if (findScreen(fromHash)) route = fromHash;
+    if (findScreen(fromHash.split("/")[0])) navigate(fromHash);
 
     let unlisten = () => {};
     (async () => {
@@ -118,9 +123,9 @@
         {#if route === "home"}
           <Home {info} onnavigate={navigate} />
         {:else if route === "settings"}
-          <Settings {info} {refreshInfo} onreplay={replaySplash} />
+          <Settings {info} {refreshInfo} onreplay={replaySplash} onnavigate={navigate} bind:tab={settingsTab} />
         {:else if route === "audio"}
-          <Audio />
+          <Audio onnavigate={navigate} />
         {:else if route === "reminders"}
           <Reminders />
         {:else if route === "videos"}

@@ -70,6 +70,9 @@ export const api = {
   openDataFolder: (sub?: string): Promise<void> =>
     inTauri ? invoke("open_data_folder", { sub: sub ?? null }) : Promise.resolve(),
 
+  /** Günlük dosyasını (gmid.log) açar. */
+  openLog: (): Promise<void> => (inTauri ? invoke("open_log") : Promise.resolve()),
+
   backupNow: (): Promise<BackupInfo[]> => (inTauri ? invoke("backup_now") : api.appInfo().then((i) => i.backups)),
 
   /** Dosya seçtirir ve `Arkaplanlar` klasörüne kopyalar. Vazgeçilirse `null`. */

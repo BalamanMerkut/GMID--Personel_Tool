@@ -53,14 +53,46 @@
     }
   }
 
+  /** Gruplar listedeki sırayla. */
+  const groups = $derived.by(() => {
+    const out: [string, HotkeyStatus[]][] = [];
+    for (const h of list) {
+      const g = out.find(([name]) => name === h.group);
+      if (g) g[1].push(h);
+      else out.push([h.group, [h]]);
+    }
+    return out;
+  });
+  const changed = $derived(list.filter((h) => h.accel !== h.defaultAccel));
+
+  async function resetAll() {
+    for (const h of changed) {
+      try {
+        list = await api.hotkeys.set(h.id, null);
+      } catch (e) {
+        notify(String(e), "info");
+      }
+    }
+    notify("Bütün kısayollar varsayılana döndü", "keyboard");
+  }
+
   const keys = (accel: string) => accel.split("+").map((k) => k.replace("PageUp", "PgUp").replace("PageDown", "PgDn"));
 </script>
 
 <svelte:window onkeydown={onKey} />
 
+{#if changed.length}
+  <div class="reset">
+    <span class="sub small">{changed.length} kısayol değiştirildi</span>
+    <button class="link" onclick={resetAll}><Icon name="restore" size={14} />Hepsini varsayılana döndür</button>
+  </div>
+{/if}
+
 <table class="keys">
+  {#each groups as [group, items] (group)}
   <tbody>
-    {#each list as h (h.id)}
+    <tr class="ghead"><th colspan="3">{group}</th></tr>
+    {#each items as h (h.id)}
       <tr>
         <td>
           <div class="label">
@@ -89,10 +121,16 @@
       </tr>
     {/each}
   </tbody>
+  {/each}
 </table>
 
 <style>
   .keys { width: 100%; border-collapse: collapse; }
+  .ghead th { text-align: left; padding: 16px 4px 6px; font-family: var(--f-display); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); border-bottom: 1px solid var(--line); }
+  tbody:first-child .ghead th { padding-top: 4px; }
+  .reset { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(227, 194, 112, 0.06); border: 1px solid rgba(227, 194, 112, 0.25); }
+  .link { border: 0; background: none; padding: 0; color: var(--teal); font-weight: 600; display: inline-flex; gap: 5px; align-items: center; }
+  .link:hover { color: var(--neon); }
   td { padding: 9px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .label { display: flex; flex-direction: column; gap: 2px; }
   .err { font-size: 12px; color: var(--bad); }

@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.9 (taslak)
+## Tasarım Dokümanı · v0.10 (taslak)
 
 > **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -936,6 +936,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.10 | 2026-10-11 | Kontrol Odası sekmeli ayarlar merkezine dönüştü (arama, kısayollar burada, gruplu); yeni kısayollar: pencereyi aç, panodaki bağlantıyı indir; ekran göstergesi ayarı; Video İndirici'de Türkçe Windows dosya adı hatası giderildi |
 | v0.9 | 2026-10-11 | Faz 5 kodlandı: Video İndirici (§3.1 özet kutusu), yerel eklenti köprüsü ve eşleştirme, Chrome/Opera eklentisi; kararlılık: Windows'ta pencere açarken kilitlenme giderildi, hatırlatıcılara Windows bildirimi, `gmid.log`; sıra değişikliği (3b/4/3c sonraya) |
 | v0.8 | 2026-10-11 | Faz 3a kodlandı: Sunucular (§3.14) — CoD/Minecraft/Steam/SA-MP sunucu sorguları, canlı oyuncu sayısı, Bağlan, GitHub'daki topluluk listesi; sohbet penceresi Faz 3c olarak plana eklendi (§8.1.1) |
 | v0.7 | 2026-10-11 | Faz 2 kodlandı: Ses & Mikrofon (Windows Core Audio, olay tabanlı mikrofon kilidi), değiştirilebilir genel kısayollar, odak çalmayan ekran göstergesi, Notlar (TipTap, .md kopyası, çöp kutusu), hızlı not ve yapışkan not pencereleri, hatırlatıcılar (tekrar, erteleme, sağ alt uyarı kartı), kronometre ve geri sayımlar |

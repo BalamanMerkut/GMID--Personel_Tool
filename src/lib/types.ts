@@ -29,6 +29,7 @@ export interface DevicePrefs {
 
 export interface HotkeyStatus {
   id: string;
+  group: string;
   label: string;
   accel: string;
   defaultAccel: string;

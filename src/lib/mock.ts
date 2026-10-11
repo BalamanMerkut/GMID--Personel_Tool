@@ -21,14 +21,16 @@ const inputs: Device[] = [
 let lock: number | null = 1;
 
 const hotkeys: HotkeyStatus[] = [
-  ["audio.cycleOutput", "Ses çıkışını değiştir (kulaklık ↔ hoparlör)", "Ctrl+Alt+A"],
-  ["mic.toggleMute", "Mikrofonu sessize al / aç", "Ctrl+Alt+M"],
-  ["mic.toggleLock", "Mikrofon seviyesi kilidini aç / kapat", "Ctrl+Alt+L"],
-  ["mic.up", "Mikrofon +5", "Ctrl+Alt+PageUp"],
-  ["mic.down", "Mikrofon −5", "Ctrl+Alt+PageDown"],
-  ["mic.max", "Mikrofonu %100'e çek", "Ctrl+Alt+Home"],
-  ["note.quick", "Hızlı not", "Ctrl+Alt+N"],
-].map(([i, label, a]) => ({ id: i, label, accel: a, defaultAccel: a, error: null }));
+  ["audio.cycleOutput", "Ses", "Ses çıkışını değiştir (kulaklık ↔ hoparlör)", "Ctrl+Alt+A"],
+  ["mic.toggleMute", "Mikrofon", "Mikrofonu sessize al / aç", "Ctrl+Alt+M"],
+  ["mic.toggleLock", "Mikrofon", "Mikrofon seviyesi kilidini aç / kapat", "Ctrl+Alt+L"],
+  ["mic.up", "Mikrofon", "Mikrofon +5", "Ctrl+Alt+PageUp"],
+  ["mic.down", "Mikrofon", "Mikrofon −5", "Ctrl+Alt+PageDown"],
+  ["mic.max", "Mikrofon", "Mikrofonu %100'e çek", "Ctrl+Alt+Home"],
+  ["note.quick", "Uygulama", "Hızlı not", "Ctrl+Alt+N"],
+  ["app.show", "Uygulama", "GMID Tool penceresini aç", "Ctrl+Alt+G"],
+  ["videos.clipboard", "Video İndirici", "Panodaki bağlantıyı indir (önerilen kalite)", "Ctrl+Alt+D"],
+].map(([i, group, label, a]) => ({ id: i, group, label, accel: a, defaultAccel: a, error: null }));
 
 const notes: Note[] = [
   {

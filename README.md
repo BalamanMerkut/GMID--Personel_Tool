@@ -32,7 +32,19 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
   sağ tık menüsü. Kurulum: Video İndirici → Tarayıcı eklentisi → adımlar (klasörü hazırla → `chrome://extensions` →
   Geliştirici modu → Paketlenmemiş öğe yükle → 6 haneli kodla eşleştir).
 
+### Kontrol Odası (ayarlar merkezi)
+
+- Bütün ayarlar tek yerde, soldan sekmeli: Genel · Görünüm · **Kısayollar** · Ses & Mikrofon · Bildirimler ·
+  Video İndirici · Sunucular · Veri ve yedekler · Hakkında; üstte **ayarlarda arama**.
+- Kısayollar gruplu (Ses, Mikrofon, Uygulama, Video İndirici), her biri değiştirilebilir / kapatılabilir /
+  varsayılana döndürülebilir; "hepsini varsayılana döndür".
+- Yeni kısayollar: `Ctrl+Alt+G` GMID Tool penceresini aç, `Ctrl+Alt+D` **panodaki video bağlantısını indir** (IDM gibi).
+- Ekran göstergesi açılıp kapatılabilir; günlük dosyası (`gmid.log`) ayarlardan açılabilir.
+
 ### Kararlılık düzeltmeleri
+
+- Türkçe Windows'ta başlığında özel karakter olan videolarda (`［EDIT］`, ş, ğ…) "İndirilen dosya bulunamadı"
+  hatası giderildi (video iniyordu ama adı yanlış okunuyordu).
 
 - Windows'ta tepsiden pencere açarken / hızlı not açarken uygulamanın **kilitlenmesi** giderildi (hatırlatıcıların
   çalmamasının sebebi buydu).

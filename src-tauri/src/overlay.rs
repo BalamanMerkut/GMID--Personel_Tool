@@ -61,6 +61,14 @@ fn tool_window(app: &AppHandle, label: &str, size: (f64, f64)) -> tauri::Result<
 
 /// Sağ üstte kısa bir bilgi gösterir.
 pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
+    // Ayarlardan kapatılabilir (Kontrol Odası → Ses & Mikrofon).
+    let enabled = app
+        .state::<crate::db::Db>()
+        .setting_json::<bool>("ui.osd")
+        .unwrap_or(true);
+    if !enabled {
+        return;
+    }
     let overlay = app.state::<Overlay>();
     let id = overlay.osd_gen.fetch_add(1, Ordering::SeqCst) + 1;
     let msg = OsdMessage {

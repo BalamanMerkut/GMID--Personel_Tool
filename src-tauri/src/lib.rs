@@ -57,6 +57,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(move |app| {
             let handle = app.handle();
             let dir = paths::DataDir::resolve(handle)?;
@@ -127,6 +128,7 @@ pub fn run() {
             commands::take_pending_route,
             commands::app_info,
             commands::open_data_folder,
+            commands::open_log,
             commands::backup_now,
             commands::import_background,
             commands::sound::audio_state,

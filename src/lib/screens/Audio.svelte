@@ -2,13 +2,14 @@
   import { onMount } from "svelte";
   import { api } from "../api";
   import { debounce, on } from "../bus";
-  import Hotkeys from "../components/Hotkeys.svelte";
   import Switch from "../components/Switch.svelte";
   import Icon from "../Icon.svelte";
   import type { IconName } from "../icons";
   import { getJson, setJson } from "../settings.svelte";
   import { notify } from "../toast.svelte";
   import type { AudioState, Device, DevicePrefs } from "../types";
+
+  let { onnavigate }: { onnavigate: (id: string) => void } = $props();
 
   let audio: AudioState | null = $state(null);
   let error = $state("");
@@ -181,8 +182,15 @@
 
   <section class="panel">
     <h3 class="h2"><Icon name="keyboard" />Kısayollar</h3>
-    <p class="sub small">Oyunun içinden de çalışır. Değiştirmek için kaleme bas, sonra yeni tuşlara bas.</p>
-    <Hotkeys />
+    <p class="sub small">Oyunun içinden de çalışır.</p>
+    <ul class="keys">
+      <li><span>Kulaklık ↔ hoparlör</span><span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>A</kbd></span></li>
+      <li><span>Mikrofonu sessize al</span><span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>M</kbd></span></li>
+      <li><span>Mikrofon kilidi</span><span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>L</kbd></span></li>
+      <li><span>Mikrofon ±5 / %100</span><span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>PgUp</kbd><kbd>PgDn</kbd><kbd>Home</kbd></span></li>
+    </ul>
+    <span class="sub small">Varsayılan tuşlar; değiştirdiysen ayarlarda yenisi yazar.</span>
+    <button class="btn ghost" onclick={() => onnavigate("settings/kisayollar")}><Icon name="keyboard" />Kısayolları düzenle</button>
   </section>
 
   <section class="panel">
@@ -236,4 +244,7 @@
   .check li :global(svg) { color: var(--teal); margin-top: 2px; }
   kbd { font-family: var(--f-body); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: var(--coal); border: 1px solid var(--line-2); }
   @media (max-width: 1000px) { .audio { grid-template-columns: minmax(0, 1fr); } }
+  .keys { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .keys li { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--muted); }
+  .keys li span:last-child { display: flex; gap: 3px; }
 </style>

@@ -536,7 +536,14 @@ impl Downloader {
             }
             None => {
                 self.drop_cookies(id);
-                let file = file.filter(|f| Path::new(f).is_file());
+                // Yazılan ad okunamadıysa dosyayı video kimliğiyle bul.
+                let file = file.filter(|f| Path::new(f).is_file()).or_else(|| {
+                    find_finished(
+                        &videos_dir(&dir).join(ytdlp::site_folder(&d.site)),
+                        &d.video_id,
+                        d.audio_only,
+                    )
+                });
                 if let (true, Some(f)) = (ok, file) {
                     let size = std::fs::metadata(&f).map(|m| m.len() as i64).ok();
                     let thumb = thumbs_dir(&dir).join(format!("{}.jpg", d.video_id));
@@ -725,6 +732,41 @@ fn inside(path: &str, dir: &Path) -> bool {
     Path::new(path).starts_with(dir)
 }
 
+/// Klasörde `[kimlik]` taşıyan, bitmiş (yarım olmayan) en yeni dosya.
+fn find_finished(dir: &Path, video_id: &str, audio_only: bool) -> Option<String> {
+    if video_id.is_empty() {
+        return None;
+    }
+    let tag = format!("[{video_id}]");
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let ext = Path::new(&name)
+                .extension()
+                .map(|x| x.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            let wanted = if audio_only {
+                ext == "mp3"
+            } else {
+                matches!(ext.as_str(), "mp4" | "mkv" | "webm" | "mov")
+            };
+            // Birleştirilmemiş ara parçalar: "… [kimlik].f137.mp4", ".temp.mp4"
+            let intermediate = name.contains(".temp.")
+                || name.split('.').any(|seg| {
+                    seg.len() > 1
+                        && seg.starts_with('f')
+                        && seg[1..].bytes().all(|b| b.is_ascii_digit())
+                });
+            let ok = name.contains(&tag) && wanted && !intermediate;
+            let modified = e.metadata().and_then(|m| m.modified()).ok()?;
+            ok.then(|| (modified, e.path().to_string_lossy().into_owned()))
+        })
+        .max_by_key(|(t, _)| *t)
+        .map(|(_, p)| p)
+}
+
 /// İptal edilen indirmenin yarım parçalarını siler (`… [kimlik].f137.mp4.part` gibi).
 fn remove_partials(dir: &Path, video_id: &str) {
     if video_id.is_empty() {
@@ -820,6 +862,31 @@ mod tests {
         assert_eq!(lines.len(), 4);
         assert_eq!(lines[0], "GMIDP 1|2|NA|NA|NA|137");
         assert_eq!(lines[3], "GMIDFILE C:\\a.mp4");
+    }
+
+    #[test]
+    fn finished_file_is_found_by_id() {
+        let dir = std::env::temp_dir().join(format!("gmid-find-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for f in [
+            "Goodfellas x GTA IV Theme［EDIT］ [abc] 1080p.mp4",
+            "Goodfellas [abc].f137.mp4.part",
+            "Goodfellas [abc].f137.mp4",
+            "Goodfellas [abc] (ses).mp3",
+            "Başka [xyz] 720p.mp4",
+        ] {
+            std::fs::write(dir.join(f), b"x").unwrap();
+        }
+        let v = find_finished(&dir, "abc", false).unwrap();
+        assert!(
+            v.ends_with("Goodfellas x GTA IV Theme［EDIT］ [abc] 1080p.mp4"),
+            "{v}"
+        );
+        assert!(find_finished(&dir, "abc", true)
+            .unwrap()
+            .ends_with("(ses).mp3"));
+        assert!(find_finished(&dir, "yok", false).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

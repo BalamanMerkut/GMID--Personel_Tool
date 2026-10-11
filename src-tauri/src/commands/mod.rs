@@ -74,6 +74,18 @@ pub fn open_data_folder(
         .map_err(|e| format!("Klasör açılamadı: {e}"))
 }
 
+/// Günlük dosyasını (gmid.log) varsayılan metin düzenleyicide açar.
+#[tauri::command]
+pub fn open_log(app: AppHandle, dir: State<'_, DataDir>) -> CmdResult<()> {
+    let log = dir.root().join("gmid.log");
+    if !log.is_file() {
+        return Err("Günlük dosyası henüz yok; her şey yolunda demek 🙂".into());
+    }
+    app.opener()
+        .open_path(log.to_string_lossy(), None::<&str>)
+        .map_err(|e| format!("Açılamadı: {e}"))
+}
+
 #[tauri::command]
 pub fn backup_now(
     db: State<'_, Db>,

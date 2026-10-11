@@ -182,7 +182,7 @@
           <li><span>Mikrofon kilidi</span><span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>L</kbd></span></li>
           <li><span>Hızlı not</span><span><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>N</kbd></span></li>
         </ul>
-        <button class="link" onclick={() => onnavigate("audio")}>Kısayolları değiştir →</button>
+        <button class="link" onclick={() => onnavigate("settings/kisayollar")}>Kısayolları değiştir →</button>
       </section>
 
       <section class="panel">

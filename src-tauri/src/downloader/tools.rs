@@ -345,7 +345,11 @@ pub fn ytdlp(root: &Path) -> Command {
         .env("PYTHONIOENCODING", "utf-8")
         .current_dir(&tools)
         .arg("--ignore-config")
-        .arg("--no-color");
+        .arg("--no-color")
+        // Türkçe Windows'ta yt-dlp çıktıyı cp1254 ile yazar ve bu tabloda olmayan karakterleri
+        // (［］, ｜ gibi) sessizce atar; dosya adları bozulmasın diye çıktı her zaman UTF-8.
+        // (PYTHONUTF8 paketlenmiş yt-dlp.exe'de işe yaramıyor.)
+        .args(["--encoding", "utf-8"]);
     if let Some(ff) = ffmpeg_dir(root) {
         cmd.arg("--ffmpeg-location").arg(ff);
     }

@@ -11,6 +11,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 pub struct Action {
     pub id: &'static str,
+    /// Ayarlar ekranındaki başlık: "Ses", "Mikrofon", "Uygulama", "Video İndirici"
+    pub group: &'static str,
     pub label: &'static str,
     pub default: &'static str,
 }
@@ -18,38 +20,57 @@ pub struct Action {
 pub const ACTIONS: &[Action] = &[
     Action {
         id: "audio.cycleOutput",
+        group: "Ses",
         label: "Ses çıkışını değiştir (kulaklık ↔ hoparlör)",
         default: "Ctrl+Alt+A",
     },
     Action {
         id: "mic.toggleMute",
+        group: "Mikrofon",
         label: "Mikrofonu sessize al / aç",
         default: "Ctrl+Alt+M",
     },
     Action {
         id: "mic.toggleLock",
+        group: "Mikrofon",
         label: "Mikrofon seviyesi kilidini aç / kapat",
         default: "Ctrl+Alt+L",
     },
     Action {
         id: "mic.up",
+        group: "Mikrofon",
         label: "Mikrofon +5",
         default: "Ctrl+Alt+PageUp",
     },
     Action {
         id: "mic.down",
+        group: "Mikrofon",
         label: "Mikrofon −5",
         default: "Ctrl+Alt+PageDown",
     },
     Action {
         id: "mic.max",
+        group: "Mikrofon",
         label: "Mikrofonu %100'e çek",
         default: "Ctrl+Alt+Home",
     },
     Action {
         id: "note.quick",
+        group: "Uygulama",
         label: "Hızlı not",
         default: "Ctrl+Alt+N",
+    },
+    Action {
+        id: "app.show",
+        group: "Uygulama",
+        label: "GMID Tool penceresini aç",
+        default: "Ctrl+Alt+G",
+    },
+    Action {
+        id: "videos.clipboard",
+        group: "Video İndirici",
+        label: "Panodaki bağlantıyı indir (önerilen kalite)",
+        default: "Ctrl+Alt+D",
     },
 ];
 
@@ -59,6 +80,7 @@ const SETTING: &str = "hotkeys";
 #[serde(rename_all = "camelCase")]
 pub struct HotkeyStatus {
     pub id: String,
+    pub group: String,
     pub label: String,
     /// Boşsa kısayol kapalı.
     pub accel: String,
@@ -144,6 +166,7 @@ pub fn list(app: &AppHandle) -> Vec<HotkeyStatus> {
             let b = map.get(a.id);
             HotkeyStatus {
                 id: a.id.into(),
+                group: a.group.into(),
                 label: a.label.into(),
                 accel: b.map_or_else(|| a.default.into(), |b| b.accel.clone()),
                 default_accel: a.default.into(),
@@ -197,7 +220,30 @@ fn run(app: &AppHandle, action: &str) {
         "mic.down" => mic(app, MicOp::Step(-0.05)),
         "mic.max" => mic(app, MicOp::Max),
         "note.quick" => window::open_quick_note(app),
+        "app.show" => window::show_main(app),
+        "videos.clipboard" => download_clipboard(app),
         _ => {}
+    }
+}
+
+/// Kopyalanan video bağlantısını önerilen kaliteyle sıraya ekler (IDM'deki gibi).
+fn download_clipboard(app: &AppHandle) {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let text = app.clipboard().read_text().unwrap_or_default();
+    let url = text.trim();
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return show_osd(app, "info", "Panoda video bağlantısı yok");
+    }
+    show_osd(app, "download", "Video aranıyor…");
+    match app
+        .state::<crate::downloader::Downloader>()
+        .enqueue(app, url, "auto", None, "app")
+    {
+        Ok(d) => show_osd(app, "download", format!("Sıraya eklendi: {}", d.title)),
+        Err(e) if e == "TOOLS_MISSING" => {
+            show_osd(app, "info", "Önce Video İndirici'de araçları kur")
+        }
+        Err(e) => show_osd(app, "info", e),
     }
 }
 
