@@ -14,10 +14,22 @@
   let level = $state(0);
   let bars: number[] = $state(Array(BARS).fill(0.08));
 
+  // Güvenlik ağı: dinlerken her saniye, diğer durumlarda bir kez haber gelir. Haber kesilirse (uygulama
+  // gizlemeyi kaçırırsa) gösterge kendini boşaltır; pencere zaten tıklamaları geçirir.
+  let lastSeen = Date.now();
+  const STALE: Record<View["state"], number> = { listening: 3500, processing: 125_000, error: 2500, hidden: Infinity };
+
   onMount(() => {
-    void call<View>("dictation_view_state").then((v) => (view = v));
+    const set = (v: View) => {
+      view = v;
+      lastSeen = Date.now();
+    };
+    void call<View>("dictation_view_state").then(set);
+    const watchdog = setInterval(() => {
+      if (view.state !== "hidden" && Date.now() - lastSeen > STALE[view.state]) view = { state: "hidden", secs: 0 };
+    }, 500);
     const stops = [
-      on<View>("dikte", (v) => (view = v)),
+      on<View>("dikte", set),
       on<number>("dikte-level", (l) => (level = l)),
     ];
     // Dalga: yeni seviye ortadan girer, kenarlara doğru söner.
@@ -34,6 +46,7 @@
     }, 60);
     return () => {
       clearInterval(timer);
+      clearInterval(watchdog);
       stops.forEach((s) => void s.then((f) => f()));
     };
   });

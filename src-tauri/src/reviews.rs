@@ -59,7 +59,8 @@ pub struct Review {
     pub subject_id: String,
     pub scores: Scores,
     pub adjust: f64,
-    pub overall: f64,
+    /// "İstiyorum" durumunda puan yok.
+    pub overall: Option<f64>,
     pub one_liner: Option<String>,
     pub notes: Option<String>,
     pub status: Option<String>,
@@ -130,15 +131,25 @@ fn clean(s: Option<String>, max: usize) -> Option<String> {
 }
 
 /// Aynı oyunu ikinci kez puanlamak öncekini günceller.
+/// Önce durum: "İstiyorum" (henüz oynanmadı) seçilirse sorular ve tavsiye alınmaz, puan boş kalır.
 pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
-    let auto = input.scores.auto().ok_or("En az bir soruya puan ver")?;
-    let adjust = input.adjust.clamp(-1.0, 1.0);
-    let overall = round1((auto + adjust).clamp(1.0, 10.0));
     let status = input.status.filter(|s| STATUSES.contains(&s.as_str()));
-    let recommend = input.recommend.filter(|s| RECOMMENDS.contains(&s.as_str()));
+    let wishlist = status.as_deref() == Some("wishlist");
+    let (scores_in, adjust, overall, recommend) = if wishlist {
+        (Scores::default(), 0.0, None, None)
+    } else {
+        let auto = input.scores.auto().ok_or("En az bir soruya puan ver")?;
+        let adjust = input.adjust.clamp(-1.0, 1.0);
+        (
+            input.scores.clone(),
+            adjust,
+            Some(round1((auto + adjust).clamp(1.0, 10.0))),
+            input.recommend.filter(|s| RECOMMENDS.contains(&s.as_str())),
+        )
+    };
     let one_liner = clean(input.one_liner, 200);
     let notes = clean(input.notes, 20_000);
-    let scores = serde_json::to_string(&input.scores).map_err(|e| e.to_string())?;
+    let scores = serde_json::to_string(&scores_in).map_err(|e| e.to_string())?;
     let now = now_ms();
     let conn = db.conn();
     let prev: Option<(String, Option<i64>)> = conn
@@ -289,7 +300,7 @@ mod tests {
         )
         .is_err());
         let a = save(&db, input("playing", 5.0)).unwrap();
-        assert_eq!(a.overall, 10.0);
+        assert_eq!(a.overall, Some(10.0));
         assert_eq!(a.adjust, 1.0);
         assert_eq!(
             a.one_liner.as_deref(),
@@ -298,10 +309,23 @@ mod tests {
         assert_eq!(a.finished_at, None);
         let b = save(&db, input("finished", -0.5)).unwrap();
         assert_eq!(b.id, a.id);
-        assert_eq!(b.overall, 8.5);
+        assert_eq!(b.overall, Some(8.5));
         assert!(b.finished_at.is_some());
         let c = save(&db, input("bogus", 0.0)).unwrap();
         assert_eq!(c.status, None);
+        // İstiyorum: puan ve tavsiye yok, sorulara bakılmaz.
+        let w = save(
+            &db,
+            ReviewInput {
+                scores: Scores::default(),
+                ..input("wishlist", 1.0)
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (w.overall, w.recommend.as_deref(), w.adjust),
+            (None, None, 0.0)
+        );
         assert_eq!(list(&db, "game").unwrap().len(), 1);
         delete(&db, &a.id).unwrap();
         assert!(list(&db, "game").unwrap().is_empty());

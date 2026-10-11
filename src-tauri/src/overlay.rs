@@ -125,7 +125,7 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
             std::thread::sleep(Duration::from_millis(2200));
             if current() {
                 if let Some(w) = app.get_webview_window(OSD) {
-                    let _ = w.hide();
+                    hide_window(&w);
                 }
             }
             // Bir dakika kullanılmazsa pencereyi tamamen kapat (sesle yazma açıksa hazır beklesin).
@@ -165,7 +165,7 @@ pub fn dictation_view(app: &AppHandle, state: &str, secs: u32) {
         }
         if hide {
             if let Some(w) = app.get_webview_window(DICTATION) {
-                let _ = w.hide();
+                hide_window(&w);
             }
             return Ok(());
         }
@@ -276,7 +276,7 @@ pub fn fit_alerts(app: &AppHandle, height: f64) {
 pub fn close_alerts(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(ALERTS) {
         // Pencere kendi düğmesinden kapatılıyor; işi bitsin diye önce gizle, sonra kapat.
-        let _ = w.hide();
+        hide_window(&w);
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(200));
             let _ = w.destroy();
@@ -360,6 +360,25 @@ fn show_no_activate(w: &WebviewWindow) {
             let _ = w.show();
         }
     }
+}
+
+/// Gizler. Pencere `show_no_activate` ile doğrudan Windows'a gösterildiği için Tauri onu hâlâ gizli sanıyor
+/// ve kendi `hide()` çağrısı hiçbir şey yapmıyordu: gösterge ekranda takılı kalıyordu. Önce Windows'a
+/// doğrudan gizlet, sonra Tauri'nin durumunu da eşitle.
+#[cfg(windows)]
+fn hide_window(w: &WebviewWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
+    if let Ok(hwnd) = w.hwnd() {
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+    let _ = w.hide();
+}
+
+#[cfg(not(windows))]
+fn hide_window(w: &WebviewWindow) {
+    let _ = w.hide();
 }
 
 #[cfg(not(windows))]

@@ -21,7 +21,8 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 
 ### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)
 
-- **Oyunları tara:** Steam ve Epic'te kurulu oyunlar (Steam'in tuttuğu süreyle) bulunur; istediklerini seçip eklersin.
+- **Oyunları tara:** Steam, Epic ve Riot'ta (League of Legends, VALORANT) kurulu oyunlar (Steam'in tuttuğu süreyle) bulunur;
+  istediklerini seçip eklersin. Kapağı gelmeyen oyunlara oyun penceresinden **Kapak seç** ile kendi resmini koyabilirsin.
   Tanınmayan oyunlar: **Oyun ekle** → çalışan uygulamalardan seç ya da .exe göster.
 - **Canlı algılama (Discord gibi):** 5 saniyede bir çalışan programlara bakılır; kütüphanedeki bir oyun açılınca
   oturum başlar, kapanınca biter. Oyuna hiçbir şey enjekte edilmez (anti-cheat güvenli). 30 saniyeden kısa açılışlar
@@ -43,6 +44,7 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 
 ### Faz 3b — Oyun (2. bölüm: Oyun Arşivi)
 
+- **Önce durum:** Oynuyorum, Bitirdim, %100, Bıraktım ya da İstiyorum. İstiyorum'da puan sorulmaz (istek listesi).
 - **5 kısa soruyla puanla:** oynanış, hikâye, keyif, görsellik, performans (kaydırıcılar 7'den başlar). Hikâyesi olmayan
   oyunda **Yok** de: puanı düşürmez. Genel puan kendiliğinden hesaplanır; içine sinmezse ±1 oynatabilirsin. Tek cümle,
   durum (Oynuyorum, Bitirdim, %100, Bıraktım, İstiyorum), tavsiye ve notlar (`||spoiler||` gizlenir).

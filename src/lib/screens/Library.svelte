@@ -12,9 +12,9 @@
   import { notify } from "../toast.svelte";
   import type { FoundGame, Game, PlaySession, Review, RunningApp } from "../types";
 
-  type Source = "all" | "steam" | "epic" | "manual";
+  type Source = "all" | "steam" | "epic" | "riot" | "manual";
   type Sort = "recent" | "played" | "name" | "platform";
-  const SOURCES: [Source, string][] = [["all", "Tümü"], ["steam", "Steam"], ["epic", "Epic"], ["manual", "Elle eklenen"]];
+  const SOURCES: [Source, string][] = [["all", "Tümü"], ["steam", "Steam"], ["epic", "Epic"], ["riot", "Riot"], ["manual", "Elle eklenen"]];
   const SORTS: [Sort, string][] = [["recent", "Son oynanan"], ["played", "En çok oynanan"], ["name", "Ada göre"], ["platform", "Steam süresi"]];
 
   let games: Game[] = $state([]);
@@ -92,7 +92,7 @@
     try {
       found = await api.games.scan();
       picked = found.filter((f) => !f.already).map(key);
-      if (!found.length) notify("Steam ya da Epic'te kurulu oyun bulunamadı. Oyunu elle ekleyebilirsin.", "info");
+      if (!found.length) notify("Steam, Epic ya da Riot'ta kurulu oyun bulunamadı. Oyunu elle ekleyebilirsin.", "info");
     } catch (e) {
       notify(String(e), "info");
     } finally {
@@ -165,7 +165,7 @@
     await load();
   }
 
-  const sourceLabel = (s: string) => (s === "steam" ? "Steam" : s === "epic" ? "Epic" : "Elle eklendi");
+  const sourceLabel = (s: string) => ({ steam: "Steam", epic: "Epic", riot: "Riot" })[s] ?? "Elle eklendi";
   const fmtDate = (ms: number) =>
     new Date(ms).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 </script>
@@ -209,8 +209,8 @@
         <Icon name="library" size={40} />
         <h3>Kütüphanen boş</h3>
         <p class="sub">
-          <b>Oyunları tara</b> Steam ve Epic'te kurulu oyunlarını bulur (Steam'deki oynama sürelerinle birlikte). Riot,
-          Battle.net gibi başka yerlerdeki oyunları <b>Oyun ekle</b> ile ekleyebilirsin: oyun açıkken listede çıkar.
+          <b>Oyunları tara</b> Steam, Epic ve Riot'ta (League of Legends, VALORANT) kurulu oyunlarını bulur (Steam'deki
+          oynama sürelerinle birlikte). Battle.net gibi başka yerlerdeki oyunları <b>Oyun ekle</b> ile ekleyebilirsin: oyun açıkken listede çıkar.
         </p>
         <button class="btn" onclick={scan} disabled={scanning}><Icon name="search" size={17} />Oyunları tara</button>
       </div>
@@ -222,7 +222,7 @@
               {#if cover(g)}<img src={cover(g)} alt="" loading="lazy" />{:else}<span class="ph">{g.name}</span>{/if}
               {#if g.runningSince}<span class="badge"><span class="dot"></span>Oynuyor</span>{/if}
               <span class="src">{sourceLabel(g.source)}</span>
-              {#if reviewOf(g)}{@const r = reviewOf(g)!}<span class={`score tone-${scoreTone(r.overall)}`}>{fmtScore(r.overall)}</span>{/if}
+              {#if reviewOf(g)}{@const r = reviewOf(g)!}<span class={`score tone-${scoreTone(r.overall)}`}>{r.overall == null ? "İstiyorum" : fmtScore(r.overall)}</span>{/if}
             </div>
             <b class="nm">{g.name}</b>
             <span class="sub small tnum">
@@ -328,12 +328,13 @@
             {#if g.launch}<button class="btn" onclick={() => act(api.games.launch(g.id))}><Icon name="play" size={17} />Oyna</button>{/if}
             {#if reviewOf(g)}
               {@const r = reviewOf(g)!}
-              <button class="btn ghost sm" onclick={() => (rating = g)} title="Puanını düzenle">⭐ <b class={`tone-${scoreTone(r.overall)}`}>{fmtScore(r.overall)}</b> · Düzenle</button>
+              <button class="btn ghost sm" onclick={() => (rating = g)} title="Puanını düzenle">⭐ <b class={`tone-${scoreTone(r.overall)}`}>{r.overall == null ? "İstek listende" : fmtScore(r.overall)}</b> · Düzenle</button>
             {:else}
               <button class="btn ghost sm" onclick={() => (rating = g)}><Icon name="star" size={15} />Puanla</button>
             {/if}
             <button class="btn ghost sm" onclick={() => act(api.games.reveal(g.id))}><Icon name="folder" size={15} />Klasör</button>
             <button class="btn ghost sm" onclick={() => act(api.games.refreshMeta(g.id), "Bilgiler yenileniyor")}><Icon name="refresh" size={15} />Bilgileri yenile</button>
+            <button class="btn ghost sm" onclick={() => act(api.games.pickCover(g.id))} title="Kendi resmini kapak yap"><Icon name="image" size={15} />Kapak seç</button>
           </div>
         </div>
       </div>
@@ -394,6 +395,7 @@
   .tone-good { color: var(--good); }
   .tone-mid { color: #e0a84a; }
   .tone-low { color: var(--bad); }
+  .tone-none { color: var(--teal); }
   .nm { font-weight: 600; font-size: 14px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 40px 20px; color: var(--muted); }
   .empty h3 { margin: 0; color: var(--text); font-family: var(--f-display); }

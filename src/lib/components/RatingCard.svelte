@@ -1,6 +1,8 @@
 <script lang="ts">
-  // Puanlama kartı: 5 kısa soru (kaydırıcılar 7'den başlar), otomatik genel puan (istersen ±1),
-  // tek cümle, durum, tavsiye, notlar. Aynı oyunu yeniden puanlamak öncekini günceller.
+  // Puanlama kartı. Önce durum sorulur, gerisi ona göre gelir:
+  //  • İstiyorum: puan yok; neden istediğin ve notlar
+  //  • Oynuyorum / Bitirdim / %100 / Bıraktım: 5 kısa soru (7'den başlar), otomatik genel puan (±1), tek cümle,
+  //    tavsiye, notlar. Aynı oyunu yeniden puanlamak öncekini günceller.
   import { untrack } from "svelte";
   import { api } from "../api";
   import Icon from "../Icon.svelte";
@@ -26,12 +28,21 @@
   let adjust = $state(start?.adjust ?? 0);
   let oneLiner = $state(start?.oneLiner ?? "");
   let notes = $state(start?.notes ?? "");
-  const g0 = untrack(() => game);
-  let status: ReviewStatus | null = $state(start?.status ?? (g0.inLibrary && g0.playedSeconds ? "playing" : null));
+  let status: ReviewStatus | null = $state(start?.status ?? null);
   let recommend: Recommend | null = $state(start?.recommend ?? null);
   let saving = $state(false);
   let armedDelete = $state(false);
 
+  const STATUS_HINT: Record<ReviewStatus, string> = {
+    playing: "Hâlâ oynuyorum",
+    finished: "Hikâyesini bitirdim",
+    completed: "Her şeyini yaptım",
+    dropped: "Yarıda bıraktım",
+    wishlist: "Henüz oynamadım, oynamak istiyorum",
+  };
+  // Eski bir puanda durum seçilmemişse her şey görünsün.
+  const chosen = $derived(status != null || !!start);
+  const wishlist = $derived(status === "wishlist");
   const auto = $derived(autoScore(scores));
   const overall = $derived(overallOf(scores, adjust));
 
@@ -60,7 +71,7 @@
         status,
         recommend,
       });
-      notify(`${game.name}: ${fmtScore(r.overall)} / 10 kaydedildi`, "check");
+      notify(r.overall == null ? `${game.name} istek listene eklendi` : `${game.name}: ${fmtScore(r.overall)} / 10 kaydedildi`, "check");
       onsaved?.(r);
       onclose();
     } catch (e) {
@@ -106,6 +117,22 @@
       </div>
     </div>
 
+    <div class="field status">
+      <span>Bu oyunla durumun ne?</span>
+      <div class="sts">
+        {#each STATUS as s (s.id)}
+          <button class="st" aria-pressed={status === s.id} onclick={() => (status = s.id)}>
+            <b>{s.label}</b><small>{STATUS_HINT[s.id]}</small>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    {#if !chosen}
+      <p class="sub small pick">Önce durumu seç; sorular ona göre gelir.</p>
+    {:else}
+    {#if !wishlist}
+    {#if status === "playing"}<span class="sub small">Şimdiye kadarki izlenimin; bitirince güncelleyebilirsin.</span>{/if}
     <div class="qs">
       {#each QUESTIONS as q (q.key)}
         {@const v = scores[q.key]}
@@ -152,20 +179,18 @@
       </div>
     </div>
 
+    {/if}
+
     <label class="field">
-      <span>Tek cümle</span>
-      <input bind:value={oneLiner} maxlength="200" placeholder="Bir tur daha derken sabah oldu." />
+      <span>{wishlist ? "Neden oynamak istiyorsun?" : status === "dropped" ? "Neden bıraktın?" : "Tek cümle"}</span>
+      <input
+        bind:value={oneLiner}
+        maxlength="200"
+        placeholder={wishlist ? "Arkadaşlar çok övüyor, co-op oynarız." : status === "dropped" ? "Ortası çok uzadı, sıkıldım." : "Bir tur daha derken sabah oldu."}
+      />
     </label>
 
-    <div class="field">
-      <span>Durum</span>
-      <div class="chips">
-        {#each STATUS as s (s.id)}
-          <button class="ch" aria-pressed={status === s.id} onclick={() => (status = status === s.id ? null : s.id)}>{s.label}</button>
-        {/each}
-      </div>
-    </div>
-
+    {#if !wishlist}
     <div class="field">
       <span>Tavsiye</span>
       <div class="chips">
@@ -175,10 +200,13 @@
       </div>
     </div>
 
+    {/if}
+
     <label class="field">
       <span>Notlar</span>
-      <textarea bind:value={notes} rows="4" placeholder="İpuçları, build'ler, kiminle oynadın… Spoiler'ı ||böyle|| yazarsan gizlenir."></textarea>
+      <textarea bind:value={notes} rows="4" placeholder={wishlist ? "Fiyatı, kiminle oynanır, nereden duydun…" : "İpuçları, build'ler, kiminle oynadın… Spoiler'ı ||böyle|| yazarsan gizlenir."}></textarea>
     </label>
+    {/if}
 
     <div class="foot">
       {#if start}
@@ -188,7 +216,9 @@
       {/if}
       <div class="row">
         <button class="btn ghost" onclick={onclose}>Vazgeç</button>
-        <button class="btn" onclick={save} disabled={saving || overall == null}><Icon name="check" size={17} />Kaydet</button>
+        <button class="btn" onclick={save} disabled={saving || !chosen || (!wishlist && overall == null)}>
+          <Icon name="check" size={17} />{wishlist ? "İstek listeme ekle" : "Kaydet"}
+        </button>
       </div>
     </div>
   </div>
@@ -235,6 +265,13 @@
   .tone-low { color: var(--bad); }
 
   .field { display: flex; flex-direction: column; gap: 6px; }
+  .sts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .st { display: flex; flex-direction: column; gap: 2px; text-align: left; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.025); color: var(--text); border-radius: 12px; padding: 9px 11px; }
+  .st small { color: var(--dim); font-size: 11.5px; line-height: 1.25; }
+  .st:hover { border-color: var(--gold-dim); }
+  .st[aria-pressed="true"] { background: rgba(227, 194, 112, 0.14); border-color: var(--gold); }
+  .st[aria-pressed="true"] b { color: var(--gold-glow); }
+  .pick { margin: 0; text-align: center; padding: 18px 0 6px; }
   .field > span { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
   .field input, textarea { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 12px; color: var(--text); font: inherit; resize: vertical; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -245,6 +282,9 @@
   .link { border: 0; background: none; padding: 0; font-weight: 600; }
   .link.danger { color: var(--dim); }
   .link.danger:hover { color: var(--bad); }
+  @media (max-width: 720px) {
+    .sts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   @media (max-width: 640px) {
     .q { grid-template-columns: 26px minmax(0, 1fr) 28px 46px; }
     .q input[type="range"] { grid-column: 1 / -1; grid-row: 2; }

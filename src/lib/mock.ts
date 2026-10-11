@@ -628,8 +628,10 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return reviews;
     case "review_save": {
       const input = a.input as ReviewInput;
-      const overall = overallOf(input.scores, input.adjust);
-      if (overall == null) throw "En az bir soruya puan ver";
+      const wish = input.status === "wishlist";
+      const overall = wish ? null : overallOf(input.scores, input.adjust);
+      if (!wish && overall == null) throw "En az bir soruya puan ver";
+      if (wish) input.recommend = null;
       const old = reviews.find((r) => r.subjectId === input.subjectId);
       const r: Review = { id: old?.id ?? `r${Date.now()}`, author: "me", ...input, adjust: Math.max(-1, Math.min(1, input.adjust)), overall,
         finishedAt: input.status === "finished" || input.status === "completed" ? (old?.finishedAt ?? now()) : null,

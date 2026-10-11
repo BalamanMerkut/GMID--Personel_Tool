@@ -405,7 +405,7 @@ export interface UserPlaylist {
 export interface Game {
   id: string;
   name: string;
-  source: "steam" | "epic" | "manual" | "archive";
+  source: "steam" | "epic" | "riot" | "manual" | "archive";
   sourceId: string;
   installDir: string | null;
   exes: string[];
@@ -438,7 +438,7 @@ export interface Game {
 
 /** Taramada bulunan oyun. */
 export interface FoundGame {
-  source: "steam" | "epic" | "manual";
+  source: "steam" | "epic" | "riot" | "manual";
   sourceId: string;
   name: string;
   installDir: string | null;
@@ -484,7 +484,8 @@ export interface Review {
   scores: Scores;
   /** Elle düzeltme (−1 … +1). */
   adjust: number;
-  overall: number;
+  /** "İstiyorum" durumunda puan yok. */
+  overall: number | null;
   oneLiner: string | null;
   notes: string | null;
   status: ReviewStatus | null;

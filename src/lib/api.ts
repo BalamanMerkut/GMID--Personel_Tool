@@ -254,6 +254,20 @@ export const api = {
       });
       return typeof picked === "string" ? picked : null;
     },
+    /** Kapak resmi seçtirip oyuna koyar (Steam'de olmayan oyunlar için). */
+    pickCover: async (id: string): Promise<boolean> => {
+      if (!inTauri) return false;
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        title: "Kapak resmi seç (dikey resimler en iyi görünür)",
+        filters: [{ name: "Resim", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
+      });
+      if (typeof picked !== "string") return false;
+      await call<void>("games_set_cover", { id, source: picked });
+      return true;
+    },
     /** Steam mağazasında adıyla arama (Oyun Arşivi'ne ekleme). */
     storeSearch: (term: string) => call<StoreHit[]>("games_store_search", { term }),
     /** Arşive oyun ekler; oyunun kimliği. */

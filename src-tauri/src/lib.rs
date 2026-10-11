@@ -237,6 +237,7 @@ pub fn run() {
             commands::games::games_sessions,
             commands::games::games_launch,
             commands::games::games_reveal,
+            commands::games::games_set_cover,
             commands::games::games_store_search,
             commands::games::games_add_archive,
             commands::games::reviews_list,

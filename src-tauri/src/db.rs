@@ -205,6 +205,29 @@ const MIGRATIONS: &[&str] = &[
         added_at    INTEGER NOT NULL
     );
     CREATE INDEX captures_time ON captures (created_at);",
+    // 12 — "İstiyorum" durumundaki oyunlarda genel puan yok: overall boş olabilir
+    "CREATE TABLE reviews_new (
+        id           TEXT PRIMARY KEY,
+        author       TEXT NOT NULL DEFAULT 'me',
+        subject_kind TEXT NOT NULL,
+        subject_id   TEXT NOT NULL,
+        scores       TEXT NOT NULL,
+        adjust       REAL NOT NULL DEFAULT 0,
+        overall      REAL,
+        one_liner    TEXT,
+        notes        TEXT,
+        status       TEXT,
+        recommend    TEXT,
+        finished_at  INTEGER,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        UNIQUE (author, subject_kind, subject_id)
+    );
+    INSERT INTO reviews_new SELECT id, author, subject_kind, subject_id, scores, adjust, overall, one_liner,
+        notes, status, recommend, finished_at, created_at, updated_at FROM reviews;
+    DROP TABLE reviews;
+    ALTER TABLE reviews_new RENAME TO reviews;
+    UPDATE reviews SET overall = NULL, recommend = NULL WHERE status = 'wishlist';",
 ];
 
 pub struct Db(Mutex<Connection>);

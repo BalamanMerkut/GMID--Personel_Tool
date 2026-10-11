@@ -327,9 +327,116 @@ fn registry_string(key: &str, value: &str) -> Option<String> {
 }
 
 /// Bütün kaynakları tarar.
+/// Riot oyunları (League of Legends, VALORANT…): Riot istemcisi her ürün için bir ayar dosyası tutar
+/// (`ProgramData\Riot Games\Metadata\<ürün>.<kanal>\<ürün>.<kanal>.product_settings.yaml`), içinde kurulum yolu.
+/// Başlatma Riot istemcisiyle: `RiotClientServices.exe --launch-product=valorant --launch-patchline=live`.
+pub fn riot(base: &Path) -> Vec<Found> {
+    const PRODUCTS: &[(&str, &str, &[&str])] = &[
+        (
+            "valorant",
+            "VALORANT",
+            &["valorant-win64-shipping.exe", "valorant.exe"],
+        ),
+        (
+            "league_of_legends",
+            "League of Legends",
+            &[
+                "league of legends.exe",
+                "leagueclient.exe",
+                "leagueclientux.exe",
+            ],
+        ),
+        ("bacon", "Legends of Runeterra", &["lor.exe"]),
+        ("lion", "2XKO", &[]),
+    ];
+    let client: Option<String> = std::fs::read_to_string(base.join("RiotClientInstalls.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|j| {
+            ["rc_default", "rc_live"]
+                .iter()
+                .find_map(|k| j[*k].as_str().map(str::to_string))
+        });
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(base.join("Metadata")) else {
+        return out;
+    };
+    for e in rd.flatten() {
+        let folder = e.file_name().to_string_lossy().into_owned();
+        let Some((product, patchline)) = folder.split_once('.') else {
+            continue;
+        };
+        let Some((_, name, known)) = PRODUCTS.iter().find(|(p, _, _)| *p == product) else {
+            continue;
+        };
+        let Ok(yaml) =
+            std::fs::read_to_string(e.path().join(format!("{folder}.product_settings.yaml")))
+        else {
+            continue;
+        };
+        let Some(dir) = yaml.lines().find_map(|l| {
+            l.trim()
+                .strip_prefix("product_install_full_path:")
+                .map(|v| v.trim().trim_matches(['"', '\'']).to_string())
+        }) else {
+            continue;
+        };
+        if dir.is_empty()
+            || !Path::new(&dir).is_dir()
+            || out.iter().any(|f: &Found| f.source_id == product)
+        {
+            continue;
+        }
+        let dir = dir.replace('/', "\\");
+        let mut exes: Vec<String> = known.iter().map(|x| x.to_string()).collect();
+        if exes.is_empty() {
+            exes = game_exes(Path::new(&dir));
+        }
+        out.push(Found {
+            source: "riot".into(),
+            source_id: product.to_string(),
+            name: name.to_string(),
+            launch: client.as_ref().map(|c| {
+                format!("\"{c}\" --launch-product={product} --launch-patchline={patchline}")
+            }),
+            install_dir: Some(dir),
+            exes,
+            steam_appid: None,
+            platform_minutes: 0,
+            last_played: None,
+            already: false,
+        });
+    }
+    out
+}
+
+pub fn riot_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("ProgramData")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"));
+    let p = base.join("Riot Games");
+    p.is_dir().then_some(p)
+}
+
+/// `"C:/a b/x.exe" --arg1 --arg2` → ("C:/a b/x.exe", ["--arg1", "--arg2"]); tırnaksızsa tamamı yol.
+pub fn split_command(s: &str) -> (String, Vec<String>) {
+    let s = s.trim();
+    if let Some(rest) = s.strip_prefix('"') {
+        if let Some(end) = rest.find('"') {
+            let args = rest[end + 1..]
+                .split_whitespace()
+                .map(str::to_string)
+                .collect();
+            return (rest[..end].to_string(), args);
+        }
+    }
+    (s.to_string(), Vec::new())
+}
+
 pub fn all() -> Vec<Found> {
     let mut out = steam_dir().map(|d| steam(&d)).unwrap_or_default();
     out.extend(epic_dir().map(|d| epic(&d)).unwrap_or_default());
+    out.extend(riot_dir().map(|d| riot(&d)).unwrap_or_default());
     out.sort_by_key(|f| f.name.to_lowercase());
     out
 }
@@ -337,6 +444,54 @@ pub fn all() -> Vec<Found> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn riot_games_are_found() {
+        let root = std::env::temp_dir().join(format!("gmid-riot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let base = root.join("Riot Games");
+        let val = root.join("Games/VALORANT/live");
+        std::fs::create_dir_all(&val).unwrap();
+        std::fs::create_dir_all(base.join("Metadata/valorant.live")).unwrap();
+        std::fs::create_dir_all(base.join("Metadata/league_of_legends.live")).unwrap();
+        std::fs::create_dir_all(base.join("Metadata/Riot Client")).unwrap();
+        std::fs::write(
+            base.join("RiotClientInstalls.json"),
+            r#"{"rc_default":"C:/Riot Games/Riot Client/RiotClientServices.exe"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            base.join("Metadata/valorant.live/valorant.live.product_settings.yaml"),
+            format!(
+                "product_install_full_path: \"{}\"\nproduct_install_root: \"x\"\n",
+                val.to_string_lossy().replace('\\', "/")
+            ),
+        )
+        .unwrap();
+        // LoL kaldırılmış: klasörü yok, alınmaz.
+        std::fs::write(
+            base.join(
+                "Metadata/league_of_legends.live/league_of_legends.live.product_settings.yaml",
+            ),
+            "product_install_full_path: \"Z:/yok/League of Legends\"\n",
+        )
+        .unwrap();
+        let found = riot(&base);
+        assert_eq!(found.len(), 1, "{found:?}");
+        let v = &found[0];
+        assert_eq!(
+            (v.source.as_str(), v.source_id.as_str(), v.name.as_str()),
+            ("riot", "valorant", "VALORANT")
+        );
+        assert!(v.exes.contains(&"valorant-win64-shipping.exe".to_string()));
+        let (exe, args) = split_command(v.launch.as_deref().unwrap());
+        assert_eq!(exe, "C:/Riot Games/Riot Client/RiotClientServices.exe");
+        assert_eq!(
+            args,
+            ["--launch-product=valorant", "--launch-patchline=live"]
+        );
+        assert_eq!(split_command(r"C:\Oyun\a.exe").1.len(), 0);
+    }
 
     #[test]
     fn steam_and_epic_are_found() {

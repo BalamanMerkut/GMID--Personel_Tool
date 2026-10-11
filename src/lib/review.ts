@@ -48,11 +48,12 @@ export const statusLabel = (s: ReviewStatus | null) => STATUS.find((x) => x.id =
 export const recommendOf = (r: Recommend | null) => RECOMMEND.find((x) => x.id === r) ?? null;
 
 /** Puanın tonu: 9+ altın, 7+ yeşil, 5+ amber, altı kırmızımsı. */
-export function scoreTone(v: number): "gold" | "good" | "mid" | "low" {
+export function scoreTone(v: number | null): "gold" | "good" | "mid" | "low" | "none" {
+  if (v == null) return "none";
   return v >= 9 ? "gold" : v >= 7 ? "good" : v >= 5 ? "mid" : "low";
 }
 
-export const fmtScore = (v: number) => (Number.isInteger(v) ? `${v}` : v.toFixed(1)).replace(".", ",");
+export const fmtScore = (v: number | null) => v == null ? "—" : (Number.isInteger(v) ? `${v}` : v.toFixed(1)).replace(".", ",");
 
 /** Notlarda `||spoiler||` → gizli parça. */
 export function spoilerParts(text: string): { text: string; spoiler: boolean }[] {

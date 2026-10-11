@@ -567,6 +567,12 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 - Katalogda olmayan bir program için arama (Microsoft'un paket deposunun tamamında).
 - **Format sonrası uygulamanın kendisi de kurulu olmayacak.** Bu yüzden liste, **tek başına çalışan bir kurulum dosyasına**
   (`KurulumListem.bat`) dışa aktarılır. USB'ye / buluta koyarsın, formattan sonra çift tıklarsın, her şey kurulur — GMID Tool dahil.
+- ✅ **GMID'in kendisi de yedeklenir (istek, 2026-10-11):** Dışa aktarma, kurulum listesinin yanına GMID'in tüm verisini de koyar:
+  **ayarlar** (görünüm, kısayollar, sesle yazma, klip klasörleri…), veritabanı (notlar, hatırlatıcılar, oyun kütüphanesi,
+  oturum geçmişi, puanlar, çalma listeleri, sunucular), notların .md kopyaları, arka planlar ve kapaklar
+  (`GMID-Yedek.zip`). `.bat` önce GMID Tool'u kurar, sonra yedeği yerine açar: uygulama formattan önceki haliyle,
+  geçmişiyle birlikte açılır. Büyük ve yeniden indirilebilen şeyler (Whisper/dil modelleri, yt-dlp/ffmpeg, indirilen
+  videolar) isteğe bağlı; klipler zaten kendi programlarının klasöründe durur.
 
 **Sonra:** Windows ayarları paketi (dosya uzantılarını göster, karanlık mod, gereksiz başlangıç programlarını kapat vb.).
 
@@ -1033,6 +1039,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.20 | 2026-10-11 | Geri bildirim: sesle yazma göstergesi takılı kalmıyor (pencere Windows'a doğrudan gizletiliyor + gösterge kendi güvenlik ağı), Riot oyunları (League of Legends, VALORANT) taramada, elle kapak seçme, puan kartında önce durum ("İstiyorum"da puan yok; göç 12), format yedeğine GMID ayarları ve geçmişi (§3.9) |
 | v0.19 | 2026-10-11 | Faz 3b-3 kodlandı (Faz 3b tamam): Kliplerim — NVIDIA/Xbox/AMD/OBS/Steam/Medal klasörleri, oyuna göre gruplama, önizleme, Discord'a sığdır (10 MB, panoya dosya), Geri Dönüşüm Kutusu'na silme, eski klip temizliği |
 | v0.18 | 2026-10-11 | Faz 3b-2 kodlandı: Oyun Arşivi (5 soruluk puan kartı, Yok seçeneği, otomatik genel puan), Türkçe etiketler, Keşfet filtre kutusu, Bana bir oyun seç, arşive Steam'den arayarak ekleme |
 | v0.17 | 2026-10-11 | Faz 3b-1 kodlandı: Kütüphanem (Steam/Epic tarama, elle ekleme, otomatik bilgi ve kapak, oyunu başlatma), canlı oyun algılama ve Oturum Geçmişi (grafik) |

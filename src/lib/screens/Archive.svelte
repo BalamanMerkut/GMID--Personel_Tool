@@ -21,8 +21,8 @@
     ["rated", "Son puanlanan"],
   ];
   const SCORES = [7, 8, 9];
-  const STORES: [string, string][] = [["steam", "Steam"], ["epic", "Epic"], ["other", "Diğer"]];
-  const storeOf = (g: Game) => (g.source === "steam" || g.source === "epic" ? g.source : "other");
+  const STORES: [string, string][] = [["steam", "Steam"], ["epic", "Epic"], ["riot", "Riot"], ["other", "Diğer"]];
+  const storeOf = (g: Game) => (g.source === "steam" || g.source === "epic" || g.source === "riot" ? g.source : "other");
 
   interface Item {
     g: Game;
@@ -91,7 +91,7 @@
       const l = labelsOf(i.g);
       if (!tags.every((t) => l.includes(t))) return false;
     }
-    if (skip !== "score" && minScore && i.r.overall < minScore) return false;
+    if (skip !== "score" && minScore && (i.r.overall ?? 0) < minScore) return false;
     if (skip !== "status" && statuses.length && !statuses.includes(i.r.status ?? "")) return false;
     if (skip !== "rec" && recs.length && !recs.includes(i.r.recommend ?? "")) return false;
     if (skip !== "store" && stores.length && !stores.includes(storeOf(i.g))) return false;
@@ -102,7 +102,7 @@
   const shown = $derived.by(() => {
     const list = items.filter((i) => passes(i));
     const by: Record<Sort, (a: Item, b: Item) => number> = {
-      score: (a, b) => b.r.overall - a.r.overall || a.g.name.localeCompare(b.g.name, "tr"),
+      score: (a, b) => (b.r.overall ?? -1) - (a.r.overall ?? -1) || a.g.name.localeCompare(b.g.name, "tr"),
       recent: (a, b) => (b.g.lastPlayed ?? 0) - (a.g.lastPlayed ?? 0),
       played: (a, b) => playedOf(b.g) - playedOf(a.g),
       year: (a, b) => (b.g.year ?? 0) - (a.g.year ?? 0),
@@ -297,7 +297,7 @@
             <button class="card" class:picked={pick === i && !rolling} onclick={() => openDetail(i)} title={i.g.name}>
               <div class="cv">
                 {#if cover(i.g)}<img src={cover(i.g)} alt="" loading="lazy" />{:else}<span class="ph">{i.g.name}</span>{/if}
-                <span class={`score tone-${scoreTone(i.r.overall)}`}>{fmtScore(i.r.overall)}</span>
+                <span class={`score tone-${scoreTone(i.r.overall)}`}>{i.r.overall == null ? "İstiyorum" : fmtScore(i.r.overall)}</span>
                 {#if rec}<span class="rec" title={rec.label}>{rec.icon}</span>{/if}
                 {#if i.r.status}<span class="st">{statusLabel(i.r.status)}</span>{/if}
               </div>
@@ -341,7 +341,7 @@
       <div class="grp">
         <span class="gl">Puan</span>
         {#each SCORES as s (s)}
-          {@const n = countFor("score", (i) => i.r.overall >= s)}
+          {@const n = countFor("score", (i) => (i.r.overall ?? 0) >= s)}
           <label class="opt" class:dim={!n && minScore !== s}>
             <input type="radio" name="score" checked={minScore === s} onclick={() => (minScore = minScore === s ? 0 : s)} />
             <span>{s}+</span><span class="cnt tnum">{n}</span>
@@ -397,7 +397,7 @@
       </div>
       <h3>{p.g.name}</h3>
       {#if !rolling}
-        <span class={`pscore tone-${scoreTone(p.r.overall)}`}>{fmtScore(p.r.overall)} / 10</span>
+        {#if p.r.overall != null}<span class={`pscore tone-${scoreTone(p.r.overall)}`}>{fmtScore(p.r.overall)} / 10</span>{:else}<span class="pscore tone-none">İstek listende</span>{/if}
         {#if p.r.oneLiner}<span class="one">“{p.r.oneLiner}”</span>{/if}
       {/if}
       <div class="row center">
@@ -424,7 +424,7 @@
           <span class="sub small">{[d.g.developer, d.g.year, d.g.inLibrary ? "Kütüphanede" : "Kütüphanede değil"].filter(Boolean).join(" · ")}</span>
           {#if labelsOf(d.g).length}<div class="tags">{#each labelsOf(d.g) as t (t)}<span class="chip">{t}</span>{/each}</div>{/if}
           <div class="big">
-            <b class={`tone-${scoreTone(d.r.overall)}`}>{fmtScore(d.r.overall)}</b><span class="sub">/ 10</span>
+            {#if d.r.overall != null}<b class={`tone-${scoreTone(d.r.overall)}`}>{fmtScore(d.r.overall)}</b><span class="sub">/ 10</span>{/if}
             {#if rec}<span class="chip">{rec.icon} {rec.label}</span>{/if}
             {#if d.r.status}<span class="chip">{statusLabel(d.r.status)}</span>{/if}
           </div>
@@ -432,6 +432,7 @@
         </div>
       </div>
 
+      {#if d.r.overall != null}
       <div class="bars">
         {#each QUESTIONS as q (q.key)}
           {@const v = d.r.scores[q.key]}
@@ -442,6 +443,7 @@
           </div>
         {/each}
       </div>
+      {/if}
 
       <div class="meta small sub">
         {#if playedOf(d.g)}<span>Oynama: <b>{playtime(playedOf(d.g))}</b></span>{/if}
@@ -561,6 +563,7 @@
   .tone-good { color: var(--good); }
   .tone-mid { color: #e0a84a; }
   .tone-low { color: var(--bad); }
+  .tone-none { color: var(--teal); }
   .none { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; padding: 24px 0; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 40px 20px; color: var(--muted); }
   .empty h3 { margin: 0; color: var(--text); font-family: var(--f-display); }

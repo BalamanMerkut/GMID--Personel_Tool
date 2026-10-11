@@ -63,6 +63,40 @@ pub fn games_refresh_meta(app: AppHandle, id: String) -> CmdResult<()> {
     app.state::<Games>().refresh_meta(&app, &id)
 }
 
+/// Kapağı elle seçilen resimle değiştirir (Steam'de olmayan oyunlar: Riot, Battle.net…). Resim
+/// `Kapaklar\Oyunlar` içine kopyalanır; orijinal silinse de kapak kalır.
+#[tauri::command]
+pub fn games_set_cover(
+    app: AppHandle,
+    dir: State<'_, crate::paths::DataDir>,
+    db: State<'_, Db>,
+    id: String,
+    source: String,
+) -> CmdResult<()> {
+    let src = std::path::Path::new(&source);
+    let ext = src
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .filter(|e| ["jpg", "jpeg", "png", "webp", "gif"].contains(&e.as_str()))
+        .ok_or("Bir resim seç (JPG, PNG, WebP, GIF)")?;
+    let dest = dir
+        .folder(Some("Kapaklar"))
+        .join("Oyunlar")
+        .join(format!("elle-{id}-{}.{ext}", crate::util::now_ms()));
+    if let Some(d) = dest.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(src, &dest).map_err(|e| format!("Resim kopyalanamadı: {e}"))?;
+    db.conn()
+        .execute(
+            "UPDATE games SET cover = ?2 WHERE id = ?1",
+            rusqlite::params![id, dest.to_string_lossy()],
+        )
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("games-changed", ());
+    Ok(())
+}
+
 /// `since` (ms) sonrasında biten ya da süren oturumlar.
 #[tauri::command]
 pub fn games_sessions(
@@ -92,8 +126,11 @@ pub fn games_launch(
             .open_url(&target, None::<&str>)
             .map_err(|e| e.to_string())
     } else {
-        let path = std::path::Path::new(&target);
+        // `"C:/Riot Games/Riot Client/RiotClientServices.exe" --launch-product=valorant` gibi argümanlı da olabilir.
+        let (exe, args) = crate::games::scan::split_command(&target);
+        let path = std::path::Path::new(&exe);
         let mut cmd = std::process::Command::new(path);
+        cmd.args(args);
         if let Some(dir) = path.parent() {
             cmd.current_dir(dir);
         }
