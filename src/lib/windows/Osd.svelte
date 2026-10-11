@@ -17,7 +17,8 @@
 </script>
 
 {#if msg}
-  {#key msg.id}
+  <!-- Aynı türden art arda gelen mesajlar (dikte süresi, ses seviyesi) yeniden kaymasın. -->
+  {#key msg.icon}
     <div class="osd" class:warn={msg.icon === "info"}>
       <span class="ic"><Icon name={msg.icon as IconName} size={22} /></span>
       <span class="txt">{msg.text}</span>

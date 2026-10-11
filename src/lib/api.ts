@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, Download, Langs, Segment, Sidecar, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, Download, Langs, Segment, Sidecar, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -221,6 +221,15 @@ export const api = {
     pair: () => call<string>("bridge_pair"),
     unpair: () => call<void>("bridge_unpair"),
     installExtension: () => call<string>("extension_install"),
+  },
+
+  dictation: {
+    status: () => call<DictationStatus>("dictation_status"),
+    /** Ayarlar kaydedildikten sonra: açar/kapatır, sunucular yeni ayarla başlar. */
+    apply: () => call<DictationStatus>("dictation_apply"),
+    /** `part`: "whisper" | "gpu" (NVIDIA hızlandırma) | "llm" (toparlayıcı) */
+    install: (part: "whisper" | "gpu" | "llm") => call<DictationStatus>("dictation_install", { part }),
+    warmUp: () => call<DictationStatus>("dictation_warm_up"),
   },
 
   transcripts: {

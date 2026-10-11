@@ -254,7 +254,9 @@ fn drop_noise(segs: Vec<Segment>) -> Vec<Segment> {
 
 /// Karşılaştırma için: küçük harf, noktalama yok, tek boşluk.
 fn normalize(s: &str) -> String {
-    s.to_lowercase()
+    // "İ" küçültülünce "i̇" (i + nokta) olur; karşılaştırmada düz "i" olsun.
+    s.replace('İ', "i")
+        .to_lowercase()
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { ' ' })
         .collect::<String>()
@@ -329,6 +331,31 @@ fn drop_hallucinations(segs: Vec<Segment>) -> Vec<Segment> {
         .zip(drop)
         .filter_map(|(s, d)| (!d).then_some(s))
         .collect()
+}
+
+/// Dikte (sesle yazma) çıktısını temizler: "[BLANK_AUDIO]", "(müzik)" gibi notlar ve Whisper'ın
+/// sessizlikte uydurduğu altyazı imzaları atılır. Uydurmaysa boş döner.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn clean_dictation(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut depth = 0i32;
+    for c in text.chars() {
+        match c {
+            '[' | '(' => depth += 1,
+            ']' | ')' => depth = (depth - 1).max(0),
+            _ if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    let out = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    let n = normalize(&out);
+    if n.is_empty()
+        || HALLUCINATION_MARKS.iter().any(|m| n.contains(m))
+        || HALLUCINATION_LINES.contains(&n.as_str())
+    {
+        return String::new();
+    }
+    out
 }
 
 fn srt_time(t: f64) -> String {
@@ -477,6 +504,18 @@ mod tests {
                 "Na na na"
             ]
         );
+    }
+
+    #[test]
+    fn dictation_cleanup() {
+        assert_eq!(clean_dictation(" [BLANK_AUDIO] "), "");
+        assert_eq!(clean_dictation("Altyazı M.K."), "");
+        assert_eq!(clean_dictation("İzlediğiniz için teşekkürler."), "");
+        assert_eq!(
+            clean_dictation("Yarın (gülüyor) toplantı  var."),
+            "Yarın toplantı var."
+        );
+        assert_eq!(clean_dictation("Teşekkürler."), "Teşekkürler.");
     }
 
     #[test]

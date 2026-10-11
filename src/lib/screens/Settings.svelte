@@ -9,6 +9,7 @@
   import type { IconName } from "../icons";
   import Appearance from "../settings/Appearance.svelte";
   import Data from "../settings/Data.svelte";
+  import Dictation from "../settings/Dictation.svelte";
   import Downloader from "../settings/Downloader.svelte";
   import ServersList from "../settings/ServersList.svelte";
   import { getJson, save, setJson, settings } from "../settings.svelte";
@@ -39,6 +40,7 @@
     { id: "genel", label: "Genel", icon: "power", keys: "başlangıç windows açılış tepsi pencere kapat çıkış" },
     { id: "gorunum", label: "Görünüm", icon: "palette", keys: "arka plan resim gif video renk bulanık karartma kalite animasyon açılış tema" },
     { id: "kisayollar", label: "Kısayollar", icon: "keyboard", keys: "kısayol tuş atama klavye ctrl alt hotkey mikrofon ses not pano indir" },
+    { id: "dikte", label: "Sesle yazma", icon: "mic", keys: "sesle yazma dikte konuş konuşarak yaz mikrofon whisper wispr ctrl alt nvidia yapay zeka toparla" },
     { id: "ses", label: "Ses & Mikrofon", icon: "speaker", keys: "mikrofon kilit seviye gösterge osd kulaklık hoparlör" },
     { id: "bildirimler", label: "Bildirimler", icon: "bell", keys: "bildirim ses uyarı hatırlatıcı windows sayaç indirme bitti" },
     { id: "indirici", label: "Video İndirici", icon: "download", keys: "video indirme yt-dlp ffmpeg deno araç güncelle eklenti chrome opera aynı anda klasör" },
@@ -250,6 +252,8 @@
         Bildirimler hiç gelmiyorsa: Windows Ayarları → Sistem → Bildirimler'de GMID Tool'un açık olduğuna ve
         "Rahatsız etmeyin"in kapalı olduğuna bak.
       </p>
+    {:else if tab === "dikte"}
+      <Dictation />
     {:else if tab === "indirici"}
       <Downloader {onnavigate} />
     {:else if tab === "sunucular"}

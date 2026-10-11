@@ -58,6 +58,20 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 - **Kendiliğinden yeniden deneme:** sitenin anlık reddi ya da kopan bağlantıda indirme 3 kez kendi kendine yeniden
   denenir ("Tekrar deneniyor").
 
+### Sesle yazma (Ctrl + Alt)
+
+- **Ctrl + sol Alt** basılı tut, konuş, bırak: söylediğin yazı o an hangi programdaysan (Discord, Word, tarayıcı…)
+  oraya yapıştırılır. Her şey bu bilgisayarda olur; ses hiçbir yere gönderilmez.
+- Türkçe klavyede **AltGr** (@, €, {…) dikteyi başlatmaz; araya başka bir tuş girerse (Ctrl+Alt+N gibi kısayollar)
+  dikte başlamaz ya da iptal olur.
+- **Whisper** (whisper-server) modeli bir kez yükler; **NVIDIA ekran kartı** varsa CUDA sürümüyle kısa bir dikte
+  1 saniyenin altında yazılır (bir kez ~650 MB iner; şarkı sözü çıkarmayı da hızlandırır). Ekran kartında açılmazsa
+  kendiliğinden işlemciye geçer.
+- **Toparlama (deneme):** yerel dil modeli (Gemma 3 4B, llama.cpp, ~3 GB) noktalama, paragraf, dolgu sözleri,
+  "yarın, yok yok cuma" gibi düzeltmeler ve devrik cümleler. Şüpheli sonuçta ham yazı yapıştırılır.
+- 15 dakika kullanılmazsa modeller bellekten çıkar (oyunda ekran kartı boş kalsın). Kontrol Odası → Sesle yazma:
+  özel sözcükler, dil, deneme alanı, son dikteler (yapışmadıysa kopyala).
+
 ### Kontrol Odası (ayarlar merkezi)
 
 - Bütün ayarlar tek yerde, soldan sekmeli: Genel · Görünüm · **Kısayollar** · Ses & Mikrofon · Bildirimler ·

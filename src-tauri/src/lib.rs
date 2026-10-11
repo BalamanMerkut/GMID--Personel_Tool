@@ -2,6 +2,7 @@ mod audio;
 mod backup;
 mod commands;
 mod db;
+mod dictation;
 mod downloader;
 mod hotkeys;
 mod log;
@@ -94,6 +95,7 @@ pub fn run() {
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
             app.manage(transcript::Transcriber::default());
+            app.manage(dictation::Dictation::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -104,6 +106,7 @@ pub fn run() {
             hotkeys::register_all(handle);
             scheduler::start(handle.clone());
             downloader::bridge::start(handle.clone());
+            dictation::apply(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -209,6 +212,10 @@ pub fn run() {
             commands::transcripts::transcript_delete,
             commands::transcripts::whisper_status,
             commands::transcripts::whisper_install,
+            commands::dictation::dictation_status,
+            commands::dictation::dictation_apply,
+            commands::dictation::dictation_install,
+            commands::dictation::dictation_warm_up,
         ])
         .build(tauri::generate_context!())
         .expect("GMID Tool başlatılamadı")
@@ -223,6 +230,9 @@ pub fn run() {
                 RunEvent::Exit => {
                     if let Some(d) = app.try_state::<downloader::Downloader>() {
                         d.shutdown();
+                    }
+                    if let Some(d) = app.try_state::<dictation::Dictation>() {
+                        d.engine.shutdown();
                     }
                 }
                 _ => {}

@@ -15,7 +15,9 @@ export type AppEvent =
   | "downloads-progress"
   | "tools-progress"
   | "bridge-changed"
-  | "transcript-progress";
+  | "transcript-progress"
+  | "dictation-state"
+  | "dictation-entry";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

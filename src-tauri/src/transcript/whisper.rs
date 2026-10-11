@@ -42,19 +42,41 @@ const RELEASES_API: &str = "https://api.github.com/repos/ggml-org/whisper.cpp/re
 const WINDOWS_ASSET: &str = "whisper-bin-x64.zip";
 pub const MODEL_KEY: &str = "transcript.model";
 
-fn dir(root: &Path) -> PathBuf {
+pub(crate) fn dir(root: &Path) -> PathBuf {
     tools::dir(root).join("whisper")
 }
 
-fn cli(root: &Path) -> PathBuf {
-    dir(root).join(if cfg!(windows) {
-        "whisper-cli.exe"
-    } else {
-        "whisper-cli"
-    })
+/// NVIDIA ekran kartıyla çalışan (CUDA) sürüm ayrı klasörde durur; DLL'leri işlemci sürümüyle karışmasın.
+pub(crate) fn cuda_dir(root: &Path) -> PathBuf {
+    tools::dir(root).join("whisper-cuda")
 }
 
-fn model_path(root: &Path, m: &Model) -> PathBuf {
+fn exe(name: &str) -> String {
+    if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    }
+}
+
+fn cli(root: &Path) -> PathBuf {
+    dir(root).join(exe("whisper-cli"))
+}
+
+/// Kalıcı çalışan sunucu (modeli bir kez yükler): sesle yazma için.
+pub(crate) fn server_exe(root: &Path, gpu: bool) -> PathBuf {
+    if gpu {
+        cuda_dir(root).join(exe("whisper-server"))
+    } else {
+        dir(root).join(exe("whisper-server"))
+    }
+}
+
+pub(crate) fn cuda_ready(root: &Path) -> bool {
+    server_exe(root, true).is_file() && cuda_dir(root).join(exe("whisper-cli")).is_file()
+}
+
+pub(crate) fn model_path(root: &Path, m: &Model) -> PathBuf {
     dir(root).join("models").join(m.file)
 }
 
@@ -132,20 +154,25 @@ pub fn install(app: &AppHandle, root: &Path, model: &str) -> Result<(), String> 
             );
         };
 
-    if !cli(root).is_file() {
+    // Sunucu (sesle yazma) eski kurulumlarda yoktu: eksikse program yeniden iner (~8 MB).
+    if !cli(root).is_file() || !server_exe(root, false).is_file() {
         if !cfg!(windows) {
             return Err(
                 "Whisper programı şimdilik sadece Windows için kendiliğinden kurulabiliyor.".into(),
             );
         }
-        let url = windows_asset_url()?;
+        let url = release_asset(RELEASES_API, |n| n == WINDOWS_ASSET)?.0;
         let tmp = base.join("whisper.indiriliyor");
         let r = tools::download(&url, &tmp, |d, t| {
             emit("whisper", "Whisper", "download", d, t, None)
         })
         .and_then(|_| {
             emit("whisper", "Whisper", "extract", 0, 0, None);
-            tools::extract(&tmp, &base, &["whisper-cli.exe", "*.dll"])
+            tools::extract(
+                &tmp,
+                &base,
+                &["whisper-cli.exe", "whisper-server.exe", "*.dll"],
+            )
         });
         let _ = std::fs::remove_file(&tmp);
         if let Err(e) = r {
@@ -173,11 +200,15 @@ pub fn install(app: &AppHandle, root: &Path, model: &str) -> Result<(), String> 
     Ok(())
 }
 
-/// GitHub'daki son sürümler arasında Windows dosyasını taşıyan ilkinin adresi.
-fn windows_asset_url() -> Result<String, String> {
-    let agent = crate::net::agent(Duration::from_secs(15), Duration::from_secs(30));
+/// GitHub'daki son sürümler arasında adı uyan ilk dosyanın adresi ve boyutu. whisper.cpp ve
+/// llama.cpp Windows dosyalarını her sürümde yayımlamıyor; son birkaç sürüme bakılır.
+pub(crate) fn release_asset(
+    api: &str,
+    wanted: impl Fn(&str) -> bool,
+) -> Result<(String, u64), String> {
+    let agent = crate::net::agent(Duration::from_secs(15), Duration::from_secs(60));
     let mut resp = agent
-        .get(RELEASES_API)
+        .get(api)
         .header("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| format!("GitHub'a ulaşılamadı ({e})"))?;
@@ -187,7 +218,7 @@ fn windows_asset_url() -> Result<String, String> {
     let body = resp
         .body_mut()
         .with_config()
-        .limit(8 * 1024 * 1024)
+        .limit(32 * 1024 * 1024)
         .read_to_string()
         .map_err(|e| e.to_string())?;
     let releases: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
@@ -196,9 +227,66 @@ fn windows_asset_url() -> Result<String, String> {
         .into_iter()
         .flatten()
         .flat_map(|r| r["assets"].as_array().cloned().unwrap_or_default())
-        .find(|a| a["name"] == WINDOWS_ASSET)
-        .and_then(|a| a["browser_download_url"].as_str().map(String::from))
-        .ok_or_else(|| "Whisper'ın Windows sürümü bulunamadı.".into())
+        .find(|a| a["name"].as_str().is_some_and(&wanted))
+        .and_then(|a| {
+            Some((
+                a["browser_download_url"].as_str()?.to_string(),
+                a["size"].as_u64().unwrap_or(0),
+            ))
+        })
+        .ok_or_else(|| "İndirilecek Windows sürümü bulunamadı.".into())
+}
+
+/// whisper.cpp'nin NVIDIA (CUDA 12) sürümü: "whisper-bin-win-cuda-12.4.0-x64.zip" ya da eski adıyla
+/// "whisper-cublas-12.4.0-bin-x64.zip".
+pub(crate) fn is_cuda_asset(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    n.starts_with("whisper")
+        && n.ends_with("x64.zip")
+        && (n.contains("cuda-12") || n.contains("cublas-12"))
+}
+
+/// NVIDIA ekran kartı için whisper.cpp'yi indirir (~650 MB; CUDA kütüphaneleri içinde).
+pub fn install_cuda(app: &AppHandle, root: &Path) -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("NVIDIA hızlandırma yalnızca Windows'ta kurulabiliyor.".into());
+    }
+    let emit = |stage: &str, done: u64, total: u64, error: Option<String>| {
+        let _ = app.emit(
+            "tools-progress",
+            Progress {
+                tool: "whisper-cuda",
+                name: "Whisper (NVIDIA)",
+                stage,
+                done,
+                total,
+                error,
+            },
+        );
+    };
+    let dest = cuda_dir(root);
+    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let (url, _) = release_asset(RELEASES_API, is_cuda_asset)?;
+    let tmp = dest.join("whisper-cuda.indiriliyor");
+    let r = tools::download(&url, &tmp, |d, t| emit("download", d, t, None)).and_then(|_| {
+        emit("extract", 0, 0, None);
+        tools::extract(
+            &tmp,
+            &dest,
+            &["whisper-cli.exe", "whisper-server.exe", "*.dll"],
+        )
+    });
+    let _ = std::fs::remove_file(&tmp);
+    match r {
+        Ok(()) => {
+            emit("done", 0, 0, None);
+            Ok(())
+        }
+        Err(e) => {
+            emit("error", 0, 0, Some(e.clone()));
+            Err(format!("NVIDIA sürümü indirilemedi: {e}"))
+        }
+    }
 }
 
 fn ffmpeg(root: &Path) -> PathBuf {
@@ -227,6 +315,12 @@ pub fn transcribe(
     if !cli(root).is_file() || !model_file.is_file() {
         return Err("WHISPER_MISSING".into());
     }
+    // NVIDIA sürümü kuruluysa önce o (çok daha hızlı); çalışmazsa işlemci sürümü.
+    let mut clis = Vec::new();
+    if cuda_ready(root) {
+        clis.push(cuda_dir(root).join(exe("whisper-cli")));
+    }
+    clis.push(cli(root));
     let tmp = tools::dir(root).join("tmp");
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
     let name = new_id();
@@ -284,25 +378,63 @@ pub fn transcribe(
             detected.as_deref().unwrap_or("auto")
         }
     };
-    let mut cmd = Command::new(cli(root));
+    let mut result = Err("Whisper çalışırken hata oluştu.".to_string());
+    for (i, program) in clis.iter().enumerate() {
+        let _ = std::fs::remove_file(&json);
+        result = run_cli(
+            program,
+            &model_file,
+            &wav,
+            lang,
+            &threads,
+            prompt,
+            &out_base,
+            &json,
+            &progress,
+        );
+        match &result {
+            Ok(_) => break,
+            Err(e) if i + 1 < clis.len() => {
+                crate::log!("Whisper (NVIDIA) çalışmadı, işlemciyle deneniyor: {e}")
+            }
+            Err(_) => {}
+        }
+    }
+    cleanup();
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_cli(
+    program: &Path,
+    model_file: &Path,
+    wav: &Path,
+    lang: &str,
+    threads: &str,
+    prompt: &str,
+    out_base: &Path,
+    json: &Path,
+    progress: &impl Fn(&'static str, f64),
+) -> Result<Vec<Segment>, String> {
+    let mut cmd = Command::new(program);
     cmd.arg("-m")
-        .arg(&model_file)
+        .arg(model_file)
         .arg("-f")
-        .arg(&wav)
-        .args(["-l", lang, "-t", &threads])
+        .arg(wav)
+        .args(["-l", lang, "-t", threads])
         // Tam JSON (kelime zamanlarıyla), satırlar en fazla ~50 karakter ve kelime sınırında bölünür.
         .args(["-ojf", "-ml", "50", "-sow", "-pp"])
         // Konuşma dışı simgeleri ([Müzik], ♪…) bastır: müzikte uydurma satırları azaltır.
         .arg("--suppress-nst")
         .arg("-of")
-        .arg(&out_base)
+        .arg(out_base)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     let prompt = prompt.trim();
     if !prompt.is_empty() {
         cmd.arg("--prompt").arg(prompt);
     }
-    if let Some(d) = cli(root).parent() {
+    if let Some(d) = program.parent() {
         cmd.current_dir(d);
     }
     hide_console(&mut cmd);
@@ -329,8 +461,8 @@ pub fn transcribe(
         }
     }
     let status = child.wait().map_err(|e| e.to_string())?;
-    let result = if status.success() && json.is_file() {
-        std::fs::read_to_string(&json)
+    if status.success() && json.is_file() {
+        std::fs::read_to_string(json)
             .map_err(|e| e.to_string())
             .and_then(|s| parse_whisper(&s))
     } else {
@@ -340,9 +472,7 @@ pub fn transcribe(
         } else {
             format!("Whisper: {last_err}")
         })
-    };
-    cleanup();
-    result
+    }
 }
 
 /// Kaydın ortasından 30 saniyelik bir parça alıp dilini Whisper'a sorar ("en", "tr"…).

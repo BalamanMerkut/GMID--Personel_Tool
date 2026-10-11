@@ -366,3 +366,28 @@ export interface TranscriptProgress {
   stage: "lyrics" | "subtitles" | "audio" | "whisper";
   progress: number;
 }
+
+/** Sesle yazmadaki bir dikte. */
+export interface DictationEntry {
+  text: string;
+  /** Whisper'ın ham çıktısı (toparlanmadan önce). */
+  raw: string;
+  at: number;
+  /** Bırakıştan yapıştırmaya kadar geçen süre (ms). */
+  ms: number;
+  tidied: boolean;
+}
+
+export interface DictationStatus {
+  supported: boolean;
+  enabled: boolean;
+  whisperReady: boolean;
+  gpuInstalled: boolean;
+  /** true: şu an ekran kartında çalışıyor; null: sunucu kapalı. */
+  gpuActive: boolean | null;
+  gpuError: string | null;
+  llmInstalled: boolean;
+  phase: "idle" | "listening" | "transcribing" | "tidying";
+  lastError: string | null;
+  history: DictationEntry[];
+}

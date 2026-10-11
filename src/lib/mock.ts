@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, Download, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Countdown, Device, DictationStatus, Download, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
@@ -153,6 +153,16 @@ const probeResult: Probe = {
   ],
   audioLangs: [{ code: "tur", label: "Türkçe" }, { code: "eng", label: "İngilizce" }],
   subtitles: [{ code: "tr", label: "Türkçe" }, { code: "en", label: "İngilizce" }, { code: "de", label: "Almanca" }],
+};
+
+// ---- Sesle yazma ----
+const dictation: DictationStatus = {
+  supported: true, enabled: false, whisperReady: true, gpuInstalled: false, gpuActive: null, gpuError: null,
+  llmInstalled: false, phase: "idle", lastError: null,
+  history: [
+    { text: "Yarın akşam 9'da Valorant turnuvası var, herkes Discord'da olsun.\n\nKazanan takıma Steam kartı veriyoruz.", raw: "yarın akşam dokuzda valorant turnuvası var herkes discordda olsun ee kazanan takıma steam kartı veriyoruz", at: now() - 120_000, ms: 1840, tidied: true },
+    { text: "Toplantı cuma günü saat 3'te.", raw: "toplantı perşembe yok yok cuma günü saat üçte", at: now() - 600_000, ms: 2210, tidied: true },
+  ],
 };
 
 // ---- Yazılar ----
@@ -462,6 +472,22 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         ? ["Bu dünya hepimizin.", "Onu korumak zorundayız.", "Bak, denizler ağlıyor.", "Peki ya biz ne yapıyoruz?"]
         : ["This world belongs to all of us.", "We have to protect it.", "Look, the seas are crying.", "And what are we doing?"];
       return Array.from({ length: 40 }, (_, i) => ({ start: 1 + i * 3, end: 3.6 + i * 3, text: lines[i % 4] }));
+    }
+    case "dictation_status":
+    case "dictation_apply":
+    case "dictation_warm_up":
+    case "dictation_install": {
+      if (cmd === "dictation_install") await new Promise((r) => setTimeout(r, 800));
+      if (cmd === "dictation_install" && a.part === "gpu") dictation.gpuInstalled = true;
+      if (cmd === "dictation_install" && a.part === "llm") dictation.llmInstalled = true;
+      if (cmd === "dictation_install" && a.part === "whisper") dictation.whisperReady = true;
+      if (cmd === "dictation_warm_up") dictation.gpuActive = dictation.gpuInstalled;
+      try {
+        dictation.enabled = JSON.parse(localStorage.getItem("gmid.settings") ?? "{}")["dictation.enabled"] === "true";
+      } catch {
+        /* tarayıcı depolaması kapalı */
+      }
+      return { ...dictation };
     }
     case "whisper_status":
       return { program: false, ready: false, selected: "turbo", models: [

@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.13 (taslak)
+## Tasarım Dokümanı · v0.14 (taslak)
 
 > **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -208,6 +208,20 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >     iner (altyazı hatası videoyu bozmaz). Eklenti oynatıcının ayrıca yüklediği WEBVTT/SRT dosyalarını da
 >     içeriğinden tanır ve videoyla birlikte gönderir. Oynatıcıda **CC** menüsü; tercih edilen dil kendiliğinden açılır.
 >   - *MP3 sabit bit hızı (320K CBR):* değişken hızlı MP3'te ileri sarınca sözler kayıyordu.
+> - **v0.14 · Sesle yazma (Wispr Flow benzeri, tamamen yerel):**
+>   - *Tuş:* `WH_KEYBOARD_LL` kancası yalnızca izler (tuşları engellemez, programların gönderdiği tuşları saymaz).
+>     Ctrl (sol/sağ) + **sol** Alt, başka tuş olmadan 250 ms basılı → kayıt; AltGr'nin sahte sol Ctrl'u
+>     (scanCode 0x21D) ve sağ Alt sayılmaz. Araya tuş girerse iptal. Alt bırakılınca menü açılmasın diye 0xE8
+>     "maske" tuşu gönderilir.
+>   - *Kayıt:* WASAPI paylaşımlı mod, `AUTOCONVERTPCM` ile doğrudan 16 kHz tek kanal 16 bit (dönüştürme Windows'ta).
+>   - *Yazıya dökme:* `whisper-server` (model bir kez yüklenir; `/inference`, multipart), istekte ipucu: özel
+>     sözcükler + noktalamalı örnek cümle. NVIDIA (CUDA 12) sürümü `Araclar\whisper-cuda\`; açılamazsa işlemci.
+>     Şarkı sözü çıkaran `whisper-cli` de CUDA sürümünü önce dener.
+>   - *Toparlama:* `llama-server` (llama.cpp CUDA 12 + cudart) + Gemma 3 4B Q4_K_M; OpenAI uyumlu
+>     `/v1/chat/completions`, sıcaklık 0.2. Çıktı denetlenir (boş, %30'dan kısa ya da çok uzunsa ham yazı).
+>   - *Yapıştırma:* Ctrl/Alt/Shift/Win bırakılınca pano + `SendInput` Ctrl+V; 0,7 sn sonra eski pano yazısı geri
+>     konur. Yönetici olarak açılmış pencerelere yapıştırılamaz → son 20 dikte ayarlarda kopyalanabilir.
+>   - Sunucular 15 dk kullanılmazsa kapanır; tuşa basınca konuşma sürerken yeniden yüklenir.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -969,6 +983,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.14 | 2026-10-11 | Sesle yazma (Ctrl+Alt basılı tut): klavye kancası (AltGr ayrımı), WASAPI kayıt, whisper-server (NVIDIA CUDA ya da işlemci), yerel toparlama (Gemma 3 4B / llama.cpp), pano ile yapıştırma; Kontrol Odası → Sesle yazma |
 | v0.13 | 2026-10-11 | Medya Oynatıcı ayrı ekran ve arka planda çalma (mini oynatıcı), film tam ekranı düzeltildi, dublaj/altyazı seçimi (indirme, eklenti, oynatıcıda CC), MP3 sabit bit hızı; sesle yazma (Wispr Flow benzeri) araştırıldı |
 | v0.12 | 2026-10-11 | Geri bildirim turu: indirmelerde kendiliğinden yeniden deneme ve doğru hata mesajları, eklentide gizli HLS yakalama + iframe Referer + X/Instagram akışı, şarkı sözü veritabanı (LRCLIB), Whisper uydurma süzgeci ve dil tespiti, oynatıcı yeniden yazıldı (özel kontroller, liste görünümü, alt çalma çubuğu) |
 | v0.11 | 2026-10-11 | Video İndirici genişledi: YouTube çalma listeleri (seçerek toplu indirme, liste klasörü), eklenti her sitede video yakalama (HLS/DASH/mp4 + Referer), video üstü düğme ve sağ tık kalite menüsü, uygulama içi oynatıcı ve senkron yazılar (site altyazısı ya da yerel Whisper; .srt/.lrc), parçalı hızlı indirme |

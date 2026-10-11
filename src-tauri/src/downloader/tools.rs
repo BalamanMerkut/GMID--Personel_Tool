@@ -230,7 +230,8 @@ fn install_one(t: &Tool, base: &Path, emit: Emit) -> Result<(), String> {
 }
 
 pub(crate) fn download(url: &str, dest: &Path, progress: impl Fn(u64, u64)) -> Result<(), String> {
-    let agent = crate::net::agent(Duration::from_secs(20), Duration::from_secs(60));
+    // Gövde süresi dosyanın tamamı için: birkaç GB'lık modeller yavaş bağlantıda saatler sürebilir.
+    let agent = crate::net::agent(Duration::from_secs(20), Duration::from_secs(6 * 3600));
     let resp = agent
         .get(url)
         .call()
