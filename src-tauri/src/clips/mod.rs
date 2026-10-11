@@ -571,13 +571,25 @@ fn cleanup(db: &Db) {
     }
 }
 
-/// "Discord'a Hazır" kopyaları 3 gün sonra silinir.
+/// "Discord'a Hazır" kopyaları 3 gün sonra silinir. Yalnızca GMID'in ürettiği kopyalar ("… (Discord).mp4")
+/// ve yalnızca bu klasör: başka bir klasör verilirse hiçbir şeye dokunmaz.
 fn purge_ready(dir: &Path) {
+    if dir
+        .file_name()
+        .map(|n| n.to_string_lossy() != READY_DIR)
+        .unwrap_or(true)
+    {
+        return;
+    }
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
     let limit = std::time::SystemTime::now() - Duration::from_secs(3 * 86_400);
     for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !name.ends_with("(Discord).mp4") {
+            continue;
+        }
         if e.metadata()
             .and_then(|m| m.modified())
             .is_ok_and(|t| t < limit)
@@ -651,6 +663,34 @@ fn notify_new(app: &AppHandle, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn purge_only_touches_discord_copies() {
+        let root = std::env::temp_dir().join(format!("gmid-ready-{}", std::process::id()));
+        let ready = root.join(READY_DIR);
+        std::fs::create_dir_all(&ready).unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(10 * 86_400);
+        let mk = |p: &Path| {
+            std::fs::write(p, b"x").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(p)
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+        };
+        let db = root.join("gmid.db");
+        let copy = ready.join("Ace (Discord).mp4");
+        let other = ready.join("benim.txt");
+        mk(&db);
+        mk(&copy);
+        mk(&other);
+        purge_ready(&root); // yanlış klasör: dokunmaz
+        assert!(db.exists());
+        purge_ready(&ready);
+        assert!(!copy.exists());
+        assert!(other.exists() && db.exists());
+    }
 
     #[test]
     fn names_and_times() {
