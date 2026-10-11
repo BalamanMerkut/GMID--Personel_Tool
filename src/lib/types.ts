@@ -300,3 +300,45 @@ export interface BridgeStatus {
   lastSeen: number | null;
   browser: string | null;
 }
+
+export interface Word {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface Segment {
+  start: number;
+  end: number;
+  text: string;
+  words?: Word[];
+}
+
+export interface Transcript {
+  downloadId: string;
+  source: "subtitles" | "whisper";
+  language: string;
+  segments: Segment[];
+  createdAt: number;
+}
+
+export interface WhisperModel {
+  id: string;
+  label: string;
+  detail: string;
+  sizeMb: number;
+  installed: boolean;
+}
+
+export interface WhisperStatus {
+  program: boolean;
+  models: WhisperModel[];
+  selected: string;
+  ready: boolean;
+}
+
+export interface TranscriptProgress {
+  id: string;
+  stage: "subtitles" | "audio" | "whisper";
+  progress: number;
+}

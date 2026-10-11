@@ -820,8 +820,13 @@ impl Downloader {
                         }
                     })
                     .map_err(|e| format!("Dosya silinemedi (açık olabilir): {e}"))?;
+                // Yanındaki yazı dosyaları (Whisper / altyazı) da gitsin.
+                for ext in ["srt", "lrc"] {
+                    let _ = std::fs::remove_file(Path::new(f).with_extension(ext));
+                }
             }
         }
+        crate::transcript::delete(&db, id);
         if let Some(t) = d
             .thumbnail
             .as_deref()

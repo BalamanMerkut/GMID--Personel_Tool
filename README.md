@@ -32,6 +32,20 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
   sağ tık menüsü. Kurulum: Video İndirici → Tarayıcı eklentisi → adımlar (klasörü hazırla → `chrome://extensions` →
   Geliştirici modu → Paketlenmemiş öğe yükle → 6 haneli kodla eşleştir).
 
+### Video İndirici · çalma listeleri, her sitede yakalama, yazılar
+
+- **Çalma listeleri:** YouTube listesi bağlantısı yapıştır (ya da videodaki "listenin tamamını getir"); videoları
+  tek tek seç, kalite (1080p/720p/480p/MP3) seç, toplu indir. Dosyalar liste adıyla ayrı klasöre iner;
+  Videolarım'da listeye göre süzgeç.
+- **Eklenti her sitede:** yt-dlp'nin tanıdığı 1800+ site sayfa adresinden; tanınmayan sitelerde oynatıcının
+  yüklediği video (mp4, m3u8, mpd) yakalanır ve sayfa bilgisiyle indirilir. Videonun üstüne gelince sağ üstte
+  **GMID ile indir** düğmesi; videoya sağ tık → **GMID Tool ile indir** → kalite.
+- **Uygulama içi oynatıcı:** Videolarım'da çift tıkla. Video ya da müzik (kapakla) solda, **yazılar sağda zamanla
+  akar**; o an söylenen satır altınla, kelime zamanları varsa kelime kelime işaretlenir. Satıra tıkla → oraya git.
+  Büyük yazı (şarkı sözü) modu, bitince sıradakine geç.
+- **Yazıya dök:** önce sitenin kendi altyazısı (YouTube'da kelime zamanlı), yoksa **Whisper** tamamen bu bilgisayarda
+  (model bir kez iner, ~190–550 MB). Yazılar dosyanın yanına `.srt` (video) / `.lrc` (müzik) olarak da kaydedilir.
+
 ### Kontrol Odası (ayarlar merkezi)
 
 - Bütün ayarlar tek yerde, soldan sekmeli: Genel · Görünüm · **Kısayollar** · Ses & Mikrofon · Bildirimler ·

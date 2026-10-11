@@ -90,6 +90,15 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE downloads ADD COLUMN subdir TEXT;
     -- Eklentiden: sayfa adresi, tarayıcı kimliği, sayfa başlığı (JSON)
     ALTER TABLE downloads ADD COLUMN context TEXT;",
+    // 7 — videoların yazıları (altyazı / Whisper)
+    "CREATE TABLE transcripts (
+        download_id TEXT PRIMARY KEY,
+        source      TEXT NOT NULL,
+        language    TEXT NOT NULL DEFAULT '',
+        -- [{start, end, text, words?}] (saniye)
+        segments    TEXT NOT NULL,
+        created_at  INTEGER NOT NULL
+    );",
 ];
 
 pub struct Db(Mutex<Connection>);

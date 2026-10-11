@@ -5,6 +5,7 @@
   import Switch from "../components/Switch.svelte";
   import { downloads, formatDuration, formatEta, formatSpeed, isActive, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
+  import Player from "../components/Player.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
@@ -39,6 +40,8 @@
   let tab: Tab = $state("all");
   let search = $state("");
   let armed: string | null = $state(null);
+  /** Uygulama içi oynatıcıda açık olan. */
+  let playing: Download | null = $state(null);
   let hovering: string | null = $state(null);
   let parallel = $state(getJson("videos.parallel", 2));
   let notifyDone = $state(getJson("videos.notify", true));
@@ -457,10 +460,10 @@
           {#each shown as d (d.id)}
             <article
               class="card"
-              ondblclick={() => act(api.videos.open(d.id))}
+              ondblclick={() => (playing = d)}
               onmouseenter={() => (hovering = d.id)}
               onmouseleave={() => hovering === d.id && (hovering = null)}
-              title="Çift tıkla: oynat"
+              title="Çift tıkla: oynat (yazılarıyla)"
             >
               <div class="cthumb">
                 {#if hovering === d.id && previewable(d) && inTauri}
@@ -474,7 +477,7 @@
                 <span class="qual">{d.quality}</span>
                 {#if d.duration}<span class="dur tnum">{formatDuration(d.duration)}</span>{/if}
                 <div class="hover">
-                  <button class="round" title="Oynat" onclick={() => act(api.videos.open(d.id))}><Icon name="play" size={20} /></button>
+                  <button class="round" title="Oynat (yazılarıyla)" onclick={() => (playing = d)}><Icon name="play" size={20} /></button>
                 </div>
               </div>
               <div class="cbody">
@@ -587,6 +590,10 @@
     </aside>
   </div>
 </div>
+
+{#if playing}
+  <Player item={playing} queue={shown} onclose={() => (playing = null)} onpick={(d) => (playing = d)} />
+{/if}
 
 <style>
   .vd { display: flex; flex-direction: column; gap: 16px; max-width: 1500px; margin: 0 auto; }

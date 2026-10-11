@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, Download, GameInfo, Live, Probe, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Countdown, Device, Download, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
@@ -151,6 +151,19 @@ const probeResult: Probe = {
     { id: "mp3", label: "Sadece ses", detail: "MP3", size: 3_400_000, audioOnly: true, recommended: false },
   ],
 };
+
+// ---- Yazılar ----
+const lyric = (start: number, text: string): Segment => {
+  const words = text.split(" ");
+  const step = 2.6 / words.length;
+  return { start, end: start + 3, text, words: words.map((w, i) => ({ start: start + i * step, end: start + (i + 1) * step, text: w })) };
+};
+const transcripts: Record<string, Transcript> = {};
+const demoLyrics = [
+  "Gece yine uzun, yol yine sessiz", "Farlarda kayan şehir ışıkları", "Radyoda eski bir şarkı çalıyor",
+  "Ve ben seni düşünüyorum hâlâ", "Malikânenin kapısı aralık", "Şöminede çıtırdayan odunlar",
+  "Bu gece de oyun bitmeyecek", "Sabaha kadar biz buradayız", "Gece sürüşü, gece sürüşü", "Yıldızlar yolu gösteriyor",
+];
 
 function preview(body: string) {
   return body.split("\n").map((l) => l.replace(/^[#>\-*+\s]*(\[[ x]\])?\s*/, "").replace(/[*_`]/g, "").trim()).filter(Boolean).join(" · ").slice(0, 140);
@@ -416,6 +429,31 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       emit("downloads-progress", Object.values(liveMap));
       return;
     }
+    case "transcript_get": {
+      const d = downloadsList.find((x) => x.id === a.id);
+      if (d && d.title === "Gece Sürüşü" && !transcripts[d.id])
+        transcripts[d.id] = { downloadId: d.id, source: "whisper", language: "tr", createdAt: now(), segments: demoLyrics.map((t, i) => lyric(1 + i * 3.2, t)) };
+      return transcripts[a.id as string] ?? null;
+    }
+    case "transcript_create": {
+      for (const p of [0.1, 0.35, 0.6, 0.85, 1]) {
+        await new Promise((r) => setTimeout(r, 300));
+        emit("transcript-progress", { id: a.id, stage: "whisper", progress: p });
+      }
+      transcripts[a.id as string] = { downloadId: a.id as string, source: a.mode === "whisper" ? "whisper" : "subtitles", language: "tr", createdAt: now(),
+        segments: ["Merhaba, malikâneye hoş geldin.", "Bugün yeni bir oyuna bakıyoruz.", "Önce ayarları açalım.", "Grafikler gerçekten çok güzel."].map((t, i) => lyric(0.5 + i * 3.4, t)) };
+      return transcripts[a.id as string];
+    }
+    case "transcript_delete":
+      delete transcripts[a.id as string];
+      return;
+    case "whisper_status":
+      return { program: false, ready: false, selected: "turbo", models: [
+        { id: "turbo", label: "Dengeli (önerilen)", detail: "large-v3-turbo · en iyi doğruluğa çok yakın, hızlı", sizeMb: 550, installed: false },
+        { id: "small", label: "Hızlı", detail: "small · eski bilgisayarlar için, daha az doğru", sizeMb: 190, installed: false },
+      ] };
+    case "whisper_install":
+      return { program: true, ready: true, selected: a.model, models: [] };
     case "videos_open":
     case "videos_reveal":
       return;

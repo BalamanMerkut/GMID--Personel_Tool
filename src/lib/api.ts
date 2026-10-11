@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, Download, GameInfo, Live, Parsed, ToolsState, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, Download, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -217,6 +217,15 @@ export const api = {
     pair: () => call<string>("bridge_pair"),
     unpair: () => call<void>("bridge_unpair"),
     installExtension: () => call<string>("extension_install"),
+  },
+
+  transcripts: {
+    get: (id: string) => call<Transcript | null>("transcript_get", { id }),
+    /** `mode`: "auto" (önce sitenin altyazısı) | "subtitles" | "whisper"; `lang`: "orig" | "tr" | "en" */
+    create: (id: string, mode: string, lang: string) => call<Transcript>("transcript_create", { id, mode, lang }),
+    remove: (id: string) => call<void>("transcript_delete", { id }),
+    whisperStatus: () => call<WhisperStatus>("whisper_status"),
+    installWhisper: (model: string) => call<WhisperStatus>("whisper_install", { model }),
   },
 
   overlay: {

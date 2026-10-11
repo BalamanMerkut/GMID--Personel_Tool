@@ -229,7 +229,7 @@ fn install_one(t: &Tool, base: &Path, emit: Emit) -> Result<(), String> {
     result
 }
 
-fn download(url: &str, dest: &Path, progress: impl Fn(u64, u64)) -> Result<(), String> {
+pub(crate) fn download(url: &str, dest: &Path, progress: impl Fn(u64, u64)) -> Result<(), String> {
     let agent = crate::net::agent(Duration::from_secs(20), Duration::from_secs(60));
     let resp = agent
         .get(url)
@@ -271,7 +271,7 @@ fn download(url: &str, dest: &Path, progress: impl Fn(u64, u64)) -> Result<(), S
 }
 
 /// Çalışan bir programın üzerine yazılamaz (Windows); önce eskisini kenara al.
-fn replace(src: &Path, dest: &Path) -> Result<(), String> {
+pub(crate) fn replace(src: &Path, dest: &Path) -> Result<(), String> {
     if dest.exists() {
         let old = dest.with_extension("eski");
         let _ = std::fs::remove_file(&old);
@@ -296,7 +296,7 @@ fn matches(name: &str, pattern: &str) -> bool {
     }
 }
 
-fn extract(zip_path: &Path, dest: &Path, wanted: &[&str]) -> Result<(), String> {
+pub(crate) fn extract(zip_path: &Path, dest: &Path, wanted: &[&str]) -> Result<(), String> {
     let file = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("Arşiv açılamadı: {e}"))?;
     std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;

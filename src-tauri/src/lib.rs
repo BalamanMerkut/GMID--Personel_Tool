@@ -13,6 +13,7 @@ mod reminders;
 mod scheduler;
 mod servers;
 mod timers;
+mod transcript;
 mod tray;
 mod util;
 mod window;
@@ -92,6 +93,7 @@ pub fn run() {
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
+            app.manage(transcript::Transcriber::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -200,6 +202,11 @@ pub fn run() {
             commands::videos::bridge_pair,
             commands::videos::bridge_unpair,
             commands::videos::extension_install,
+            commands::transcripts::transcript_get,
+            commands::transcripts::transcript_create,
+            commands::transcripts::transcript_delete,
+            commands::transcripts::whisper_status,
+            commands::transcripts::whisper_install,
         ])
         .build(tauri::generate_context!())
         .expect("GMID Tool başlatılamadı")

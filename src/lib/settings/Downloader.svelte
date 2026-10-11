@@ -5,7 +5,7 @@
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { BridgeStatus, ToolsState } from "../types";
+  import type { BridgeStatus, ToolsState, WhisperStatus } from "../types";
 
   let { onnavigate }: { onnavigate: (id: string) => void } = $props();
 
@@ -13,10 +13,28 @@
   let tools: ToolsState | null = $state(null);
   let bridge: BridgeStatus | null = $state(null);
   let busy: "update" | "reinstall" | null = $state(null);
+  let whisper: WhisperStatus | null = $state(null);
+  let whisperBusy: string | null = $state(null);
 
   onMount(async () => {
-    [tools, bridge] = await Promise.all([api.videos.tools(), api.videos.bridge().catch(() => null)]);
+    [tools, bridge, whisper] = await Promise.all([
+      api.videos.tools(),
+      api.videos.bridge().catch(() => null),
+      api.transcripts.whisperStatus().catch(() => null),
+    ]);
   });
+
+  async function useModel(id: string) {
+    whisperBusy = id;
+    try {
+      whisper = await api.transcripts.installWhisper(id);
+      notify("Whisper modeli hazır", "check");
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      whisperBusy = null;
+    }
+  }
 
   async function update() {
     busy = "update";
@@ -93,6 +111,28 @@
     {:else}
       <button class="btn" onclick={() => onnavigate("videos")}><Icon name="download" />Video İndirici'de kur</button>
     {/if}
+  {/if}
+</section>
+
+<section class="panel">
+  <h3 class="h2"><Icon name="note" />Yazıya dökme (Whisper)</h3>
+  <p class="sub small">
+    Altyazısı olmayan videoların konuşmalarını ve şarkı sözlerini tamamen bu bilgisayarda yazıya döker. Program ve
+    model ilk kullanımda bir kez iner; ses hiçbir yere gönderilmez.
+  </p>
+  {#if whisper}
+    {#each whisper.models as m (m.id)}
+      <div class="line tool">
+        <div><b>{m.label}{#if whisper.selected === m.id && m.installed} · kullanılıyor{/if}</b><span class="sub small">{m.detail}</span></div>
+        {#if m.installed && whisper.program && whisper.selected === m.id}
+          <span class="ok"><Icon name="check" size={15} />Hazır</span>
+        {:else}
+          <button class="btn ghost" disabled={whisperBusy !== null} onclick={() => useModel(m.id)}>
+            {whisperBusy === m.id ? "İndiriliyor…" : m.installed ? "Bunu kullan" : `İndir (~${m.sizeMb} MB)`}
+          </button>
+        {/if}
+      </div>
+    {/each}
   {/if}
 </section>
 
