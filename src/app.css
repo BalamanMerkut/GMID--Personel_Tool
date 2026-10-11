@@ -1,0 +1,106 @@
+/* Malikâne teması — renkler GMID ve Merkut Studios logolarından ölçüldü (bkz. docs/TASARIM.md §1.5). */
+:root {
+  color-scheme: dark;
+  --night: #121417;
+  --night-2: #171a1e;
+  --coal: #2f3235;
+  --coal-2: #22252a;
+  --line: #363a40;
+  --line-2: #444a51;
+  --gold: #e3c270;
+  --gold-glow: #f0d878;
+  --gold-dim: #8a7646;
+  --teal: #35a0a2;
+  --neon: #60d8d8;
+  --navy: #0b203e;
+  --plum: #7848a8;
+  --text: #ece7da;
+  --muted: #a4a8ac;
+  --dim: #737a80;
+  --good: #5cc08a;
+  --bad: #e06a6a;
+  --f-display: "Montserrat", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --r-lg: 16px;
+  --r-md: 12px;
+  --side-w: 250px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--text);
+  font: 14px/1.5 var(--f-body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+#app { height: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+::selection { background: rgba(227, 194, 112, 0.3); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Ortak parçalar */
+.panel {
+  background: rgba(34, 37, 42, 0.72);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  min-width: 0;
+}
+[data-quality="high"] .panel { backdrop-filter: blur(8px); }
+.h2 {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sub { color: var(--muted); margin: 0; }
+.small { font-size: 12px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 0; border-radius: 10px; padding: 9px 14px;
+  font-weight: 600; background: var(--gold); color: #1b1608;
+  transition: background 0.15s;
+}
+.btn:hover { background: var(--gold-glow); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn.ghost { background: transparent; border: 1px solid var(--line-2); color: var(--text); }
+.btn.ghost:hover { border-color: var(--gold-dim); background: rgba(227, 194, 112, 0.06); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--coal-2);
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button {
+  border: 1px solid var(--line-2); background: var(--coal-2);
+  border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--muted);
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
+input[type="range"] { width: 100%; accent-color: var(--gold); }
+select {
+  background: var(--coal-2); border: 1px solid var(--line-2);
+  border-radius: 8px; padding: 6px 10px;
+}
+code, .path {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px; color: var(--text);
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -1,7 +1,7 @@
 # GMID Tool — Game Mansion In Discord
 ## Tasarım Dokümanı · v0.5 (taslak)
 
-> **Durum:** Fikir / karar aşaması. Kod yazılmadı.
+> **Durum:** Faz 1 (İskelet) kodlandı. Sonraki fazlar bu dokümana göre ilerliyor.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
 > hepsinin özeti **Bölüm 11**'de.
 
@@ -468,6 +468,8 @@ indirmek yerine listeden seçip **tek tıkla hepsini kurmak**.
 **Optimizasyon (denge kuralı gereği):**
 - Pencere küçültülünce / arkada kalınca / **bir oyun algılanınca hareketli arka plan otomatik durur**.
 - GIF seçersen, GMID onu arka planda aynı görünen ama 5–10 kat daha hafif bir videoya çevirir (görüntü aynı, yük daha az).
+  *(Bu dönüştürme ffmpeg gerektirdiği için Faz 5'te Video İndirici ile birlikte gelecek. Faz 1'de GIF doğrudan gösterilir;
+  pencere arkadayken ilk karesinde durdurulur.)*
 
 ---
 
@@ -776,8 +778,8 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 
 | Faz | İçerik | Sonunda elinde ne olacak? |
 |-----|--------|---------------------------|
-| **0 — Tasarım** *(şu an)* | Bu doküman, kararlar, ekran taslakları | Onaylanmış plan |
-| **1 — İskelet** | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
+| **0 — Tasarım** ✅ | Bu doküman, kararlar, ekran taslakları | Onaylanmış plan |
+| **1 — İskelet** ✅ *kodlandı* | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
 | **2 — Günlük araçlar** | Ses & Mikrofon (kilit, kısayollar, ekran göstergesi), Notlar (+ hızlı not, yapışkan not), Hatırlatıcılar, Sayaç | Her gün kullandığın araçlar |
 | **3 — Oyun** | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
@@ -850,6 +852,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.6 | 2026-10-11 | Faz 1 (İskelet) kodlandı: Tauri 2 + Svelte 5 projesi, açılış animasyonu, Malikâne teması, menü, Kontrol Odası, veri klasörü, SQLite, günlük yedek, tepsi, Windows ile başlatma; GitHub Actions ile otomatik Windows kurulum dosyası |
 | v0.5 | 2026-10-11 | Görsel taslak eklendi; Keşfet sağ filtre paneline taşındı (alışveriş sitesi düzeni); Video İndirici uygulamada görünür hale geldi (kendi sekmesi, menü rozeti, üst çubuk göstergesi, Giriş Salonu kutusu, bağlantı yapıştırma, eklenti önizlemesi) |
 | v0.4 | 2026-10-10 | Görsel kimlik (Malikâne teması, logolardan ölçülen renk paleti, Merkut Studios imzası); açılış animasyonu; malikâne odası isimli menü; klipler taşınmıyor, uygulamada gösteriliyor (Galeri → Kliplerim); Videolarım; GMID Tool botlardan bağımsız, Butler önerileri ve Card Idler çıkarıldı; kendiliğinden sığan arayüz kuralları (§5.5); açık sorular varsayılanlarla sadeleştirildi |
 | v0.3 | 2026-10-10 | Puanlama 5 kısa soruya çevrildi (oyun ve film); kapsam: önce yerel, sunucu tarihi belirsiz; Galeri taşıma kararı; tam ekran oyunlar için sesli geri bildirim; "gerçek oynama" ve "Steam süresi" ayrımı; GMID evreninin mevcut parçaları (Butler, Music Bot, Card Idler) incelendi; yeni öneriler: paylaşım dosyası, Butler'ın ağzından bildirimler, Steam Kart Toplayıcı |
