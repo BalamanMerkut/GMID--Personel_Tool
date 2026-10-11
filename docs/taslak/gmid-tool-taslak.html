@@ -146,6 +146,80 @@ main{overflow:auto;padding:24px;min-width:0}
 select{background:var(--coal-2);border:1px solid var(--line-2);border-radius:8px;padding:6px 10px}
 .empty{padding:40px 16px;text-align:center;color:var(--muted)}
 
+/* ---------- Arşiv: sağ filtre paneli ---------- */
+.arc{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:20px;align-items:start}
+.arc-main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.arc-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.fside{position:sticky;top:0;max-height:calc(100vh - 120px);overflow:auto;display:flex;flex-direction:column;gap:4px;padding:16px}
+.fsec{border-top:1px solid var(--line);padding:12px 0 8px;display:flex;flex-direction:column;gap:1px}
+.fsec h4{margin:0 0 6px;font-family:var(--f-display);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-dim)}
+.ck{display:flex;align-items:center;gap:10px;padding:5px 6px;border-radius:8px;cursor:pointer;color:var(--muted);user-select:none}
+.ck:hover{background:rgba(255,255,255,.04);color:var(--text)}
+.ck input{accent-color:var(--gold);width:16px;height:16px;margin:0;flex:none}
+.ck input:checked+span{color:var(--gold-glow);font-weight:600}
+.ck .n{margin-left:auto;font-size:12px;color:var(--dim)}
+.ck.off{opacity:.38}
+.link{border:0;background:transparent;color:var(--teal);font-size:12px;font-weight:600;padding:4px 6px;text-align:left}
+.link:hover{color:var(--neon)}
+.active{display:flex;gap:8px;flex-wrap:wrap}
+.active:empty{display:none}
+.achip{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--gold-dim);background:rgba(227,194,112,.1);color:var(--gold-glow);border-radius:999px;padding:3px 4px 3px 12px;font-size:12px}
+.achip button{border:0;background:transparent;color:inherit;padding:2px 6px;border-radius:999px;line-height:1}
+.achip button:hover{background:rgba(227,194,112,.2)}
+.fbtn,.fclose,.fapply{display:none!important}
+
+/* ---------- Video İndirici ---------- */
+.paste{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.paste .search{max-width:none;flex:1 1 300px}
+.fmt{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:16px;margin-top:14px;padding:14px;border:1px solid var(--line-2);border-radius:14px;background:rgba(255,255,255,.02);animation:pop .2s ease}
+.vthumb{aspect-ratio:16/9;max-width:100%;border-radius:10px;position:relative;overflow:hidden}
+.vthumb .dur{position:absolute;right:8px;bottom:8px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,.65)}
+.qopts{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin:10px 0}
+.qopt{display:flex;align-items:center;gap:10px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;cursor:pointer;min-width:0}
+.qopt input{accent-color:var(--gold);margin:0;flex:none}
+.qopt b{font-family:var(--f-display);font-size:14px}
+.qopt span{font-size:12px;color:var(--dim);margin-left:auto;white-space:nowrap}
+.qopt em{font-style:normal;font-size:10px;white-space:nowrap;font-weight:700;color:var(--gold);letter-spacing:.04em}
+.qopt:has(input:checked){border-color:var(--gold);background:rgba(227,194,112,.08)}
+.chip.ok{color:var(--good);border-color:rgba(92,192,138,.4)}
+.dlchip{cursor:pointer;border-color:rgba(96,216,216,.45);color:var(--neon)}
+.queue{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.qrow{display:grid;grid-template-columns:104px minmax(0,1fr) auto;gap:14px;align-items:center;padding:10px;border-radius:12px;background:rgba(255,255,255,.03)}
+.qthumb{aspect-ratio:16/9;border-radius:8px;max-width:100%}
+.qmain{min-width:0}
+.prog.big{height:8px;margin:6px 0}
+.prog.big i{transition:width .45s linear;background:linear-gradient(90deg,var(--teal),var(--neon))}
+.qrow.paused .prog i{background:var(--dim)}
+.qrow .small{font-size:12px}
+.qact{display:flex;gap:4px}
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.clip .vq{position:absolute;right:8px;top:8px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(227,194,112,.9);color:#1b1608}
+.clip .cap.two{flex-direction:column;align-items:flex-start;gap:2px}
+.clip .cap.two b{color:var(--text);font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nav .nbadge{margin-left:auto;font-size:11px;font-weight:700;background:var(--neon);color:#062626;border-radius:999px;padding:0 7px}
+.nav .nbadge:empty{display:none}
+/* Eklenti önizlemesi */
+.browser{width:min(900px,100%);max-height:100%;overflow:auto;border-radius:14px;background:#0f1012;border:1px solid var(--line-2);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:pop .22s ease}
+.bbar{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#1d1f22;border-bottom:1px solid var(--line)}
+.bdots{display:flex;gap:6px;flex:none}.bdots i{width:10px;height:10px;border-radius:50%;background:#3a3d42}
+.addr{flex:1;min-width:0;background:#2a2c30;border-radius:999px;padding:6px 14px;color:#b9bcc0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.extbtn{position:relative;border:1px solid var(--gold);border-radius:8px;background:rgba(227,194,112,.12);padding:3px;flex:none}
+.extbtn img{width:24px;height:24px;border-radius:50%;display:block}
+.extbtn .bdg{position:absolute;top:-7px;right:-7px;background:var(--neon);color:#062626;font-size:10px;font-weight:800;border-radius:999px;padding:0 5px}
+.bpage{position:relative;padding:16px;display:grid;gap:12px}
+.bvideo{aspect-ratio:16/9;max-width:100%;border-radius:10px;position:relative;overflow:hidden;background:radial-gradient(60% 80% at 30% 40%,#c9a54a55,transparent 60%),radial-gradient(50% 60% at 75% 70%,#7848a855,transparent 60%),linear-gradient(150deg,#1b1a12,#0b0c0e)}
+.bplay{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.85)}
+.bplay svg{width:56px;height:56px}
+.ondl{position:absolute;top:12px;left:12px;display:inline-flex;gap:6px;align-items:center;border:1px solid rgba(227,194,112,.6);background:rgba(12,14,17,.85);color:var(--gold-glow);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600}
+.bmeta b{display:block;font-size:16px}.bmeta span{color:var(--dim);font-size:12px}
+.popup{position:absolute;top:6px;right:12px;width:min(330px,calc(100% - 24px));background:var(--night-2);border:1px solid var(--gold-dim);border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.65);padding:14px;display:flex;flex-direction:column;gap:10px;animation:pop .2s ease}
+.popup .qopts{grid-template-columns:1fr;margin:0;gap:6px}
+.popup .qopt{padding:6px 10px}
+.popup-h{display:flex;align-items:center;gap:10px}
+.popup-h img{width:28px;height:28px;border-radius:50%}
+.bcap{text-align:center;color:var(--dim);font-size:12px;padding:0 16px 14px}
+
 /* ---------- Puanlama kartı ---------- */
 .modal{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:16px;background:rgba(8,9,11,.68);backdrop-filter:blur(6px)}
 .dialog{width:min(660px,100%);max-height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:var(--night-2);border:1px solid var(--line-2);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden;animation:pop .22s ease}
@@ -279,6 +353,14 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
 .prog i{display:block;height:100%;width:38%;background:var(--gold)}
 
 /* ---------- Duyarlı yerleşim ---------- */
+@media (max-width:1000px){
+  .arc{grid-template-columns:minmax(0,1fr)}
+  .fside{position:fixed;top:0;right:0;bottom:0;width:min(320px,90vw);max-height:none;border-radius:0;z-index:115;transform:translateX(105%);transition:transform .25s ease;background:var(--night-2);backdrop-filter:none;border-width:0 0 0 1px}
+  .fside.open{transform:none}
+  .fbtn,.fclose{display:inline-flex!important}
+  .fapply{display:flex!important;justify-content:center;position:sticky;bottom:0;margin-top:8px}
+  .fmt{grid-template-columns:minmax(0,1fr)}
+}
 @media (max-width:1180px){ .span-7,.span-5,.span-4,.span-8{grid-column:span 12} }
 @media (max-width:1100px){
   :root{--side-w:76px}
@@ -287,6 +369,7 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
   .nav{padding:6px 10px;gap:4px}
   .nav button{justify-content:center;padding:11px}
   .nav .sep{height:1px;background:var(--line);margin:8px 6px}
+  .nav .nbadge{position:absolute;top:3px;right:6px;padding:0 5px}
 }
 @media (min-width:1101px){ .nav .sep{display:none} }
 @media (max-width:720px){
@@ -297,10 +380,13 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
   .side .brand div,.side .room,.side .nav button span,.side .side-foot{display:revert}
   .side .nav button{justify-content:flex-start;padding:9px 10px}
   .side .nav .sep{display:none}
+  .side .nav .nbadge{position:static;padding:0 7px}
   .burger{display:inline-flex}
   .topbar{padding:10px 16px;grid-column:1}
   main{padding:16px;grid-column:1}
   .chips .hide-s{display:none}
+  .qrow{grid-template-columns:72px minmax(0,1fr) auto;gap:10px}
+  .popup{position:static;width:auto}
   .notes{grid-template-columns:minmax(0,1fr)}
   .q{grid-template-columns:minmax(0,1fr) auto 36px;row-gap:2px}
   .q .ql{grid-column:1;grid-row:1}
@@ -319,6 +405,11 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-castle" viewBox="0 0 24 24"><path d="M3 21h18M4 21V9h3v2h2V9h2v2h2V9h2v2h2V9h3v12M10 21v-4a2 2 0 0 1 4 0v4"/></symbol>
   <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M6 11h4M8 9v4M15 12h.01M18 10h.01M17.3 5H6.7a4 4 0 0 0-3.96 3.43L2 14.5A3 3 0 0 0 7.2 16.6L9 15h6l1.8 1.6A3 3 0 0 0 22 14.5l-.74-6.07A4 4 0 0 0 17.3 5z"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M10 4a2 2 0 1 1 4 0v2h4v4h1a2 2 0 1 1 0 4h-1v4h-4v-1a2 2 0 1 0-4 0v1H6v-4H5a2 2 0 1 1 0-4h1V6h4z"/></symbol>
   <symbol id="i-library" viewBox="0 0 24 24"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="9" y="4" width="4" height="16" rx="1"/><path d="M15.5 5.2l3.8-1 3 15.6-3.8 1z"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-clip" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3"/></symbol>
@@ -364,7 +455,7 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
       <div><b>GMID TOOL</b><span>Game Mansion In Discord</span></div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="side-foot"><span>Merkut Studios</span><span class="tnum">v0.4 taslak</span></div>
+    <div class="side-foot"><span>Merkut Studios</span><span class="tnum">v0.5 taslak</span></div>
   </aside>
 
   <header class="topbar">
@@ -372,6 +463,7 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
     <h1 id="title">Giriş Salonu</h1>
     <label class="search" for="q"><svg class="i"><use href="#i-search"/></svg><input id="q" type="search" placeholder="Oyun, etiket veya tür ara…" autocomplete="off"><kbd class="hide-s">Ctrl K</kbd></label>
     <div class="chips">
+      <button class="chip dlchip" id="dlChip" data-go="videos" title="Video İndirici'yi aç"><svg class="i" style="width:14px;height:14px"><use href="#i-download"/></svg><span id="dlChipT"></span></button>
       <span class="chip live hide-s"><i></i>Hades II · 1 sa 12 dk</span>
       <span class="chip hide-s" id="micChip"><svg class="i" style="width:14px;height:14px"><use href="#i-mic"/></svg><span>%100 kilitli</span></span>
       <button class="iconbtn" id="openPanel" title="Ctrl+Shift+G"><svg class="i" style="width:16px;height:16px"><use href="#i-layers"/></svg>Oyun İçi Panel</button>
@@ -421,6 +513,10 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
             <li><span class="t">Hafta sonu co-op listesi</span><span class="m">2 gün önce</span></li>
           </ul>
         </div>
+        <div class="panel span-12">
+          <div class="spread"><h3 class="h2"><svg class="i"><use href="#i-download"/></svg>Devam eden indirmeler</h3><button class="iconbtn" data-go="videos">Video İndirici</button></div>
+          <div class="queue" id="homeQueue"></div>
+</div>
       </div>
     </section>
 
@@ -436,19 +532,47 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
 
     <!-- Oyun Arşivi -->
     <section class="screen" data-screen="archive" hidden>
-      <div class="panel filters">
-        <div class="spread">
-          <h3 class="h2"><svg class="i"><use href="#i-search"/></svg>Keşfet <span class="sub tnum" id="count" style="font-weight:500;font-family:var(--f-body)"></span></h3>
-          <button class="btn" id="pick"><svg class="i"><use href="#i-dice"/></svg>Bana bir oyun seç</button>
+      <div class="arc">
+        <div class="arc-main">
+          <div class="arc-top">
+            <p class="sub tnum" id="count" style="margin:0"></p>
+            <div class="row">
+              <label class="selects"><span style="font-size:12px;color:var(--dim)">Sırala</span>
+                <select id="sort"><option value="score">Puana göre</option><option value="recent">Son oynanana göre</option><option value="hrs">Oynama süresine göre</option><option value="year">Çıkış yılına göre</option></select></label>
+              <button class="btn ghost fbtn" id="openF"><svg class="i"><use href="#i-filter"/></svg>Filtrele<span class="tnum" id="fcount"></span></button>
+              <button class="btn" id="pick"><svg class="i"><use href="#i-dice"/></svg>Bana bir oyun seç</button>
+            </div>
+          </div>
+          <div class="active" id="activeF"></div>
+          <div class="grid" id="arcGrid"></div>
         </div>
-        <div class="fchips" id="tagChips" role="group" aria-label="Etiketler"></div>
-        <div class="selects">
-          <label>En düşük puan <select id="minScore"><option value="0">Hepsi</option><option value="7">7 ve üstü</option><option value="8">8 ve üstü</option><option value="9">9 ve üstü</option></select></label>
-          <label>Sırala <select id="sort"><option value="score">Puana göre</option><option value="recent">Son oynanana göre</option><option value="hrs">Oynama süresine göre</option><option value="year">Çıkış yılına göre</option></select></label>
-          <button class="btn ghost" id="clearF" style="padding:6px 12px">Filtreleri temizle</button>
-        </div>
+        <aside class="fside panel" id="fside" aria-label="Filtreler">
+          <div class="spread"><h3 class="h2"><svg class="i"><use href="#i-filter"/></svg>Filtreler</h3><div class="row" style="gap:4px"><button class="link" id="clearF">Temizle</button><button class="xbtn fclose" id="closeF" aria-label="Filtreleri kapat"><svg class="i"><use href="#i-x"/></svg></button></div></div>
+          <div class="fsec"><h4>Tür ve etiket</h4><div id="fTags"></div><button class="link" id="moreTags"></button></div>
+          <div class="fsec"><h4>Puan</h4><div id="fScore"></div></div>
+          <div class="fsec"><h4>Durum</h4><div id="fStatus"></div></div>
+          <div class="fsec"><h4>Tavsiye</h4><div id="fRec"></div></div>
+          <div class="fsec"><h4>Mağaza</h4><div id="fSrc"></div></div>
+          <button class="btn fapply" id="applyF"></button>
+        </aside>
       </div>
-      <div class="grid" id="arcGrid"></div>
+    </section>
+
+    <!-- Video İndirici -->
+    <section class="screen" data-screen="videos" hidden>
+      <div class="panel">
+        <div class="spread"><h3 class="h2"><svg class="i"><use href="#i-download"/></svg>Video indir</h3><span class="sub" style="font-size:12px">YouTube · X (Twitter) · Instagram ve yüzlerce site</span></div>
+        <form class="paste" id="pasteF"><label class="search" for="url"><svg class="i"><use href="#i-link"/></svg><input id="url" type="url" value="https://youtu.be/ornek-video" placeholder="Video bağlantısını yapıştır…" autocomplete="off"></label><button class="btn" type="submit" id="fetchB"><svg class="i"><use href="#i-search"/></svg>Kaliteleri getir</button></form>
+        <div id="fmt"></div>
+        <div class="row" style="margin-top:12px;gap:8px"><span class="sub" style="font-size:12px">Tarayıcıda gezerken:</span><span class="chip ok"><svg class="i" style="width:14px;height:14px"><use href="#i-puzzle"/></svg>Chrome eklentisi bağlı</span><span class="chip ok"><svg class="i" style="width:14px;height:14px"><use href="#i-puzzle"/></svg>Opera eklentisi bağlı</span><button class="link" id="showExt">Eklenti nasıl görünüyor? →</button></div>
+      </div>
+      <div class="panel">
+        <div class="spread"><h3 class="h2"><svg class="i"><use href="#i-download"/></svg>İndirmeler <span class="sub tnum" id="qCount" style="font-family:var(--f-body);font-weight:500"></span></h3><span class="sub" style="font-size:12px">Kaydedilen yer: Belgeler\GMID Tool\Videolar</span></div>
+        <div class="queue" id="queue"></div>
+      </div>
+      <div class="spread"><h3 class="h2"><svg class="i"><use href="#i-video"/></svg>Videolarım <span class="sub tnum" id="vCount" style="font-family:var(--f-body);font-weight:500"></span></h3><div class="seg" id="siteTabs"></div></div>
+      <p class="sub" style="margin-top:-12px;font-size:12px">Çift tıkla, video açılsın.</p>
+      <div class="vgrid" id="vgrid"></div>
     </section>
 
     <!-- Kliplerim -->
@@ -561,6 +685,25 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
   </div>
 </div>
 
+<!-- Eklenti önizlemesi -->
+<div class="modal" id="extModal" hidden role="dialog" aria-modal="true" aria-label="Tarayıcı eklentisi önizlemesi">
+  <div class="browser">
+    <div class="bbar"><span class="bdots"><i></i><i></i><i></i></span><div class="addr">youtube.com/watch?v=ornek-video</div><button class="extbtn" id="extIcon" title="GMID Tool eklentisi"><img alt="GMID" src="data:image/webp;base64,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"><span class="bdg">1</span></button><button class="xbtn" id="extClose" aria-label="Kapat"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="bpage">
+      <div class="bvideo"><button class="ondl" id="ondl"><svg class="i" style="width:16px;height:16px"><use href="#i-download"/></svg>GMID ile indir</button><span class="bplay"><svg class="i"><use href="#i-play"/></svg></span></div>
+      <div class="bmeta"><b>Elden Ring Nightreign · Tüm patronlar rehberi</b><span>Örnek kanal · 214 B görüntüleme</span></div>
+      <div class="popup" id="popup">
+        <div class="popup-h"><img alt="" src="data:image/webp;base64,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"><div style="min-width:0"><b style="font-family:var(--f-display);color:var(--gold)">GMID Tool</b><div class="sub" style="font-size:12px">Bu sayfada 1 video bulundu</div></div></div>
+        <b class="ell">Elden Ring Nightreign · Tüm patronlar rehberi</b>
+        <div class="qopts" id="popQ"></div>
+        <button class="btn" id="popGo" style="justify-content:center"><svg class="i"><use href="#i-download"/></svg>İndir</button>
+        <span class="sub" style="font-size:11px">Videolar\YouTube klasörüne iner · GMID Tool'da "Video İndirici"de görünür</span>
+      </div>
+    </div>
+    <p class="bcap">Taslak: eklentinin Chrome'da nasıl görüneceği. Eklenti simgesine ya da videonun üstündeki düğmeye tıkla.</p>
+  </div>
+</div>
+
 <!-- Oyun İçi Panel -->
 <div class="ingame" id="ingame" hidden>
   <div class="gamehint">HADES II</div>
@@ -620,7 +763,7 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
   const NAV=[
     {top:1,id:'home',ic:'castle',l:'Giriş Salonu'},
     {room:'Oyun Salonu',items:[['library','Kütüphanem','library'],['clock','Oturum Geçmişi','sessions'],['clip','Kliplerim','clips'],['bolt','Oyun Modu','gamemode']]},
-    {room:'Eğlence Salonu',items:[['star','Oyun Arşivi','archive'],['film','Film & Dizi Arşivi','films'],['video','Videolarım','videos']]},
+    {room:'Eğlence Salonu',items:[['star','Oyun Arşivi','archive'],['film','Film & Dizi Arşivi','films'],['download','Video İndirici','videos']]},
     {room:'Çalışma Odası',items:[['note','Notlar','notes'],['bell','Hatırlatıcılar','reminders'],['timer','Sayaç','timer'],['speaker','Ses & Mikrofon','audio'],['install','Format Sonrası Kurulum','install']]},
     {top:1,id:'settings',ic:'gear',l:'Kontrol Odası'},
   ];
@@ -629,7 +772,6 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
     sessions:'Hangi gün hangi oyunu ne kadar oynadığın: günlük ve haftalık grafikler, en uzun oturumlar, "gerçek oynama" ile Steam süresinin karşılaştırması.',
     gamemode:'Tek tıkla oyuna hazırlan: güç planı, kulaklığa geçiş, mikrofon kilidi, bildirimleri susturma, seçtiğin uygulamaları kapatma. Oyun kapanınca hepsi geri alınır.',
     films:'Oyun Arşivi ile aynı kart ve aynı Keşfet ekranı; afiş, özet, yönetmen ve oyuncular TMDB\'den Türkçe gelir. Dizilerde "S2 · B5" nerede kaldım takibi.',
-    videos:'Tarayıcı eklentisiyle indirdiğin videolar: küçük resimli kartlar, siteye göre filtre, üzerine gelince önizleme, çift tıkla aç.',
     reminders:'Tarih, saat ve tekrar seçerek hatırlatıcı kur; "30 dk sonra", "yarın 09:00" gibi hazır düğmeler. Windows bildirimi, oyundayken köşede küçük gösterge.',
     timer:'Kronometre ve aynı anda birden çok geri sayım ("Fırın 20 dk", "Mola 5 dk"). Tepsiden ve Oyun İçi Panel\'den başlatılabilir.',
     install:'Format sonrası kurulacak programların listesi: katalogdan ekle, sırala, tek tıkla hepsini kur ya da USB\'ye koymak için kurulum dosyasına aktar.',
@@ -640,13 +782,13 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
     for(const n of NAV){
       if(n.top){TITLES[n.id]=n.l;ICONS[n.id]=n.ic;h+=`<div class="sep"></div><button class="top" data-go="${n.id}" title="${n.l}">${icon(n.ic)}<span>${n.l}</span></button>`;continue}
       h+=`<div class="room">${n.room}</div><div class="sep"></div>`;
-      for(const [ic,l,id] of n.items){TITLES[id]=l;ICONS[id]=ic;h+=`<button data-go="${id}" title="${l}">${icon(ic)}<span>${l}</span></button>`}
+      for(const [ic,l,id] of n.items){TITLES[id]=l;ICONS[id]=ic;h+=`<button data-go="${id}" title="${l}">${icon(ic)}<span>${l}</span>${id==='videos'?'<b class="nbadge tnum" id="navDl"></b>':''}</button>`}
     }
     $('#nav').innerHTML=h.replace('<div class="sep"></div>','');
   }
 
   /* ---------- Ekran geçişi ---------- */
-  const SCREENS=['home','library','archive','clips','notes','audio'];
+  const SCREENS=['home','library','archive','clips','notes','audio','videos'];
   function go(id,push=true){
     if(!TITLES[id])id='home';
     $$('.screen').forEach(s=>s.hidden=true);
@@ -662,7 +804,7 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
   document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b){go(b.dataset.go)}});
 
   /* ---------- Mobil menü ---------- */
-  function closeSide(){$('#side').classList.remove('open');$('#scrim').hidden=true}
+  function closeSide(){$('#side').classList.remove('open');$('#fside').classList.remove('open');$('#scrim').hidden=true}
   $('#burger').onclick=()=>{$('#side').classList.add('open');$('#scrim').hidden=false};
   $('#scrim').onclick=closeSide;
 
@@ -684,36 +826,150 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
   }
   $('#libSort').onchange=buildLibrary;
 
-  /* ---------- Arşiv + Keşfet ---------- */
-  const sel=new Set(); let qtext='';
+  /* ---------- Arşiv + sağ filtre paneli ---------- */
+  const sel=new Set(), stS=new Set(), recS=new Set(), srcS=new Set(); let minS=0, qtext='', allTagsOpen=false;
+  const sc=g=>Math.min(10,Math.max(1,g.score+g.adj));
   const allTags=[...new Set(G.flatMap(g=>g.tags))].sort((a,b)=>{const c=t=>G.filter(g=>g.tags.includes(t)).length;return c(b)-c(a)||a.localeCompare(b,'tr')});
-  function buildChips(){$('#tagChips').innerHTML=allTags.map(t=>`<button class="fchip" aria-pressed="${sel.has(t)}" data-tag="${t}">${t}</button>`).join('')}
-  $('#tagChips').onclick=e=>{const b=e.target.closest('[data-tag]');if(!b)return;const t=b.dataset.tag;sel.has(t)?sel.delete(t):sel.add(t);buildChips();buildArchive()};
+  function match(g,skip){
+    const q=qtext.toLocaleLowerCase('tr');
+    return (skip==='tag'||[...sel].every(t=>g.tags.includes(t)))
+      &&(skip==='score'||sc(g)>=minS)
+      &&(skip==='st'||!stS.size||stS.has(g.st))
+      &&(skip==='rec'||!recS.size||recS.has(g.rec))
+      &&(skip==='src'||!srcS.size||srcS.has(g.src))
+      &&(!q||(g.t+' '+g.tags.join(' ')+' '+g.dev).toLocaleLowerCase('tr').includes(q));
+  }
   function filtered(){
-    const min=+$('#minScore').value, q=qtext.toLocaleLowerCase('tr');
-    let l=G.filter(g=>[...sel].every(t=>g.tags.includes(t))&&(g.score+g.adj)>=min&&(!q||(g.t+' '+g.tags.join(' ')+' '+g.dev).toLocaleLowerCase('tr').includes(q)));
-    const s=$('#sort').value;
-    l.sort((a,b)=>s==='score'?(b.score+b.adj)-(a.score+a.adj):s==='recent'?a.last-b.last:s==='hrs'?b.hrs-a.hrs:b.y-a.y);
-    return l;
+    const l=G.filter(g=>match(g)), s=$('#sort').value;
+    return l.sort((a,b)=>s==='score'?sc(b)-sc(a):s==='recent'?a.last-b.last:s==='hrs'?b.hrs-a.hrs:b.y-a.y);
+  }
+  const ck=(grp,val,label,n,on,type='checkbox')=>`<label class="ck ${!on&&n===0?'off':''}"><input type="${type}" name="f-${grp}" data-g="${grp}" value="${val}" ${on?'checked':''}><span>${label}</span><span class="n tnum">${n}</span></label>`;
+  function buildFilters(){
+    const tagsShown=allTagsOpen?allTags:allTags.slice(0,8);
+    $('#fTags').innerHTML=tagsShown.map(t=>ck('tag',t,t,G.filter(g=>match(g,'tag')&&[...sel,t].every(x=>g.tags.includes(x))).length,sel.has(t))).join('');
+    $('#moreTags').textContent=allTagsOpen?'Daha az göster':`Tümünü göster (${allTags.length})`;
+    $('#fScore').innerHTML=[[0,'Hepsi'],[7,'7 ve üstü'],[8,'8 ve üstü'],[9,'9 ve üstü']].map(([v,l])=>ck('score',v,l,G.filter(g=>match(g,'score')&&sc(g)>=v).length,minS===v,'radio')).join('');
+    $('#fStatus').innerHTML=['Oynuyorum','Bitirdim','%100','Ara verdim','Bıraktım'].map(v=>ck('st',v,v,G.filter(g=>match(g,'st')&&g.st===v).length,stS.has(v))).join('');
+    $('#fRec').innerHTML=REC.map(([k,l])=>ck('rec',k,l,G.filter(g=>match(g,'rec')&&g.rec===k).length,recS.has(k))).join('');
+    $('#fSrc').innerHTML=['Steam','Epic','EA','Elle'].map(v=>ck('src',v,v==='Elle'?'Elle eklenen':v,G.filter(g=>match(g,'src')&&g.src===v).length,srcS.has(v))).join('');
+  }
+  function activeList(){
+    const a=[...sel].map(t=>['tag',t,t]);
+    if(minS)a.push(['score',minS,`Puan ${minS}+`]);
+    stS.forEach(v=>a.push(['st',v,v]));recS.forEach(v=>a.push(['rec',v,RECTXT[v]]));srcS.forEach(v=>a.push(['src',v,v]));
+    if(qtext)a.push(['q',qtext,`“${qtext}”`]);
+    return a;
   }
   function cardHTML(g){
-    const sc=Math.min(10,Math.max(1,g.score+g.adj));
-    return `<button class="card" data-rate="${g.id}" id="c-${g.id}"><div style="position:relative">${cover(g)}<span class="score tnum">${fmt(sc)}</span><span class="rec ${g.rec}">${RECTXT[g.rec]}</span></div><div class="body"><span class="meta">${g.dev} · ${g.y} · ${g.st}</span><span class="line">“${g.line}”</span><div class="tags">${g.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('')}</div></div></button>`;
+    return `<button class="card" data-rate="${g.id}" id="c-${g.id}"><div style="position:relative">${cover(g)}<span class="score tnum">${fmt(sc(g))}</span><span class="rec ${g.rec}">${RECTXT[g.rec]}</span></div><div class="body"><span class="meta">${g.dev} · ${g.y} · ${g.st}</span><span class="line">“${g.line}”</span><div class="tags">${g.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('')}</div></div></button>`;
   }
   function buildArchive(){
-    const l=filtered();
-    $('#count').textContent=`· ${l.length} oyun`;
-    $('#arcGrid').innerHTML=l.length?l.map(cardHTML).join(''):`<div class="empty" style="grid-column:1/-1">Bu filtrelere uyan oyun yok. Bir etiketi kaldırmayı dene.</div>`;
+    const l=filtered(), act=activeList();
+    $('#count').innerHTML=`<b style="color:var(--text)">${l.length}</b> oyun ${act.length?'filtreye uyuyor':'arşivde'}`;
+    $('#activeF').innerHTML=act.map(([g,v,l])=>`<span class="achip">${l}<button data-rm="${g}" data-v="${v}" aria-label="${l} filtresini kaldır">${icon('x','width:12px;height:12px')}</button></span>`).join('');
+    $('#fcount').textContent=act.length?` (${act.length})`:'';
+    $('#applyF').textContent=`${l.length} oyunu göster`;
+    $('#arcGrid').innerHTML=l.length?l.map(cardHTML).join(''):`<div class="empty" style="grid-column:1/-1">Bu filtrelere uyan oyun yok. Sağdan bir filtreyi kaldırmayı dene.</div>`;
+    buildFilters();
   }
-  ['minScore','sort'].forEach(id=>$('#'+id).onchange=buildArchive);
-  $('#clearF').onclick=()=>{sel.clear();$('#minScore').value='0';qtext='';$('#q').value='';buildChips();buildArchive()};
+  $('#fside').addEventListener('change',e=>{
+    const x=e.target; if(!x.dataset.g)return; const v=x.value, on=x.checked;
+    const S={tag:sel,st:stS,rec:recS,src:srcS}[x.dataset.g];
+    if(x.dataset.g==='score')minS=+v; else on?S.add(v):S.delete(v);
+    buildArchive();
+  });
+  $('#activeF').onclick=e=>{const b=e.target.closest('[data-rm]');if(!b)return;const g=b.dataset.rm,v=b.dataset.v;
+    if(g==='score')minS=0;else if(g==='q'){qtext='';$('#q').value=''}else ({tag:sel,st:stS,rec:recS,src:srcS})[g].delete(v);buildArchive()};
+  $('#moreTags').onclick=()=>{allTagsOpen=!allTagsOpen;buildFilters()};
+  $('#sort').onchange=buildArchive;
+  $('#clearF').onclick=()=>{[sel,stS,recS,srcS].forEach(x=>x.clear());minS=0;qtext='';$('#q').value='';buildArchive()};
+  $('#openF').onclick=()=>{$('#fside').classList.add('open');$('#scrim').hidden=false};
+  $('#closeF').onclick=closeSide; $('#applyF').onclick=closeSide;
   $('#pick').onclick=()=>{
     const l=filtered(); if(!l.length){osd('search','Filtreye uyan oyun yok');return}
     const g=l[Math.floor(Math.random()*l.length)], el=$('#c-'+g.id);
     el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
-    osd('dice',`Bugünün önerisi: ${g.t} (${fmt(g.score+g.adj)})`);
+    osd('dice',`Bugünün önerisi: ${g.t} (${fmt(sc(g))})`);
   };
   $('#q').addEventListener('input',e=>{qtext=e.target.value.trim();if(!$('[data-screen="archive"]').hidden)buildArchive();else if(qtext){go('archive');buildArchive()}});
+
+  /* ---------- Video İndirici ---------- */
+  const SITEC={YouTube:['#2a1012','#e0565b'],Twitter:['#0f1a24','#5aa9e6'],Instagram:['#2a1026','#d9628f'],Diğer:['#1c1f24','#8b939b']};
+  const vth=(site,i=0)=>`background:radial-gradient(70% 90% at ${25+(i*17)%55}% 35%,${SITEC[site][1]}88 0%,transparent 60%),linear-gradient(140deg,${SITEC[site][0]},#0b0c0e)`;
+  const VIDS=[
+    {t:'Elden Ring · Malenia hiç vurulmadan',site:'YouTube',q:'1080p',dur:'14:22',size:'612 MB',when:'2 gün önce'},
+    {t:'Valorant 1v5 ace',site:'Twitter',q:'720p',dur:'0:48',size:'18 MB',when:'3 gün önce'},
+    {t:'Stardew çiftlik turu',site:'Instagram',q:'1080p',dur:'0:59',size:'24 MB',when:'5 gün önce'},
+    {t:'Lo-fi oyun müzikleri · 1 saat',site:'YouTube',q:'MP3',dur:'1:02:10',size:'86 MB',when:'1 hafta önce'},
+    {t:'Hades II yama notları özeti',site:'YouTube',q:'1440p',dur:'9:05',size:'740 MB',when:'1 hafta önce'},
+    {t:"Baldur's Gate 3 komik anlar",site:'Twitter',q:'720p',dur:'2:31',size:'41 MB',when:'2 hafta önce'},
+  ];
+  const QUEUE=[
+    {t:'Hollow Knight Silksong · İlk izlenim',site:'YouTube',q:'1080p',total:820,done:385,speed:6.2,paused:false},
+    {t:'CS2 smoke rehberi',site:'Instagram',q:'1080p',total:35,done:4,speed:3.1,paused:false},
+  ];
+  let siteF='Tümü';
+  const mb=n=>n>=1000?fmt(n/1000)+' GB':Math.round(n)+' MB';
+  const eta=s=>s<60?`${Math.ceil(s)} sn`:`${Math.floor(s/60)} dk ${Math.round(s%60)} sn`;
+  function qrowHTML(x,i){const p=x.done/x.total*100;return `<div class="qrow ${x.paused?'paused':''}"><div class="qthumb" style="${vth(x.site,i+3)}"></div><div class="qmain"><div class="spread" style="flex-wrap:nowrap"><b class="ell">${x.t}</b><span class="tnum" style="color:var(--neon);font-weight:600">%${Math.floor(p)}</span></div><div class="prog big"><i style="width:${p}%"></i></div><div class="spread sub small" style="gap:4px 12px"><span class="tnum">${x.site} · ${x.q} · ${mb(x.done)} / ${mb(x.total)}</span><span class="tnum">${x.paused?'Duraklatıldı':fmt(x.speed)+' MB/sn · '+eta((x.total-x.done)/x.speed)+' kaldı'}</span></div></div><div class="qact"><button class="xbtn" data-pause="${i}" aria-label="${x.paused?'Devam et':'Duraklat'}">${icon(x.paused?'play':'pause')}</button><button class="xbtn" data-cancel="${i}" aria-label="İptal et">${icon('x')}</button></div></div>`}
+  function renderQueue(){
+    const h=QUEUE.length?QUEUE.map(qrowHTML).join(''):`<div class="empty" style="padding:18px">Şu an indirme yok. Bir bağlantı yapıştır ya da tarayıcıda GMID eklentisine tıkla.</div>`;
+    $('#queue').innerHTML=h; $('#homeQueue').innerHTML=h;
+    $('#qCount').textContent=QUEUE.length?`· ${QUEUE.length} devam ediyor`:'';
+    const act=QUEUE.filter(x=>!x.paused), avg=QUEUE.length?Math.floor(QUEUE.reduce((a,x)=>a+x.done,0)/QUEUE.reduce((a,x)=>a+x.total,0)*100):0;
+    $('#dlChip').hidden=!QUEUE.length; $('#dlChipT').textContent=`${QUEUE.length} indiriliyor · %${avg}`;
+    const nb=$('#navDl'); if(nb)nb.textContent=QUEUE.length||'';
+  }
+  document.addEventListener('click',e=>{
+    const pz=e.target.closest('[data-pause]'), cn=e.target.closest('[data-cancel]');
+    if(pz){const x=QUEUE[+pz.dataset.pause];x.paused=!x.paused;renderQueue();osd(x.paused?'pause':'play',x.paused?'İndirme duraklatıldı':'İndirme devam ediyor')}
+    if(cn){const x=QUEUE.splice(+cn.dataset.cancel,1)[0];renderQueue();osd('x',`İptal edildi: ${x.t}`)}
+  });
+  setInterval(()=>{
+    if(document.hidden||!QUEUE.length)return;
+    for(let i=QUEUE.length-1;i>=0;i--){const x=QUEUE[i];if(x.paused)continue;x.done=Math.min(x.total,x.done+x.speed*0.5);
+      if(x.done>=x.total){QUEUE.splice(i,1);VIDS.unshift({t:x.t,site:x.site,q:x.q,dur:x.q==='MP3'||x.q==='M4A'?'3:12':'11:48',size:mb(x.total),when:'az önce'});buildVideos();osd('check',`İndirme tamamlandı: ${x.t}`)}}
+    renderQueue();
+  },500);
+  function buildVideos(){
+    const sites=['Tümü','YouTube','Twitter','Instagram'];
+    $('#siteTabs').innerHTML=sites.map(s=>`<button aria-pressed="${s===siteF}" data-site="${s}">${s==='Twitter'?'X (Twitter)':s}</button>`).join('');
+    const l=VIDS.filter(v=>siteF==='Tümü'||v.site===siteF);
+    $('#vCount').textContent=`· ${VIDS.length} video`;
+    $('#vgrid').innerHTML=l.map((v,i)=>`<button class="clip" data-vid="${VIDS.indexOf(v)}" title="Çift tıkla aç"><div class="th"><i style="${vth(v.site,i)}"></i><span class="src">${v.site==='Twitter'?'X':v.site.toUpperCase()}</span><span class="vq">${v.q}</span><span class="dur tnum">${v.dur}</span><span class="play"><span>${icon('play','width:18px;height:18px')}</span></span></div><div class="cap two"><b>${v.t}</b><span class="tnum">${v.size} · ${v.when}</span></div></button>`).join('');
+  }
+  $('#siteTabs').onclick=e=>{const b=e.target.closest('[data-site]');if(b){siteF=b.dataset.site;buildVideos()}};
+  document.addEventListener('dblclick',e=>{const v=e.target.closest('[data-vid]');if(v)osd('play',`Açılıyor: ${VIDS[+v.dataset.vid].t}`)});
+  const SAMPLE={YouTube:['Elden Ring Nightreign · Tüm patronlar rehberi','12:41',[['2160p','4K','1,9 GB'],['1440p','','1,1 GB'],['1080p','önerilen','540 MB'],['720p','','280 MB'],['480p','','140 MB'],['MP3','sadece ses','11 MB']]],
+    Twitter:['Valorant clutch anı','0:42',[['1080p','önerilen','22 MB'],['720p','','12 MB'],['480p','','6 MB'],['MP3','sadece ses','1 MB']]],
+    Instagram:['Hollow Knight speedrun anı','0:58',[['1080p','önerilen','26 MB'],['720p','','14 MB'],['MP3','sadece ses','1 MB']]],
+    Diğer:['Bağlantıdaki video','4:10',[['1080p','önerilen','180 MB'],['720p','','95 MB'],['MP3','sadece ses','4 MB']]]};
+  const siteOf=u=>/instagram/i.test(u)?'Instagram':/(twitter\.com|x\.com)/i.test(u)?'Twitter':/youtu/i.test(u)?'YouTube':'Diğer';
+  const qoptsHTML=(opts,name)=>opts.map(([q,tag,size])=>`<label class="qopt"><input type="radio" name="${name}" value="${q}" data-size="${size}" ${tag==='önerilen'?'checked':''}><b>${q}</b>${tag?`<em>${tag.toLocaleUpperCase('tr')}</em>`:''}<span class="tnum">${size}</span></label>`).join('');
+  function startDl(t,site,q,size){
+    const total=size.includes('GB')?parseFloat(size.replace(',','.'))*1000:parseFloat(size);
+    QUEUE.push({t,site,q,total,done:0,speed:q==='MP3'?2.5:site==='YouTube'?9.5:3.4,paused:false});renderQueue();
+    osd('download',`İndirme başladı · ${q} · ${size}`);
+  }
+  $('#pasteF').onsubmit=e=>{
+    e.preventDefault(); const u=$('#url').value.trim(); if(!u){$('#url').focus();return}
+    const site=siteOf(u), [t,dur,opts]=SAMPLE[site];
+    $('#fmt').innerHTML=`<div class="fmt" style="opacity:.6"><span class="sub">Video çözülüyor…</span></div>`;
+    setTimeout(()=>{
+      $('#fmt').innerHTML=`<div class="fmt"><div class="vthumb" style="${vth(site,2)}"><span class="dur tnum">${dur}</span></div><div style="min-width:0"><b style="font-size:16px">${t}</b><div class="sub" style="font-size:12px">${site==='Twitter'?'X (Twitter)':site} · ${dur} · örnek</div><div class="qopts">${qoptsHTML(opts,'fq')}</div><div class="row"><button class="btn" id="dlGo"><svg class="i"><use href="#i-download"/></svg>İndir</button><button class="btn ghost" id="dlCancel">Vazgeç</button><label class="ck" style="padding:0 4px"><input type="checkbox" id="always"><span>Her seferinde en iyisini seç, sorma</span></label></div></div></div>`;
+      $('#dlGo').onclick=()=>{const r=$('#fmt input[name=fq]:checked');startDl(t,site,r.value,r.dataset.size);$('#fmt').innerHTML=''};
+      $('#dlCancel').onclick=()=>{$('#fmt').innerHTML=''};
+    },550);
+  };
+  // Eklenti önizlemesi
+  $('#popQ').innerHTML=qoptsHTML(SAMPLE.YouTube[2],'pq');
+  function openExt(){$('#extModal').hidden=false;$('#popup').hidden=false}
+  function closeExt(){$('#extModal').hidden=true}
+  $('#showExt').onclick=openExt; $('#extClose').onclick=closeExt;
+  $('#extModal').addEventListener('click',e=>{if(e.target.id==='extModal')closeExt()});
+  $('#extIcon').onclick=()=>{$('#popup').hidden=!$('#popup').hidden};
+  $('#ondl').onclick=()=>{$('#popup').hidden=false};
+  $('#popGo').onclick=()=>{const r=$('#popQ input:checked');closeExt();startDl(SAMPLE.YouTube[0],'YouTube',r.value,r.dataset.size);go('videos')};
 
   /* ---------- Puanlama kartı ---------- */
   let cur=null, tmp=null;
@@ -826,11 +1082,11 @@ input[type=range]{width:100%;accent-color:var(--gold);height:22px;background:tra
     if(e.ctrlKey&&e.altKey&&e.key.toLowerCase()==='m'){e.preventDefault();toggleMute();return}
     if(e.ctrlKey&&e.altKey&&e.key.toLowerCase()==='l'){e.preventDefault();toggleLock();return}
     if(e.ctrlKey&&e.altKey&&e.key.toLowerCase()==='a'){e.preventDefault();setOut((outI+1)%OUTS.length);return}
-    if(e.key==='Escape'){if(!$('#modal').hidden)closeModal();else if(!$('#ingame').hidden)togglePanel(false);else closeSide()}
+    if(e.key==='Escape'){if(!$('#extModal').hidden)closeExt();else if(!$('#modal').hidden)closeModal();else if(!$('#ingame').hidden)togglePanel(false);else closeSide()}
   });
 
   /* ---------- Başlat ---------- */
-  buildNav();buildChips();buildArchive();buildLibrary();buildHome();buildClips();buildNotes();buildOuts();renderMic();
+  buildNav();buildArchive();buildVideos();renderQueue();buildLibrary();buildHome();buildClips();buildNotes();buildOuts();renderMic();
   const start=(location.hash||'').slice(1);
   go(TITLES[start]?start:'home',false);
   playSplash();

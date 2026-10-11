@@ -1,5 +1,5 @@
 # GMID Tool — Game Mansion In Discord
-## Tasarım Dokümanı · v0.4 (taslak)
+## Tasarım Dokümanı · v0.5 (taslak)
 
 > **Durum:** Fikir / karar aşaması. Kod yazılmadı.
 > Bu doküman birlikte güncelleniyor. Kesinleşen kararlar ✅, cevap bekleyenler ❓ ile işaretli;
@@ -123,7 +123,7 @@ odaları, sekmeler düz isimli:
 🍿 Eğlence Salonu
    ├─ Oyun Arşivi        → Puanladığımız oyunlar, yorumlar, notlar + tür/etiket filtreleme
    ├─ Film & Dizi Arşivi → Aynısı film ve diziler için
-   └─ Videolarım         → İndirilen videolar (IDM benzeri indiricinin kütüphanesi)
+   └─ Video İndirici     → Bağlantı yapıştır + indirme kuyruğu + "Videolarım" kütüphanesi (IDM benzeri)
 
 🧰 Çalışma Odası
    ├─ Notlar
@@ -161,6 +161,21 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 3. Uygulama videonun kaynağını çözer ve seçenekleri döndürür: `2160p · 1440p · 1080p · 720p · 480p · Sadece ses (MP3/M4A)` + tahmini boyutlar.
 4. Seçtiğin kalite indirilir, ilerleme hem eklentide hem uygulamada görünür.
 5. Bitince Windows bildirimi: "İndirme tamamlandı — Aç / Klasörde göster".
+
+**Uygulamada nerede?** ✅ Video indirici uygulamanın **en görünür** parçalarından biri:
+- Eğlence Salonu'nda kendi sekmesi: **Video İndirici** (menüde devam eden indirme sayısını gösteren rozet).
+- Üst çubukta her ekrandan görünen indirme göstergesi: "2 indiriliyor · %47" → tıklayınca Video İndirici açılır.
+- Giriş Salonu'nda "Devam eden indirmeler" kutusu.
+
+**Video İndirici ekranı (yukarıdan aşağıya):**
+1. **Bağlantı yapıştır** kutusu → "Kaliteleri getir" → kalite kartları (2160p · 1440p · 1080p *önerilen* · 720p · 480p · sadece ses MP3), her birinde tahmini boyut → **İndir**. Tarayıcı açık olmasa da çalışır.
+2. **Eklenti durumu:** "Chrome eklentisi bağlı · Opera eklentisi bağlı".
+3. **İndirmeler** kuyruğu: küçük resim, başlık, site, kalite, ilerleme çubuğu, hız, kalan süre, duraklat / iptal.
+4. **Videolarım:** indirilenler; siteye göre sekmeler (Tümü · YouTube · X · Instagram), çift tıkla aç.
+
+**Tarayıcı eklentisi (Chrome / Opera):** Video olan sayfada eklenti simgesinde rozet çıkar; tıklayınca küçük bir
+pencerede kaliteler listelenir → **İndir**. Videonun üstünde ayrıca küçük bir "GMID ile indir" düğmesi belirir.
+İndirme başlayınca GMID Tool'un kuyruğunda görünür. (Görsel taslakta "Eklenti nasıl görünüyor?" ile görülebilir.)
 
 **MVP**
 - YouTube, Twitter/X, Instagram (ve yt-dlp'nin desteklediği yüzlerce site, ücretsiz bonus).
@@ -292,6 +307,13 @@ Oyun eklendiğinde (kütüphaneden ya da isimle aratarak) **hiçbir şeyi elle y
 - Yanlış eşleşme olursa: "Bu oyun değil" → doğru oyunu seç. Bilgiler istenirse elle düzeltilebilir.
 
 #### c) Keşfet ekranı (filtrele, bul, öner) ✅
+
+**Yerleşim ✅:** Alışveriş sitelerindeki gibi **sağda filtre kutusu**, solda oyun kartları.
+- Filtre grupları: **Tür ve etiket** (en çok kullanılan 8'i görünür, "Tümünü göster" ile hepsi), **Puan** (7+, 8+, 9+), **Durum**, **Tavsiye**, **Mağaza**.
+- Her seçeneğin yanında, seçersen **kaç oyun kalacağı** yazar; sonuç çıkmayacak seçenekler soluk görünür.
+- Seçilen filtreler kartların üstünde ✕'li etiketler olarak durur; tek tıkla kaldırılır. "Temizle" hepsini sıfırlar.
+- Kartların üstünde: sonuç sayısı, sıralama ve **"Bana bir oyun seç"** düğmesi.
+- Dar pencerede filtre kutusu gizlenir; **"Filtrele"** düğmesiyle sağdan açılan bir çekmeceye dönüşür ("5 oyunu göster" düğmesiyle kapanır).
 
 Senaryo: *Arkadaşın "roguelike bir şey oynamak istiyorum" dedi.*
 
@@ -828,6 +850,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.5 | 2026-10-11 | Görsel taslak eklendi; Keşfet sağ filtre paneline taşındı (alışveriş sitesi düzeni); Video İndirici uygulamada görünür hale geldi (kendi sekmesi, menü rozeti, üst çubuk göstergesi, Giriş Salonu kutusu, bağlantı yapıştırma, eklenti önizlemesi) |
 | v0.4 | 2026-10-10 | Görsel kimlik (Malikâne teması, logolardan ölçülen renk paleti, Merkut Studios imzası); açılış animasyonu; malikâne odası isimli menü; klipler taşınmıyor, uygulamada gösteriliyor (Galeri → Kliplerim); Videolarım; GMID Tool botlardan bağımsız, Butler önerileri ve Card Idler çıkarıldı; kendiliğinden sığan arayüz kuralları (§5.5); açık sorular varsayılanlarla sadeleştirildi |
 | v0.3 | 2026-10-10 | Puanlama 5 kısa soruya çevrildi (oyun ve film); kapsam: önce yerel, sunucu tarihi belirsiz; Galeri taşıma kararı; tam ekran oyunlar için sesli geri bildirim; "gerçek oynama" ve "Steam süresi" ayrımı; GMID evreninin mevcut parçaları (Butler, Music Bot, Card Idler) incelendi; yeni öneriler: paylaşım dosyası, Butler'ın ağzından bildirimler, Steam Kart Toplayıcı |
 | v0.2 | 2026-10-10 | İsim ve hikâye (Game Mansion In Discord); denge kuralı; sade puanlama + otomatik oyun bilgisi + Keşfet ekranı; dizi eklendi; Ses & Mikrofon (seviye kilidi, kısayollar, ekran göstergesi); yeni modüller: Oyun İçi Panel, Galeri; Oyun Modu onaylandı; teknoloji seçimi kesinleşti; Butler entegrasyonu fikri; yol haritası güncellendi |
