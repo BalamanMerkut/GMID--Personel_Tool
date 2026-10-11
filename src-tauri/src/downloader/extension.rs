@@ -46,10 +46,13 @@ mod tests {
         let (_, bytes) = super::FILES[0];
         let m: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         assert_eq!(m["manifest_version"], 3);
-        // Eklentinin konuştuğu portlar uygulamanınkilerle aynı olmalı.
+        // Eklenti köprüye (127.0.0.1) erişebilmeli ve portlar uygulamanınkilerle aynı olmalı.
         let hosts = m["host_permissions"].to_string();
+        assert!(hosts.contains("<all_urls>") || hosts.contains("127.0.0.1"));
+        let (_, bg) = super::FILES[1];
+        let bg = String::from_utf8_lossy(bg);
         for p in super::super::bridge::PORTS {
-            assert!(hosts.contains(&format!("127.0.0.1:{p}")), "{p}");
+            assert!(bg.contains(&p.to_string()), "{p}");
         }
     }
 }

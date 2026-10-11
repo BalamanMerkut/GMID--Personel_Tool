@@ -93,9 +93,68 @@ async function jobsView(container) {
   polling = setInterval(render, 1000);
 }
 
-async function videoView() {
+function optionsView(p, jobs) {
+  const parts = [];
+  if (p.thumbnail) parts.push(el("img", { class: "thumb", src: p.thumbnail, alt: "" }));
+  parts.push(el("p", { class: "title" }, p.title));
+  parts.push(el("p", { class: "muted" }, [p.uploader, p.from === "media" ? "Sayfadan yakalanan video" : p.site].filter(Boolean).join(" · ")));
+  if (p.kind === "playlist") {
+    parts.push(el("p", { class: "muted" }, `Çalma listesi · ${p.entries.length} video. Hepsini indir (seçerek indirmek için GMID Tool'da aç):`));
+    parts.push(el("div", { class: "opts" }, ...[["1080", "1080p"], ["720", "720p"], ["mp3", "Sadece ses (MP3)"]].map(([id, label]) =>
+      el("button", { class: "opt", onclick: async (e) => {
+        const b = e.currentTarget;
+        b.disabled = true;
+        try {
+          const r = await send({ type: "playlist", url: p.url, option: id });
+          b.replaceChildren(el("b", {}, `${r.added} video sıraya eklendi ✓`));
+        } catch (err) {
+          b.replaceChildren(el("span", { class: "err" }, explain(err)));
+        }
+      } }, el("b", {}, label), el("small", {}, `${p.entries.length} dosya`)))));
+    parts.push(jobs);
+    return parts;
+  }
+  parts.push(el("div", { class: "opts" }, ...p.options.map((o) =>
+    el("button", { class: "opt" + (o.recommended ? " rec" : ""), onclick: async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      try {
+        await send({ type: "download", url: p.url, option: o.id, context: p.context });
+        b.replaceChildren(el("b", {}, "Sıraya eklendi ✓"));
+      } catch (err) {
+        b.replaceChildren(el("span", { class: "err" }, explain(err)));
+      }
+    } },
+      el("span", {}, el("b", {}, o.label), o.recommended ? el("span", { class: "tag" }, "ÖNERİLEN") : null,
+        o.detail ? el("small", {}, " · " + o.detail) : null),
+      el("small", {}, size(o.size))))));
+  parts.push(jobs);
+  return parts;
+}
+
+const KIND = { hls: "Yayın (HLS)", dash: "Yayın (DASH)", file: "Video dosyası" };
+
+async function mediaList(container) {
+  const list = await send({ type: "media" }).catch(() => []);
+  if (!list.length) return;
+  container.replaceChildren(
+    el("p", { class: "muted" }, `Bu sayfada yakalanan videolar (${list.length}):`),
+    ...list.slice(0, 6).map((m) => el("button", { class: "opt", onclick: async () => {
+      show(el("p", { class: "muted" }, "Video aranıyor…"));
+      try {
+        const p = await send({ type: "probe-media", url: m.url });
+        show(...optionsView(p, el("div")));
+      } catch (e) {
+        show(el("p", { class: "err" }, explain(e)));
+      }
+    } }, el("span", {}, el("b", {}, KIND[m.kind] || m.kind), el("small", {}, " · " + new URL(m.url).hostname)), el("small", {}, size(m.size)))),
+  );
+}
+
+async function videoView(wholeList = false) {
   const url = await currentUrl();
   const jobs = el("div");
+  const extra = el("div", { class: "opts" });
   if (!url) {
     show(el("p", { class: "muted" }, "Bu sekmede indirilecek bir şey yok. Video olan bir sayfada tekrar dene."), jobs);
     return jobsView(jobs);
@@ -103,28 +162,17 @@ async function videoView() {
   show(el("p", { class: "muted" }, "Video aranıyor…"), jobs);
   void jobsView(jobs);
   try {
-    const p = await send({ type: "probe", url });
-    const opts = el("div", { class: "opts" }, ...p.options.map((o) =>
-      el("button", { class: "opt" + (o.recommended ? " rec" : ""), onclick: async (e) => {
-        e.currentTarget.disabled = true;
-        try {
-          await send({ type: "download", url, option: o.id });
-          e.currentTarget.replaceChildren(el("b", {}, "Sıraya eklendi ✓"));
-        } catch (err) {
-          e.currentTarget.replaceChildren(el("span", { class: "err" }, explain(err)));
-        }
-      } },
-        el("span", {}, el("b", {}, o.label), o.recommended ? el("span", { class: "tag" }, "ÖNERİLEN") : null,
-          o.detail ? el("small", {}, " · " + o.detail) : null),
-        el("small", {}, size(o.size)))));
-    show(
-      p.thumbnail ? el("img", { class: "thumb", src: p.thumbnail, alt: "" }) : null,
-      el("p", { class: "title" }, p.title),
-      el("p", { class: "muted" }, [p.uploader, p.site].filter(Boolean).join(" · ")),
-      opts, jobs,
-    );
+    const p = await send({ type: "smart-probe", wholeList });
+    const parts = optionsView(p, jobs);
+    if (p.kind === "video" && p.from === "page" && /[?&]list=/.test(url) && !wholeList) {
+      parts.splice(parts.length - 1, 0, el("button", { class: "link", onclick: () => videoView(true) }, "Bu çalma listesinin tamamını göster"));
+    }
+    if (p.mediaCount > 1 || (p.from === "page" && p.mediaCount)) parts.splice(parts.length - 1, 0, extra);
+    show(...parts);
+    void mediaList(extra);
   } catch (e) {
-    show(el("p", { class: "err" }, explain(e)), jobs);
+    show(el("p", { class: "err" }, explain(e)), extra, jobs);
+    void mediaList(extra);
   }
 }
 

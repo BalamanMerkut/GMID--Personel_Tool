@@ -8,3 +8,12 @@ Kurulum:
  Opera:  opera://extensions → "Geliştirici modu" → "Paketlenmemiş öğe yükle" → bu klasörü seç.
 
 Sonra eklenti simgesine tıkla, GMID Tool'daki 6 haneli eşleştirme kodunu yaz.
+
+Kullanım:
+ - Herhangi bir sitede videonun üstüne gel: sağ üstte "GMID ile indir" düğmesi çıkar.
+ - Videoya sağ tıkla → "GMID Tool ile indir" → kaliteyi seç.
+ - Eklenti simgesi: sayfadaki video(lar), kaliteler ve inen işlerin ilerlemesi.
+ - Eklenti, sayfa tanınmasa bile oynatıcının yüklediği videoyu (mp4, m3u8, mpd) yakalar.
+
+GMID Tool güncellenince bu klasör de kendiliğinden güncellenir; chrome://extensions
+sayfasında GMID'nin yenile (⟳) düğmesine bir kez basman yeterli.

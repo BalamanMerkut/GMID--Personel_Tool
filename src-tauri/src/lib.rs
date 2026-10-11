@@ -102,9 +102,18 @@ pub fn run() {
             hotkeys::register_all(handle);
             scheduler::start(handle.clone());
             downloader::bridge::start(handle.clone());
-            // Önceki oturumdan sırada kalanlar varsa devam et.
+            // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
+            // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
-            std::thread::spawn(move || h.state::<downloader::Downloader>().pump(&h));
+            std::thread::spawn(move || {
+                let ext = h.state::<paths::DataDir>().folder(Some("Eklenti"));
+                if ext.join("manifest.json").is_file() {
+                    if let Err(e) = downloader::extension::install(&ext) {
+                        log!("Eklenti güncellenemedi: {e}");
+                    }
+                }
+                h.state::<downloader::Downloader>().pump(&h);
+            });
             window::restore_stickies(handle);
 
             // Günlük yedek açılışı yavaşlatmasın diye arka planda.

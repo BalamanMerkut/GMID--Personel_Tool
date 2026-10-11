@@ -356,7 +356,8 @@
       </div>
     {:else if !probing && !probeError}
       <p class="sub small hint">
-        İpucu: Tarayıcıdaki videonun altındaki <b>GMID ile indir</b> düğmesini kullanmak için eklentiyi kur (sağda).
+        İpucu: Tarayıcıda her sitedeki videoyu (üstündeki <b>GMID ile indir</b> düğmesi ya da sağ tık) indirmek için eklentiyi kur (sağda).
+        YouTube çalma listesi bağlantısı yapıştırırsan videoları seçerek toplu indirebilirsin.
         İndirilenler <b>Videolar</b> klasörüne, siteye göre ayrılarak iner.
       </p>
     {/if}
@@ -506,7 +507,11 @@
           <p class="state on">
             <span class="dot"></span>Bağlı{bridge.browser ? ` · ${bridge.browser}` : ""}{bridge.lastSeen ? ` · ${ago(bridge.lastSeen)} görüldü` : ""}
           </p>
-          <p class="sub small">Video sayfalarında sol altta <b>GMID ile indir</b> düğmesi çıkar; eklenti simgesinden ya da sağ tık menüsünden de indirebilirsin.</p>
+          <p class="sub small">
+            Her sitede bir videonun üstüne gelince sağ üstte <b>GMID ile indir</b> düğmesi çıkar. Videoya sağ tıklayıp
+            <b>GMID Tool ile indir</b> menüsünden kalite seçebilir, eklenti simgesinden sayfadaki videoları görebilirsin.
+          </p>
+          <p class="sub small">Uygulama güncellenince eklenti de güncellenir: <code>chrome://extensions</code> sayfasında GMID'nin ⟳ (yenile) düğmesine bir kez bas.</p>
           <div class="row">
             <button class="link" onclick={() => (showSteps = !showSteps)}>{showSteps ? "Adımları gizle" : "Kurulum adımları"}</button>
             <button class="link dangerlink" onclick={unpair}>Bağlantıyı kaldır</button>
