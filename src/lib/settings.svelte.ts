@@ -44,8 +44,24 @@ const KEYS: Record<keyof Settings, string> = {
 
 export const settings: Settings = $state({ ...DEFAULTS });
 
+/** Ayar ekranı dışındaki modüllerin JSON ayarları (ör. `audio.devices`, `reminders.sound`). */
+let raw: Record<string, string> = {};
+
+export function getJson<T>(key: string, fallback: T): T {
+  try {
+    return key in raw ? (JSON.parse(raw[key]) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function setJson(key: string, value: unknown): Promise<void> {
+  raw[key] = JSON.stringify(value);
+  await api.setSetting(key, raw[key]);
+}
+
 export async function loadSettings(): Promise<void> {
-  const raw = await api.getSettings();
+  raw = await api.getSettings();
   for (const key of Object.keys(KEYS) as (keyof Settings)[]) {
     const stored = raw[KEYS[key]];
     if (stored === undefined) continue;

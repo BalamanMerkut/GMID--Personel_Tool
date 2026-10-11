@@ -12,6 +12,34 @@ const MIGRATIONS: &[&str] = &[
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );",
+    // 2 — notlar
+    "CREATE TABLE notes (
+        id         TEXT PRIMARY KEY,
+        title      TEXT NOT NULL DEFAULT '',
+        body       TEXT NOT NULL DEFAULT '',
+        color      TEXT NOT NULL DEFAULT 'default',
+        font       TEXT NOT NULL DEFAULT 'inter',
+        pinned     INTEGER NOT NULL DEFAULT 0,
+        file_name  TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+    );
+    CREATE INDEX notes_updated ON notes (updated_at);",
+    // 3 — hatırlatıcılar
+    "CREATE TABLE reminders (
+        id         TEXT PRIMARY KEY,
+        title      TEXT NOT NULL,
+        note       TEXT NOT NULL DEFAULT '',
+        due_at     INTEGER NOT NULL,
+        -- Tekrarın asıl zamanı; erteleme sadece due_at'i değiştirir.
+        anchor_at  INTEGER NOT NULL,
+        repeat     TEXT NOT NULL DEFAULT 'none',
+        notified   INTEGER NOT NULL DEFAULT 0,
+        done       INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX reminders_due ON reminders (done, notified, due_at);",
 ];
 
 pub struct Db(Mutex<Connection>);
@@ -43,6 +71,14 @@ impl Db {
                 r.get(0)
             })
             .optional()
+    }
+
+    /// JSON olarak saklanan bir ayarı okur; yoksa ya da bozuksa `None`.
+    pub fn setting_json<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+        self.setting(key)
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str(&v).ok())
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> rusqlite::Result<()> {
@@ -87,6 +123,7 @@ mod tests {
         // İkinci açılışta göçler tekrar çalışmamalı, veri durmalı.
         let db = Db::open(&path).unwrap();
         assert_eq!(db.all_settings().unwrap().len(), 1);
+        assert_eq!(db.setting_json::<bool>("ui.splash"), Some(true));
         let v: i64 = db
             .conn()
             .pragma_query_value(None, "user_version", |r| r.get(0))

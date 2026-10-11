@@ -63,6 +63,9 @@ jobs:
           workspaces: src-tauri
 
       - run: npm ci
+      - name: Clippy (Windows'a özel kod)
+        working-directory: src-tauri
+        run: cargo clippy --locked -- -D warnings
       - name: Kurulum dosyasını derle
         run: npm run tauri build -- --bundles nsis
 

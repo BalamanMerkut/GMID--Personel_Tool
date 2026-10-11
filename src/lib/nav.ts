@@ -47,13 +47,13 @@ export const ROOMS: Room[] = [
   {
     name: "Çalışma Odası",
     screens: [
-      { id: "notes", label: "Notlar", icon: "note", phase: 2,
+      { id: "notes", label: "Notlar", icon: "note", phase: null,
         description: "Her yerden Ctrl+Alt+N ile açılan hızlı not, yapışkan notlar ve yapılacaklar listeleri. Kaybolmaz, kendiliğinden kaydedilir." },
-      { id: "reminders", label: "Hatırlatıcılar", icon: "bell", phase: 2,
+      { id: "reminders", label: "Hatırlatıcılar", icon: "bell", phase: null,
         description: "\"30 dk sonra\", \"yarın 09:00\" gibi hızlı hatırlatıcılar; Windows bildirimiyle, oyundayken köşede küçük gösterge." },
-      { id: "timer", label: "Sayaç", icon: "timer", phase: 2,
+      { id: "timer", label: "Sayaç", icon: "timer", phase: null,
         description: "Kronometre ve aynı anda birden çok geri sayım. Tepsiden ve Oyun İçi Panel'den başlatılabilir." },
-      { id: "audio", label: "Ses & Mikrofon", icon: "speaker", phase: 2,
+      { id: "audio", label: "Ses & Mikrofon", icon: "speaker", phase: null,
         description: "Kulaklık ve hoparlör arasında tek tık geçiş, mikrofon seviyesi kilidi ve oyundan çıkmadan çalışan kısayollar." },
       { id: "install", label: "Format Sonrası Kurulum", icon: "install", phase: 6,
         description: "Formattan sonra kurulacak programların listesi: tek tıkla hepsini kur ya da USB'ye koymak için kurulum dosyasına aktar." },

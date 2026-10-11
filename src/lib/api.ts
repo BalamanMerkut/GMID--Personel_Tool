@@ -27,6 +27,18 @@ function browserStore(): Record<string, string> {
   }
 }
 
+import type {
+  Alerts, AudioState, HotkeyStatus, MicStatus, Note, NoteInput, NoteSummary, OsdMessage, Reminder,
+  ReminderInput, TimersSnapshot,
+} from "./types";
+
+/** Bir Rust komutunu çağırır; tarayıcıda taklit katmana gider. */
+export async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
+  if (inTauri) return invoke<T>(cmd, args);
+  const mock = await import("./mock");
+  return mock.handle(cmd, args) as Promise<T>;
+}
+
 export const api = {
   getSettings: (): Promise<Record<string, string>> =>
     inTauri ? invoke("get_settings") : Promise.resolve(browserStore()),
@@ -95,7 +107,74 @@ export const api = {
     const { listen } = await import("@tauri-apps/api/event");
     return listen<string>("navigate", (e) => cb(e.payload));
   },
+
+  audio: {
+    state: () => call<AudioState>("audio_state"),
+    setDefault: (id: string) => call<void>("audio_set_default", { id }),
+    setVolume: (id: string, level: number) => call<void>("audio_set_volume", { id, level }),
+    setMute: (id: string, muted: boolean) => call<void>("audio_set_mute", { id, muted }),
+    /** `null` kilidi kapatır. */
+    setLock: (level: number | null) => call<MicStatus>("mic_set_lock", { level }),
+  },
+
+  hotkeys: {
+    list: () => call<HotkeyStatus[]>("hotkeys_list"),
+    /** `null` varsayılana döndürür, `""` kapatır. */
+    set: (id: string, accel: string | null) => call<HotkeyStatus[]>("hotkey_set", { id, accel }),
+  },
+
+  notes: {
+    list: (trash = false) => call<NoteSummary[]>("notes_list", { trash }),
+    get: (id: string) => call<Note | null>("note_get", { id }),
+    save: (input: NoteInput) => call<Note>("note_save", { input }),
+    trash: (id: string) => call<void>("note_trash", { id }),
+    restore: (id: string) => call<void>("note_restore", { id }),
+    remove: (id: string) => call<void>("note_delete", { id }),
+    openQuick: () => call<void>("open_quick_note"),
+    openSticky: (id: string) => call<void>("open_sticky", { id }),
+    closeSticky: (id: string) => call<void>("close_sticky", { id }),
+  },
+
+  reminders: {
+    list: () => call<Reminder[]>("reminders_list"),
+    save: (input: ReminderInput) => call<Reminder>("reminder_save", { input }),
+    remove: (id: string) => call<void>("reminder_delete", { id }),
+    complete: (id: string) => call<void>("reminder_complete", { id }),
+    snooze: (id: string, minutes: number) => call<void>("reminder_snooze", { id, minutes }),
+  },
+
+  timers: {
+    state: () => call<TimersSnapshot>("timers_state"),
+    stopwatchToggle: () => call<TimersSnapshot>("stopwatch_toggle"),
+    stopwatchLap: () => call<TimersSnapshot>("stopwatch_lap"),
+    stopwatchReset: () => call<TimersSnapshot>("stopwatch_reset"),
+    add: (label: string, ms: number) => call<TimersSnapshot>("countdown_add", { label, ms }),
+    toggle: (id: string) => call<TimersSnapshot>("countdown_toggle", { id }),
+    remove: (id: string) => call<TimersSnapshot>("countdown_remove", { id }),
+  },
+
+  overlay: {
+    takeOsd: () => call<OsdMessage | null>("take_osd"),
+    alerts: () => call<Alerts>("alerts_list"),
+    fitAlerts: (height: number) => call<void>("alerts_fit", { height }),
+    closeAlerts: () => call<void>("alerts_close"),
+  },
 };
+
+/** Bu pencerenin görevi: ana pencere, gösterge, uyarılar, hızlı not ya da yapışkan not. */
+export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" | "sticky"; id?: string } {
+  let label = "main";
+  if (inTauri) {
+    const meta = (window as unknown as { __TAURI_INTERNALS__: { metadata?: { currentWindow?: { label?: string } } } })
+      .__TAURI_INTERNALS__.metadata;
+    label = meta?.currentWindow?.label ?? "main";
+  } else {
+    label = new URLSearchParams(location.search).get("view") ?? "main";
+  }
+  if (label.startsWith("sticky-")) return { kind: "sticky", id: label.slice(7) };
+  if (label === "osd" || label === "alerts" || label === "quicknote") return { kind: label };
+  return { kind: "main" };
+}
 
 export function isVideo(path: string): boolean {
   return /\.(mp4|webm)$/i.test(path);

@@ -1,5 +1,8 @@
 //! Arayüzün çağırdığı komutlar.
 
+pub mod sound;
+pub mod tools;
+
 use crate::{backup, db::Db, paths::DataDir, Launch};
 use serde::Serialize;
 use std::collections::HashMap;

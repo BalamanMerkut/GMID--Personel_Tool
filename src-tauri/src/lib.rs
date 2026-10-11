@@ -1,8 +1,16 @@
+mod audio;
 mod backup;
 mod commands;
 mod db;
+mod hotkeys;
+mod notes;
+mod overlay;
 mod paths;
+mod reminders;
+mod scheduler;
+mod timers;
 mod tray;
+mod util;
 mod window;
 
 use std::sync::atomic::AtomicBool;
@@ -33,12 +41,15 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                // Gösterge ve uyarılar her seferinde ekranın köşesine yerleştirilir.
+                .with_denylist(&[overlay::OSD, overlay::ALERTS])
                 .build(),
         )
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![MINIMIZED_ARG]),
         ))
+        .plugin(hotkeys::plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
@@ -50,14 +61,28 @@ pub fn run() {
             app.asset_protocol_scope()
                 .allow_directory(dir.backgrounds(), true)?;
 
+            // Mikrofon kilidi açılışta da etkin olsun.
+            let mic_lock: Option<f32> = db.setting_json("audio.micLock");
+            if let Err(e) = notes::purge_trash(&db) {
+                eprintln!("Çöp kutusu temizlenemedi: {e}");
+            }
+
             app.manage(db);
             app.manage(dir);
+            app.manage(overlay::Overlay::default());
+            app.manage(timers::Timers::default());
+            app.manage(scheduler::Scheduler::default());
+            app.manage(hotkeys::Hotkeys::default());
+            app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
                 pending_route: Mutex::new(None),
             });
 
             tray::create(handle)?;
+            hotkeys::register_all(handle);
+            scheduler::start(handle.clone());
+            window::restore_stickies(handle);
 
             // Günlük yedek açılışı yavaşlatmasın diye arka planda.
             let h = handle.clone();
@@ -82,6 +107,38 @@ pub fn run() {
             commands::open_data_folder,
             commands::backup_now,
             commands::import_background,
+            commands::sound::audio_state,
+            commands::sound::audio_set_default,
+            commands::sound::audio_set_volume,
+            commands::sound::audio_set_mute,
+            commands::sound::mic_set_lock,
+            commands::sound::hotkeys_list,
+            commands::sound::hotkey_set,
+            commands::tools::notes_list,
+            commands::tools::note_get,
+            commands::tools::note_save,
+            commands::tools::note_trash,
+            commands::tools::note_restore,
+            commands::tools::note_delete,
+            commands::tools::open_quick_note,
+            commands::tools::open_sticky,
+            commands::tools::close_sticky,
+            commands::tools::reminders_list,
+            commands::tools::reminder_save,
+            commands::tools::reminder_delete,
+            commands::tools::reminder_complete,
+            commands::tools::reminder_snooze,
+            commands::tools::timers_state,
+            commands::tools::stopwatch_toggle,
+            commands::tools::stopwatch_lap,
+            commands::tools::stopwatch_reset,
+            commands::tools::countdown_add,
+            commands::tools::countdown_toggle,
+            commands::tools::countdown_remove,
+            commands::tools::take_osd,
+            commands::tools::alerts_list,
+            commands::tools::alerts_fit,
+            commands::tools::alerts_close,
         ])
         .build(tauri::generate_context!())
         .expect("GMID Tool başlatılamadı")

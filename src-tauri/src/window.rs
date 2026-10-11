@@ -1,7 +1,8 @@
 //! Ana pencere. Kapatılınca tamamen kapanır (arayüz bellekten çıkar), çekirdek tepside kalır;
 //! tepsiden açılınca yeniden oluşturulur.
 
-use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
+use crate::db::Db;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const MAIN: &str = "main";
 
@@ -46,5 +47,95 @@ fn keep_on_screen(w: &WebviewWindow) {
     });
     if !visible {
         let _ = w.center();
+    }
+}
+
+pub const QUICK_NOTE: &str = "quicknote";
+const STICKY_PREFIX: &str = "sticky-";
+const STICKIES_SETTING: &str = "notes.stickies";
+
+/// Her yerden açılan küçük hızlı not penceresi.
+pub fn open_quick_note(app: &AppHandle) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window(QUICK_NOTE) {
+        w.show()?;
+        w.set_focus()?;
+        return Ok(());
+    }
+    let w = WebviewWindowBuilder::new(app, QUICK_NOTE, WebviewUrl::App("index.html".into()))
+        .title("Hızlı not")
+        .inner_size(420.0, 380.0)
+        .min_inner_size(300.0, 240.0)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .center()
+        .build()?;
+    w.set_focus()?;
+    Ok(())
+}
+
+fn sticky_label(id: &str) -> String {
+    format!("{STICKY_PREFIX}{id}")
+}
+
+fn stickies(app: &AppHandle) -> Vec<String> {
+    app.state::<Db>()
+        .setting_json(STICKIES_SETTING)
+        .unwrap_or_default()
+}
+
+fn save_stickies(app: &AppHandle, ids: &[String]) {
+    if let Ok(json) = serde_json::to_string(ids) {
+        let _ = app.state::<Db>().set_setting(STICKIES_SETTING, &json);
+    }
+}
+
+/// Notu masaüstünde "her zaman üstte" küçük bir yapışkan not olarak açar.
+pub fn open_sticky(app: &AppHandle, id: &str) -> tauri::Result<()> {
+    let label = sticky_label(id);
+    if let Some(w) = app.get_webview_window(&label) {
+        w.show()?;
+        w.set_focus()?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title("Yapışkan not")
+        .inner_size(300.0, 300.0)
+        .min_inner_size(220.0, 160.0)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .build()?;
+    let mut ids = stickies(app);
+    if !ids.iter().any(|i| i == id) {
+        ids.push(id.to_string());
+        save_stickies(app, &ids);
+    }
+    Ok(())
+}
+
+pub fn close_sticky(app: &AppHandle, id: &str) {
+    if let Some(w) = app.get_webview_window(&sticky_label(id)) {
+        let _ = w.destroy();
+    }
+    let ids: Vec<String> = stickies(app).into_iter().filter(|i| i != id).collect();
+    save_stickies(app, &ids);
+}
+
+/// Açılışta, kapatılmadan bırakılan yapışkan notları geri açar (silinmiş notlar hariç).
+pub fn restore_stickies(app: &AppHandle) {
+    let db = app.state::<Db>();
+    let alive: Vec<String> = stickies(app)
+        .into_iter()
+        .filter(|id| {
+            crate::notes::get(&db, id)
+                .ok()
+                .flatten()
+                .is_some_and(|n| n.deleted_at.is_none())
+        })
+        .collect();
+    save_stickies(app, &alive);
+    for id in alive {
+        let _ = open_sticky(app, &id);
     }
 }

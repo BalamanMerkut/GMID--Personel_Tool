@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet) ve Faz 2 (Günlük araçlar) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -17,7 +17,24 @@ kişisel Windows uygulaması.
 Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı değil):
 **Ek bilgi → Yine de çalıştır**.
 
-## Faz 1'de neler var?
+## Neler var?
+
+### Faz 2 — Günlük araçlar
+
+- **Ses & Mikrofon:** kulaklık / hoparlör / monitör arasında tek tıkla geçiş, cihaz başına ses seviyesi ve sessiz,
+  takma ad, simge ve gizleme; **mikrofon seviye kilidi** (bir program mikrofonu kısarsa anında geri çeker)
+- **Her yerden çalışan kısayollar** (değiştirilebilir): `Ctrl+Alt+A` ses çıkışı, `Ctrl+Alt+M` mikrofon sessiz,
+  `Ctrl+Alt+L` mikrofon kilidi, `Ctrl+Alt+PgUp/PgDn` mikrofon ±5, `Ctrl+Alt+Home` mikrofon %100, `Ctrl+Alt+N` hızlı not
+- **Ekran göstergesi:** kısayollara sağ üstte küçük, odak çalmayan bir bilgiyle karşılık verir
+- **Notlar:** biçimlendirme (kalın, başlık, liste, yapılacaklar kutusu, kod), not başına renk ve yazı tipi, sabitleme,
+  arama, 30 günlük çöp kutusu; her not `Notlar\` klasöründe `.md` dosyası olarak da durur
+- **Hızlı not penceresi** (`Ctrl+Alt+N`) ve masaüstünde her zaman üstte duran **yapışkan notlar**
+- **Hatırlatıcılar:** hızlı süreler, tekrar (her gün / hafta içi / her hafta / her ay), zamanı gelince sağ altta
+  odak çalmayan kart (10 dk / 1 saat ertele, Tamam); kapalıyken kaçırılanlar açılışta gösterilir
+- **Sayaç:** turlu kronometre ve aynı anda birden çok geri sayım; pencere kapalıyken de çalışır, bitince kart çıkar
+- Tepsi menüsü: hızlı not, ses çıkışı değiştir, mikrofonu sessize al, 5/10/25 dk geri sayım
+
+### Faz 1 — İskelet
 
 - Merkut Studios açılış animasyonu (tıkla ya da Esc ile atla; tepsiden açarken oynamaz)
 - Malikâne teması, malikâne odası isimli sol menü; dar pencerede sadece ikonlar
@@ -47,7 +64,7 @@ dosya seçme gibi masaüstü işlemleri çalışmaz.
 | Klasör | İçerik |
 |--------|--------|
 | `src/` | Arayüz (Svelte 5 + TypeScript) |
-| `src-tauri/` | Çekirdek (Rust): veri klasörü, veritabanı, yedekler, tepsi, pencere |
+| `src-tauri/` | Çekirdek (Rust): veri klasörü, veritabanı, yedekler, tepsi, pencereler, ses, kısayollar, zamanlayıcı |
 | `docs/` | Tasarım dokümanı, araştırmalar, görsel taslak |
 | `assets/marka/` | Merkut Studios, GMID ve GMID AI Butler logoları |
 

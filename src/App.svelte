@@ -6,9 +6,12 @@
   import Splash from "./lib/components/Splash.svelte";
   import Toast from "./lib/components/Toast.svelte";
   import { findScreen, roomOf, SCREENS } from "./lib/nav";
+  import Audio from "./lib/screens/Audio.svelte";
   import Home from "./lib/screens/Home.svelte";
   import Placeholder from "./lib/screens/Placeholder.svelte";
+  import Reminders from "./lib/screens/Reminders.svelte";
   import Settings from "./lib/screens/Settings.svelte";
+  import Timer from "./lib/screens/Timer.svelte";
   import { effectiveQuality, loadSettings, settings } from "./lib/settings.svelte";
 
   let route = $state("home");
@@ -100,6 +103,17 @@
           <Home {info} onnavigate={navigate} />
         {:else if route === "settings"}
           <Settings {info} {refreshInfo} onreplay={replaySplash} />
+        {:else if route === "audio"}
+          <Audio />
+        {:else if route === "reminders"}
+          <Reminders />
+        {:else if route === "timer"}
+          <Timer />
+        {:else if route === "notes"}
+          <!-- Not editörü büyük olduğu için sadece Notlar açılınca yüklenir. -->
+          {#await import("./lib/screens/Notes.svelte") then m}
+            <m.default />
+          {/await}
         {:else}
           <Placeholder {screen} onnavigate={navigate} />
         {/if}

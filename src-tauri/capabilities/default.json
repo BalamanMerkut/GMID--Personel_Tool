@@ -1,10 +1,18 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Ana pencerenin izinleri",
-  "windows": ["main"],
+  "description": "Uygulama pencerelerinin izinleri",
+  "windows": [
+    "main",
+    "quicknote",
+    "sticky-*",
+    "osd",
+    "alerts"
+  ],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
     "dialog:allow-open",
     "autostart:allow-enable",
     "autostart:allow-disable",

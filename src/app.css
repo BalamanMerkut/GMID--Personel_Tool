@@ -37,6 +37,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 #app { height: 100%; }
+/* Gösterge ve uyarı pencereleri şeffaf: sadece kartlar görünür. */
+:root[data-view="osd"], :root[data-view="alerts"] { color-scheme: normal; background: transparent; }
+:root[data-view="osd"] body, :root[data-view="alerts"] body { background: transparent; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
