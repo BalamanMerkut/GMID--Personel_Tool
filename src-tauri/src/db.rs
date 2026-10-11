@@ -244,6 +244,29 @@ const MIGRATIONS: &[&str] = &[
     // 14 — Steam dışı oyunlar Microsoft Store'un dikey posterini denesin (Minecraft; Wikipedia'dan gelenler yatay logo)
     "UPDATE games SET meta_at = NULL
      WHERE steam_appid IS NULL AND (cover IS NULL OR cover LIKE '%wiki-%');",
+    // 15 — Film & Dizi Arşivi (Faz 6): film/dizi bilgileri (Wikipedia + Wikidata), puanlara ek alanlar
+    "CREATE TABLE titles (
+        id         TEXT PRIMARY KEY,
+        -- movie | series
+        kind       TEXT NOT NULL,
+        name       TEXT NOT NULL,
+        original   TEXT,
+        year       INTEGER,
+        poster     TEXT,
+        summary    TEXT,
+        directors  TEXT NOT NULL DEFAULT '[]',
+        cast_list  TEXT NOT NULL DEFAULT '[]',
+        genres     TEXT NOT NULL DEFAULT '[]',
+        -- dakika (film)
+        runtime    INTEGER,
+        seasons    INTEGER,
+        episodes   INTEGER,
+        wikidata   TEXT,
+        wiki_title TEXT,
+        meta_at    INTEGER,
+        added_at   INTEGER NOT NULL
+    );
+    ALTER TABLE reviews ADD COLUMN extra TEXT;",
 ];
 
 pub struct Db(Mutex<Connection>);

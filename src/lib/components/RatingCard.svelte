@@ -1,28 +1,63 @@
 <script lang="ts">
-  // Puanlama kartı. Önce durum sorulur, gerisi ona göre gelir:
-  //  • İstiyorum: puan yok; neden istediğin ve notlar
-  //  • Oynuyorum / Bitirdim / %100 / Bıraktım: 5 kısa soru (7'den başlar), otomatik genel puan (±1), tek cümle,
-  //    tavsiye, notlar. Aynı oyunu yeniden puanlamak öncekini günceller.
+  // Puanlama kartı (oyun ya da film/dizi). Önce durum sorulur, gerisi ona göre gelir:
+  //  • İstiyorum / İzlenecek: puan yok; neden istediğin ve notlar
+  //  • Diğerleri: 5 kısa soru (7'den başlar), otomatik genel puan (±1), tek cümle, tavsiye, notlar;
+  //    filmde nerede/kiminle izlendi, dizide nerede kaldın. Aynı şeyi yeniden puanlamak öncekini günceller.
   import { untrack } from "svelte";
   import { api } from "../api";
   import Icon from "../Icon.svelte";
-  import { GUIDE, QUESTIONS, RECOMMEND, STATUS, autoScore, fmtScore, overallOf, scoreTone } from "../review";
+  import {
+    GUIDE, RECOMMEND, WHERE, autoScore, fmtScore, overallOf, questionsOf, recommendLabel, scoreTone, statusesOf, unratedOf,
+    type Kind,
+  } from "../review";
   import { notify } from "../toast.svelte";
-  import type { Game, Recommend, Review, ReviewStatus, Scores } from "../types";
+  import type { Game, Recommend, Review, ReviewExtra, ReviewStatus, Scores } from "../types";
+
+  /** Puanlanan şey (oyun ya da film/dizi). */
+  export interface Subject {
+    id: string;
+    name: string;
+    cover: string | null;
+    line1?: string;
+    line2?: string;
+    /** Dizi: "nerede kaldın" sorulur. */
+    series?: boolean;
+  }
 
   interface Props {
-    game: Game;
+    kind?: Kind;
+    /** Oyun için kısayol (subject yerine). */
+    game?: Game;
+    subject?: Subject;
     review: Review | null;
     onclose: () => void;
     onsaved?: (r: Review) => void;
     ondeleted?: () => void;
+    /** Kaydetmeden kapatıldı (yeni eklenen film geri alınsın diye). */
+    ondismiss?: () => void;
   }
-  let { game, review, onclose, onsaved, ondeleted }: Props = $props();
+  let { kind = "game", game, subject, review, onclose, onsaved, ondeleted, ondismiss }: Props = $props();
+
+  const subj: Subject = $derived(
+    subject ??
+      (game
+        ? {
+            id: game.id,
+            name: game.name,
+            cover: game.cover,
+            line1: [...game.genres, ...game.tags.filter((t) => !game.genres.includes(t))].slice(0, 5).join(" · "),
+            line2: [game.year, game.developer].filter(Boolean).join(" · "),
+          }
+        : { id: "", name: "", cover: null }),
+  );
+  const isTitle = $derived(kind === "title");
+  const questions = $derived(questionsOf(kind));
+  const statuses = $derived(statusesOf(kind));
+  const unratedId = $derived(unratedOf(kind));
 
   const start = untrack(() => review);
-  let scores: Scores = $state(
-    start ? { ...start.scores } : { gameplay: 7, story: 7, enjoyment: 7, visuals: 7, performance: 7 },
-  );
+  const startKind = untrack(() => kind);
+  let scores: Scores = $state(start ? { ...start.scores } : Object.fromEntries(questionsOf(startKind).map((q) => [q.key, 7])));
   // "Yok"tan geri dönünce kaydırıcı son değerine dönsün.
   const lastValue: Record<string, number> = {};
   let adjust = $state(start?.adjust ?? 0);
@@ -30,8 +65,10 @@
   let notes = $state(start?.notes ?? "");
   let status: ReviewStatus | null = $state(start?.status ?? null);
   let recommend: Recommend | null = $state(start?.recommend ?? null);
+  let extra: ReviewExtra = $state({ ...(start?.extra ?? {}) });
   let saving = $state(false);
   let armedDelete = $state(false);
+  let saved = false;
 
   const STATUS_HINT: Record<ReviewStatus, string> = {
     playing: "Hâlâ oynuyorum",
@@ -39,14 +76,17 @@
     completed: "Her şeyini yaptım",
     dropped: "Yarıda bıraktım",
     wishlist: "Henüz oynamadım, oynamak istiyorum",
+    watching: "Hâlâ izliyorum",
+    watched: "Bitirdim",
+    watchlist: "Henüz izlemedim, izleyeceğim",
   };
   // Eski bir puanda durum seçilmemişse her şey görünsün.
   const chosen = $derived(status != null || !!start);
-  const wishlist = $derived(status === "wishlist");
-  const auto = $derived(autoScore(scores));
-  const overall = $derived(overallOf(scores, adjust));
+  const unrated = $derived(status === unratedId);
+  const auto = $derived(autoScore(scores, kind));
+  const overall = $derived(overallOf(scores, adjust, kind));
 
-  function toggleNone(key: keyof Scores) {
+  function toggleNone(key: string) {
     if (scores[key] == null) scores[key] = lastValue[key] ?? 7;
     else {
       lastValue[key] = scores[key]!;
@@ -58,20 +98,32 @@
     adjust = Math.max(-1, Math.min(1, Math.round((adjust + d) * 2) / 2));
   }
 
+  function close() {
+    if (!saved) ondismiss?.();
+    onclose();
+  }
+
   async function save() {
     saving = true;
     try {
       const r = await api.reviews.save({
-        subjectKind: "game",
-        subjectId: game.id,
+        subjectKind: kind,
+        subjectId: subj.id,
         scores: $state.snapshot(scores),
         adjust,
         oneLiner: oneLiner.trim() || null,
         notes: notes.trim() || null,
         status,
         recommend,
+        extra: isTitle ? $state.snapshot(extra) : null,
       });
-      notify(r.overall == null ? `${game.name} istek listene eklendi` : `${game.name}: ${fmtScore(r.overall)} / 10 kaydedildi`, "check");
+      saved = true;
+      notify(
+        r.overall == null
+          ? `${subj.name} ${isTitle ? "izleme listene" : "istek listene"} eklendi`
+          : `${subj.name}: ${fmtScore(r.overall)} / 10 kaydedildi`,
+        "check",
+      );
       onsaved?.(r);
       onclose();
     } catch (e) {
@@ -89,6 +141,7 @@
     }
     try {
       await api.reviews.remove(start.id);
+      saved = true;
       notify("Puan silindi", "check");
       ondeleted?.();
       onclose();
@@ -97,30 +150,30 @@
     }
   }
 
-  const cover = $derived(!game.cover ? null : /^(https?:|data:)/.test(game.cover) ? game.cover : api.fileSrc(game.cover));
-  const genres = $derived([...game.genres, ...game.tags.filter((t) => !game.genres.includes(t))].slice(0, 5));
+  const cover = $derived(!subj.cover ? null : /^(https?:|data:)/.test(subj.cover) ? subj.cover : api.fileSrc(subj.cover));
+  const num = (v: string) => (v.trim() === "" ? null : Math.max(0, Math.round(Number(v))) || null);
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && onclose()} />
+<svelte:window onkeydown={(e) => e.key === "Escape" && close()} />
 
-<div class="back" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
-  <div class="card panel" role="dialog" aria-label={`${game.name} puanla`}>
+<div class="back" role="presentation" onclick={(e) => e.target === e.currentTarget && close()}>
+  <div class="card panel" role="dialog" aria-label={`${subj.name} puanla`}>
     <div class="head">
       {#if cover}<img class="cv" src={cover} alt="" />{/if}
       <div class="htx">
         <div class="spread">
-          <h3>{game.name}</h3>
-          <button class="x" onclick={onclose} title="Kapat"><Icon name="x" size={18} /></button>
+          <h3>{subj.name}</h3>
+          <button class="x" onclick={close} title="Kapat"><Icon name="x" size={18} /></button>
         </div>
-        {#if genres.length}<span class="sub small">{genres.join(" · ")}</span>{/if}
-        <span class="sub small">{[game.year, game.developer].filter(Boolean).join(" · ")}</span>
+        {#if subj.line1}<span class="sub small">{subj.line1}</span>{/if}
+        {#if subj.line2}<span class="sub small">{subj.line2}</span>{/if}
       </div>
     </div>
 
     <div class="field status">
-      <span>Bu oyunla durumun ne?</span>
-      <div class="sts">
-        {#each STATUS as s (s.id)}
+      <span>{isTitle ? (subj.series ? "Bu diziyle durumun ne?" : "Bu filmle durumun ne?") : "Bu oyunla durumun ne?"}</span>
+      <div class="sts" style:--n={statuses.length}>
+        {#each statuses as s (s.id)}
           <button class="st" aria-pressed={status === s.id} onclick={() => (status = s.id)}>
             <b>{s.label}</b><small>{STATUS_HINT[s.id]}</small>
           </button>
@@ -131,10 +184,10 @@
     {#if !chosen}
       <p class="sub small pick">Önce durumu seç; sorular ona göre gelir.</p>
     {:else}
-    {#if !wishlist}
-    {#if status === "playing"}<span class="sub small">Şimdiye kadarki izlenimin; bitirince güncelleyebilirsin.</span>{/if}
+    {#if !unrated}
+    {#if status === "playing" || status === "watching"}<span class="sub small">Şimdiye kadarki izlenimin; bitirince güncelleyebilirsin.</span>{/if}
     <div class="qs">
-      {#each QUESTIONS as q (q.key)}
+      {#each questions as q (q.key)}
         {@const v = scores[q.key]}
         <div class="q" class:off={v == null}>
           <span class="qi" aria-hidden="true">{q.icon}</span>
@@ -155,7 +208,7 @@
           />
           <span class="qv tnum">{v ?? "—"}</span>
           {#if q.none}
-            <button class="none" aria-pressed={v == null} onclick={() => toggleNone(q.key)} title="Bu oyunda yok: etkisi diğer sorulara dağılır">Yok</button>
+            <button class="none" aria-pressed={v == null} onclick={() => toggleNone(q.key)} title="Bunda yok: etkisi diğer sorulara dağılır">Yok</button>
           {:else}
             <span></span>
           {/if}
@@ -181,30 +234,64 @@
 
     {/if}
 
+    {#if isTitle && subj.series && (status === "watching" || status === "dropped")}
+      <div class="field">
+        <span>Nerede kaldın?</span>
+        <div class="row prog">
+          <label>Sezon <input type="number" min="1" value={extra.season ?? ""} oninput={(e) => (extra.season = num(e.currentTarget.value))} /></label>
+          <label>Bölüm <input type="number" min="1" value={extra.episode ?? ""} oninput={(e) => (extra.episode = num(e.currentTarget.value))} /></label>
+        </div>
+      </div>
+    {/if}
+
     <label class="field">
-      <span>{wishlist ? "Neden oynamak istiyorsun?" : status === "dropped" ? "Neden bıraktın?" : "Tek cümle"}</span>
+      <span>{unrated ? (isTitle ? "Neden izlemek istiyorsun?" : "Neden oynamak istiyorsun?") : status === "dropped" ? "Neden bıraktın?" : "Tek cümle"}</span>
       <input
         bind:value={oneLiner}
         maxlength="200"
-        placeholder={wishlist ? "Arkadaşlar çok övüyor, co-op oynarız." : status === "dropped" ? "Ortası çok uzadı, sıkıldım." : "Bir tur daha derken sabah oldu."}
+        placeholder={unrated
+          ? isTitle ? "Herkes sonunu konuşuyor." : "Arkadaşlar çok övüyor, co-op oynarız."
+          : status === "dropped" ? "Ortası çok uzadı, sıkıldım."
+          : isTitle ? "Sonu aklımdan çıkmıyor." : "Bir tur daha derken sabah oldu."}
       />
     </label>
 
-    {#if !wishlist}
+    {#if !unrated}
     <div class="field">
       <span>Tavsiye</span>
       <div class="chips">
         {#each RECOMMEND as r (r.id)}
-          <button class="ch" aria-pressed={recommend === r.id} onclick={() => (recommend = recommend === r.id ? null : r.id)}>{r.icon} {r.label}</button>
+          <button class="ch" aria-pressed={recommend === r.id} onclick={() => (recommend = recommend === r.id ? null : r.id)}>{r.icon} {recommendLabel(r.id, kind)}</button>
         {/each}
       </div>
     </div>
 
+    {#if isTitle}
+      <div class="field">
+        <span>Nerede izledin?</span>
+        <div class="chips">
+          {#each WHERE as w (w)}
+            <button class="ch" aria-pressed={extra.where === w} onclick={() => (extra.where = extra.where === w ? null : w)}>{w}</button>
+          {/each}
+        </div>
+      </div>
+      <label class="field">
+        <span>Kiminle?</span>
+        <input value={extra.with ?? ""} oninput={(e) => (extra.with = e.currentTarget.value.trim() || null)} maxlength="80" placeholder="Yalnız, kardeşimle, arkadaşlarla…" />
+      </label>
+    {/if}
     {/if}
 
     <label class="field">
       <span>Notlar</span>
-      <textarea bind:value={notes} rows="4" placeholder={wishlist ? "Fiyatı, kiminle oynanır, nereden duydun…" : "İpuçları, build'ler, kiminle oynadın… Spoiler'ı ||böyle|| yazarsan gizlenir."}></textarea>
+      <textarea
+        bind:value={notes}
+        rows="4"
+        placeholder={unrated
+          ? isTitle ? "Nereden duydun, kim önerdi…" : "Fiyatı, kiminle oynanır, nereden duydun…"
+          : isTitle ? "Sevdiğin sahneler, alıntılar… Spoiler'ı ||böyle|| yazarsan gizlenir."
+          : "İpuçları, build'ler, kiminle oynadın… Spoiler'ı ||böyle|| yazarsan gizlenir."}
+      ></textarea>
     </label>
     {/if}
 
@@ -215,9 +302,9 @@
         <span></span>
       {/if}
       <div class="row">
-        <button class="btn ghost" onclick={onclose}>Vazgeç</button>
-        <button class="btn" onclick={save} disabled={saving || !chosen || (!wishlist && overall == null)}>
-          <Icon name="check" size={17} />{wishlist ? "İstek listeme ekle" : "Kaydet"}
+        <button class="btn ghost" onclick={close}>Vazgeç</button>
+        <button class="btn" onclick={save} disabled={saving || !chosen || (!unrated && overall == null)}>
+          <Icon name="check" size={17} />{unrated ? (isTitle ? "İzleme listeme ekle" : "İstek listeme ekle") : "Kaydet"}
         </button>
       </div>
     </div>
@@ -265,7 +352,9 @@
   .tone-low { color: var(--bad); }
 
   .field { display: flex; flex-direction: column; gap: 6px; }
-  .sts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .sts { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 8px; }
+  .prog label { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); }
+  .prog input { width: 70px; }
   .st { display: flex; flex-direction: column; gap: 2px; text-align: left; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.025); color: var(--text); border-radius: 12px; padding: 9px 11px; }
   .st small { color: var(--dim); font-size: 11.5px; line-height: 1.25; }
   .st:hover { border-color: var(--gold-dim); }

@@ -1,5 +1,6 @@
-//! Oyun Arşivi puanları: 5 kısa soru → otomatik genel puan (+ istersen ±1), tek cümle, notlar, durum, tavsiye.
-//! Veri modeli baştan çok kişili (`author`); şimdilik hep "me". Film ve diziler de ileride aynı tabloya gelir.
+//! Oyun Arşivi ve Film & Dizi Arşivi puanları: 5 kısa soru → otomatik genel puan (+ istersen ±1), tek cümle,
+//! notlar, durum, tavsiye. Konu türü (`subject_kind`): `game` ya da `title` (film/dizi); soruları, ağırlıkları
+//! ve durumları türe göre. Veri modeli baştan çok kişili (`author`); şimdilik hep "me".
 
 use crate::db::Db;
 use crate::util::{new_id, now_ms};
@@ -9,41 +10,62 @@ use serde::{Deserialize, Serialize};
 const ME: &str = "me";
 
 /// Soru başına puan (1–10); `None` = "Yok" (ör. hikâyesi olmayan çok oyunculu oyun).
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Scores {
-    pub gameplay: Option<f64>,
-    pub story: Option<f64>,
-    pub enjoyment: Option<f64>,
-    pub visuals: Option<f64>,
-    pub performance: Option<f64>,
+pub type Scores = std::collections::BTreeMap<String, Option<f64>>;
+
+/// Türe göre sorular (anahtar, genel puana etkisi %), durumlar ve puansız durum.
+struct KindRules {
+    weights: &'static [(&'static str, f64)],
+    statuses: &'static [&'static str],
+    /// Henüz oynanmadı/izlenmedi: puan ve tavsiye sorulmaz.
+    unrated: &'static str,
+    /// Bitirme/izleme tarihi bu durumlarda tutulur.
+    done: &'static [&'static str],
 }
 
-/// Genel puana etkisi (yüzde): oynanış 35, hikâye 20, keyif 20, görsellik 15, performans 10.
-const WEIGHTS: [f64; 5] = [35.0, 20.0, 20.0, 15.0, 10.0];
+const GAME: KindRules = KindRules {
+    weights: &[
+        ("gameplay", 35.0),
+        ("story", 20.0),
+        ("enjoyment", 20.0),
+        ("visuals", 15.0),
+        ("performance", 10.0),
+    ],
+    statuses: &["playing", "finished", "completed", "dropped", "wishlist"],
+    unrated: "wishlist",
+    done: &["finished", "completed"],
+};
 
-impl Scores {
-    fn values(&self) -> [Option<f64>; 5] {
-        [
-            self.gameplay,
-            self.story,
-            self.enjoyment,
-            self.visuals,
-            self.performance,
-        ]
+const TITLE: KindRules = KindRules {
+    weights: &[
+        ("story", 25.0),
+        ("acting", 20.0),
+        ("direction", 20.0),
+        ("pace", 15.0),
+        ("enjoyment", 20.0),
+    ],
+    statuses: &["watching", "watched", "dropped", "watchlist"],
+    unrated: "watchlist",
+    done: &["watched"],
+};
+
+fn rules(kind: &str) -> &'static KindRules {
+    if kind == "title" {
+        &TITLE
+    } else {
+        &GAME
     }
+}
 
-    /// "Yok" denen soruların etkisi diğerlerine oransal dağılır (puanı düşürmez).
-    pub fn auto(&self) -> Option<f64> {
-        let (mut sum, mut weight) = (0.0, 0.0);
-        for (v, w) in self.values().iter().zip(WEIGHTS) {
-            if let Some(v) = v {
-                sum += v.clamp(1.0, 10.0) * w;
-                weight += w;
-            }
+/// "Yok" denen soruların etkisi diğerlerine oransal dağılır (puanı düşürmez).
+pub fn auto(kind: &str, scores: &Scores) -> Option<f64> {
+    let (mut sum, mut weight) = (0.0, 0.0);
+    for (key, w) in rules(kind).weights {
+        if let Some(Some(v)) = scores.get(*key) {
+            sum += v.clamp(1.0, 10.0) * w;
+            weight += w;
         }
-        (weight > 0.0).then(|| round1(sum / weight))
     }
+    (weight > 0.0).then(|| round1(sum / weight))
 }
 
 fn round1(v: f64) -> f64 {
@@ -66,6 +88,8 @@ pub struct Review {
     pub status: Option<String>,
     pub recommend: Option<String>,
     pub finished_at: Option<i64>,
+    /// Filmler/diziler: { season, episode, where, with } (nerede kaldım, nerede/kiminle izlendi).
+    pub extra: Option<serde_json::Value>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -82,13 +106,14 @@ pub struct ReviewInput {
     pub notes: Option<String>,
     pub status: Option<String>,
     pub recommend: Option<String>,
+    #[serde(default)]
+    pub extra: Option<serde_json::Value>,
 }
 
-const STATUSES: &[&str] = &["playing", "finished", "completed", "dropped", "wishlist"];
 const RECOMMENDS: &[&str] = &["yes", "maybe", "no"];
 
 const COLUMNS: &str = "id, author, subject_kind, subject_id, scores, adjust, overall, one_liner,
-    notes, status, recommend, finished_at, created_at, updated_at";
+    notes, status, recommend, finished_at, created_at, updated_at, extra";
 
 fn from_row(r: &Row) -> rusqlite::Result<Review> {
     let scores: String = r.get(4)?;
@@ -107,6 +132,9 @@ fn from_row(r: &Row) -> rusqlite::Result<Review> {
         finished_at: r.get(11)?,
         created_at: r.get(12)?,
         updated_at: r.get(13)?,
+        extra: r
+            .get::<_, Option<String>>(14)?
+            .and_then(|s| serde_json::from_str(&s).ok()),
     })
 }
 
@@ -133,15 +161,23 @@ fn clean(s: Option<String>, max: usize) -> Option<String> {
 /// Aynı oyunu ikinci kez puanlamak öncekini günceller.
 /// Önce durum: "İstiyorum" (henüz oynanmadı) seçilirse sorular ve tavsiye alınmaz, puan boş kalır.
 pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
-    let status = input.status.filter(|s| STATUSES.contains(&s.as_str()));
-    let wishlist = status.as_deref() == Some("wishlist");
-    let (scores_in, adjust, overall, recommend) = if wishlist {
+    let r = rules(&input.subject_kind);
+    let status = input.status.filter(|s| r.statuses.contains(&s.as_str()));
+    let unrated = status.as_deref() == Some(r.unrated);
+    let (scores_in, adjust, overall, recommend) = if unrated {
         (Scores::default(), 0.0, None, None)
     } else {
-        let auto = input.scores.auto().ok_or("En az bir soruya puan ver")?;
+        // Yalnızca bu türün soruları saklanır.
+        let scores: Scores = input
+            .scores
+            .iter()
+            .filter(|(k, _)| r.weights.iter().any(|(w, _)| w == k))
+            .map(|(k, v)| (k.clone(), v.map(|v| v.clamp(1.0, 10.0))))
+            .collect();
+        let auto = auto(&input.subject_kind, &scores).ok_or("En az bir soruya puan ver")?;
         let adjust = input.adjust.clamp(-1.0, 1.0);
         (
-            input.scores.clone(),
+            scores,
             adjust,
             Some(round1((auto + adjust).clamp(1.0, 10.0))),
             input.recommend.filter(|s| RECOMMENDS.contains(&s.as_str())),
@@ -149,6 +185,11 @@ pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
     };
     let one_liner = clean(input.one_liner, 200);
     let notes = clean(input.notes, 20_000);
+    let extra = input
+        .extra
+        .filter(|v| v.is_object())
+        .map(|v| v.to_string())
+        .filter(|s| s.len() <= 2_000 && s != "{}");
     let scores = serde_json::to_string(&scores_in).map_err(|e| e.to_string())?;
     let now = now_ms();
     let conn = db.conn();
@@ -160,8 +201,8 @@ pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
         )
         .optional()
         .map_err(|e| e.to_string())?;
-    // Bitirme tarihi: "Bitirdim" / "%100" ilk seçildiğinde.
-    let done = matches!(status.as_deref(), Some("finished" | "completed"));
+    // Bitirme/izleme tarihi: "Bitirdim", "%100", "İzledim" ilk seçildiğinde.
+    let done = status.as_deref().is_some_and(|s| r.done.contains(&s));
     let finished_at = match (&prev, done) {
         (Some((_, Some(t))), true) => Some(*t),
         (_, true) => Some(now),
@@ -171,8 +212,8 @@ pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
         Some((id, _)) => {
             conn.execute(
                 "UPDATE reviews SET scores = ?2, adjust = ?3, overall = ?4, one_liner = ?5, notes = ?6,
-                    status = ?7, recommend = ?8, finished_at = ?9, updated_at = ?10 WHERE id = ?1",
-                params![id, scores, adjust, overall, one_liner, notes, status, recommend, finished_at, now],
+                    status = ?7, recommend = ?8, finished_at = ?9, updated_at = ?10, extra = ?11 WHERE id = ?1",
+                params![id, scores, adjust, overall, one_liner, notes, status, recommend, finished_at, now, extra],
             )
             .map_err(|e| e.to_string())?;
             id
@@ -181,8 +222,8 @@ pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
             let id = new_id();
             conn.execute(
                 "INSERT INTO reviews (id, author, subject_kind, subject_id, scores, adjust, overall,
-                    one_liner, notes, status, recommend, finished_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)",
+                    one_liner, notes, status, recommend, finished_at, created_at, updated_at, extra)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?14)",
                 params![
                     id,
                     ME,
@@ -196,7 +237,8 @@ pub fn save(db: &Db, input: ReviewInput) -> Result<Review, String> {
                     status,
                     recommend,
                     finished_at,
-                    now
+                    now,
+                    extra
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -228,6 +270,10 @@ pub fn delete(db: &Db, id: &str) -> Result<(), String> {
         if kind == "game" {
             conn.execute("DELETE FROM games WHERE id = ?1 AND in_library = 0", [&sid])
                 .map_err(|e| e.to_string())?;
+        } else if kind == "title" {
+            // Film/dizi yalnızca arşivde var: puanı silinince kendisi de gider.
+            conn.execute("DELETE FROM titles WHERE id = ?1", [&sid])
+                .map_err(|e| e.to_string())?;
         }
     }
     Ok(())
@@ -238,34 +284,36 @@ mod tests {
     use super::*;
 
     fn s(v: [Option<f64>; 5]) -> Scores {
-        Scores {
-            gameplay: v[0],
-            story: v[1],
-            enjoyment: v[2],
-            visuals: v[3],
-            performance: v[4],
-        }
+        ["gameplay", "story", "enjoyment", "visuals", "performance"]
+            .iter()
+            .zip(v)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
+    }
+
+    fn g(v: [Option<f64>; 5]) -> Option<f64> {
+        auto("game", &s(v))
     }
 
     #[test]
     fn overall_is_weighted_and_none_is_redistributed() {
         // Tasarımdaki örnek: 9 · 8 · 10 · 9 · 9 → 9.0
         assert_eq!(
-            s([Some(9.0), Some(8.0), Some(10.0), Some(9.0), Some(9.0)]).auto(),
+            g([Some(9.0), Some(8.0), Some(10.0), Some(9.0), Some(9.0)]),
             Some(9.0)
         );
         // Hepsi 7 → 7, hikâye "Yok" olsa da 7 (puanı düşürmez).
-        assert_eq!(s([Some(7.0); 5]).auto(), Some(7.0));
+        assert_eq!(g([Some(7.0); 5]), Some(7.0));
         assert_eq!(
-            s([Some(7.0), None, Some(7.0), Some(7.0), Some(7.0)]).auto(),
+            g([Some(7.0), None, Some(7.0), Some(7.0), Some(7.0)]),
             Some(7.0)
         );
         // Hikâye yokken oynanışın etkisi büyür: 35/80.
         assert_eq!(
-            s([Some(10.0), None, Some(6.0), Some(6.0), Some(6.0)]).auto(),
+            g([Some(10.0), None, Some(6.0), Some(6.0), Some(6.0)]),
             Some(7.8)
         );
-        assert_eq!(s([None; 5]).auto(), None);
+        assert_eq!(g([None; 5]), None);
     }
 
     #[test]
@@ -290,6 +338,7 @@ mod tests {
             notes: None,
             status: Some(status.into()),
             recommend: Some("yes".into()),
+            extra: None,
         };
         assert!(save(
             &db,
@@ -335,5 +384,59 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM games", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn titles_use_their_own_questions_and_statuses() {
+        let t: Scores = [
+            ("story", 10.0),
+            ("acting", 8.0),
+            ("direction", 8.0),
+            ("pace", 6.0),
+            ("enjoyment", 10.0),
+            ("gameplay", 1.0),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), Some(*v)))
+        .collect();
+        // 25·10 + 20·8 + 20·8 + 15·6 + 20·10 = 860 → 8.6 (oyun sorusu sayılmaz)
+        assert_eq!(auto("title", &t), Some(8.6));
+        let dir = std::env::temp_dir().join(format!("gmid-rvt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_file(dir.join("gmid.db"));
+        let db = Db::open(&dir.join("gmid.db")).unwrap();
+        db.conn()
+            .execute(
+                "INSERT INTO titles (id, kind, name, added_at) VALUES ('t1', 'series', 'Breaking Bad', 0)",
+                [],
+            )
+            .unwrap();
+        let input = |status: &str| ReviewInput {
+            subject_kind: "title".into(),
+            subject_id: "t1".into(),
+            scores: t.clone(),
+            adjust: 0.0,
+            one_liner: None,
+            notes: None,
+            status: Some(status.into()),
+            recommend: Some("yes".into()),
+            extra: Some(serde_json::json!({"season": 2, "episode": 5, "where": "Netflix"})),
+        };
+        let a = save(&db, input("watching")).unwrap();
+        assert_eq!(a.overall, Some(8.6));
+        assert!(!a.scores.contains_key("gameplay"));
+        assert_eq!(a.extra.as_ref().unwrap()["season"], 2);
+        assert_eq!(a.finished_at, None);
+        assert!(save(&db, input("watched")).unwrap().finished_at.is_some());
+        // Oyun durumu filmde geçmez; İzlenecek'te puan yok.
+        assert_eq!(save(&db, input("finished")).unwrap().status, None);
+        let w = save(&db, input("watchlist")).unwrap();
+        assert_eq!((w.overall, w.recommend), (None, None));
+        delete(&db, &a.id).unwrap();
+        let n: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM titles", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "film/dizi de silindi");
     }
 }

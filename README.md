@@ -34,6 +34,15 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
 
+### Faz 6 — Film & Dizi Arşivi
+
+- İzlediğin film ve dizileri **5 kısa soruyla** puanla: hikâye, oyunculuk, yönetmenlik, tempo, keyif. Önce durum:
+  İzliyorum · İzledim · Yarıda bıraktım · İzlenecek (puansız, izleme listesi).
+- Adını yazman yeter: Türkçe ad, afiş, Türkçe özet, yönetmen, oyuncular, tür, süre ya da sezon sayısı **Wikipedia ve
+  Wikidata'dan** kendiliğinden gelir (anahtar gerekmez). Bulunamazsa yalnızca adıyla eklenir.
+- Dizilerde "nerede kaldın" (S2 · B5), hepsinde nerede ve kiminle izlediğin.
+- Sağdaki süzgeçler: film/dizi, tür, yönetmen ("Christopher Nolan filmleri"), puan, durum, tavsiye. **🎲 Bana bir film seç.**
+
 ### Faz 4 — Oyun içi deneyim
 
 - **Oyun Modu** (Oyun Salonu → Oyun Modu, kısayol **Ctrl+Alt+O**): güç planı yüksek performansa geçer, seçtiğin ses

@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -314,8 +314,20 @@ export const api = {
     hide: () => call<void>("panel_hide"),
   },
 
+  titles: {
+    list: () => call<Title[]>("titles_list"),
+    /** Wikipedia'da film/dizi arar. */
+    search: (term: string) => call<TitleHit[]>("titles_search", { term }),
+    /** Arama sonucundan ya da yalnızca adıyla ekler. */
+    add: (hit: TitleHit | null, name?: string, kind?: "movie" | "series") =>
+      call<Title>("titles_add", { hit, name: name ?? null, kind: kind ?? null }),
+    /** Puanlanmadan vazgeçildiyse geri alır. */
+    discard: (id: string) => call<void>("titles_discard", { id }),
+    refresh: (id: string) => call<void>("titles_refresh", { id }),
+  },
+
   reviews: {
-    list: () => call<Review[]>("reviews_list"),
+    list: (kind: "game" | "title" = "game") => call<Review[]>("reviews_list", { kind }),
     save: (input: ReviewInput) => call<Review>("review_save", { input }),
     remove: (id: string) => call<void>("review_delete", { id }),
   },

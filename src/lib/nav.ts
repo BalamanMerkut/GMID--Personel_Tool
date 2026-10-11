@@ -40,7 +40,7 @@ export const ROOMS: Room[] = [
     screens: [
       { id: "archive", label: "Oyun Arşivi", icon: "star", phase: null,
         description: "Oyunlarını 5 kısa soruyla puanla, yorum ve not yaz. Sağdaki filtre kutusuyla türe, etikete ve puana göre bul." },
-      { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: 6,
+      { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: null,
         description: "Film ve dizileri aynı sade kartla puanla; afiş, özet ve oyuncular TMDB'den Türkçe gelir." },
       { id: "media", label: "Medya Oynatıcı", icon: "headphones", phase: null,
         description: "İndirdiğin müzikler ve videolar: senkron şarkı sözleriyle çal, liste görünümü, filmlerde altyazı. Başka ekrana geçince altta çalmaya devam eder." },

@@ -477,23 +477,29 @@ export interface RunningApp {
 }
 
 /** Puanlama kartının 5 sorusu; `null` = "Yok". */
-export interface Scores {
-  gameplay: number | null;
-  story: number | null;
-  enjoyment: number | null;
-  visuals: number | null;
-  performance: number | null;
-}
+/** Soru → puan (1–10) ya da null ("Yok"). Oyunda: gameplay, story, enjoyment, visuals, performance;
+ *  filmde: story, acting, direction, pace, enjoyment. */
+export type Scores = Record<string, number | null>;
 
-export type ReviewStatus = "playing" | "finished" | "completed" | "dropped" | "wishlist";
+/** Oyun: playing · finished · completed · dropped · wishlist — Film/dizi: watching · watched · dropped · watchlist */
+export type ReviewStatus = "playing" | "finished" | "completed" | "dropped" | "wishlist" | "watching" | "watched" | "watchlist";
+
+/** Film/dizi için ek alanlar. */
+export interface ReviewExtra {
+  season?: number | null;
+  episode?: number | null;
+  where?: string | null;
+  with?: string | null;
+}
 export type Recommend = "yes" | "maybe" | "no";
 
 export interface Review {
   id: string;
   author: string;
-  subjectKind: "game";
+  subjectKind: "game" | "title";
   subjectId: string;
   scores: Scores;
+  extra: ReviewExtra | null;
   /** Elle düzeltme (−1 … +1). */
   adjust: number;
   /** "İstiyorum" durumunda puan yok. */
@@ -508,7 +514,7 @@ export interface Review {
 }
 
 export interface ReviewInput {
-  subjectKind: "game";
+  subjectKind: "game" | "title";
   subjectId: string;
   scores: Scores;
   adjust: number;
@@ -516,6 +522,7 @@ export interface ReviewInput {
   notes: string | null;
   status: ReviewStatus | null;
   recommend: Recommend | null;
+  extra?: ReviewExtra | null;
 }
 
 /** Steam mağazası arama sonucu. */
@@ -571,4 +578,35 @@ export interface GameModeStatus {
   since: number | null;
   quiet: boolean;
   stopBackground: boolean;
+}
+
+/** Film & Dizi Arşivi kaydı (bilgiler Wikipedia + Wikidata). */
+export interface Title {
+  id: string;
+  kind: "movie" | "series";
+  name: string;
+  original: string | null;
+  year: number | null;
+  poster: string | null;
+  summary: string | null;
+  directors: string[];
+  cast: string[];
+  genres: string[];
+  /** Dakika (film). */
+  runtime: number | null;
+  seasons: number | null;
+  episodes: number | null;
+  wikiTitle: string | null;
+  addedAt: number;
+}
+
+/** Film/dizi araması sonucu. */
+export interface TitleHit {
+  wikiTitle: string;
+  name: string;
+  description: string;
+  image: string | null;
+  wikidata: string | null;
+  kind: "movie" | "series";
+  year: number | null;
 }

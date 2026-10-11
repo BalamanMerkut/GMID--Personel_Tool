@@ -20,6 +20,7 @@ mod reviews;
 mod scheduler;
 mod servers;
 mod timers;
+mod titles;
 mod transcript;
 mod tray;
 mod util;
@@ -119,6 +120,7 @@ pub fn run() {
             dictation::apply(handle);
             games::start(handle);
             clips::start(handle);
+            titles::fetch_meta(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -258,6 +260,11 @@ pub fn run() {
             commands::games::reviews_list,
             commands::games::review_save,
             commands::games::review_delete,
+            commands::games::titles_list,
+            commands::games::titles_search,
+            commands::games::titles_add,
+            commands::games::titles_discard,
+            commands::games::titles_refresh,
             commands::clips::clips_list,
             commands::clips::clips_roots,
             commands::clips::clips_rescan,

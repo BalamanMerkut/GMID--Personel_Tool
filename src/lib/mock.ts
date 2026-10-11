@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Clip, Countdown, Device, DictationStatus, Download, Game, PlaySession, Review, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Clip, Countdown, Device, Title, TitleHit, DictationStatus, Download, Game, PlaySession, Review, ReviewExtra, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 import { overallOf } from "./review";
 
@@ -224,7 +224,7 @@ const reviews: Review[] = (
     ["g8", sc(8, 10, 9, 10, 7), 0, "Arthur'u unutmak mümkün değil.", "finished", "yes", "PS4'te oynadım."],
   ] as [string, Scores, number, string, ReviewStatus, Recommend, string | null][]
 ).map(([gid, scores, adjust, oneLiner, status, recommend, notes], i) => ({
-  id: `r${i}`, author: "me", subjectKind: "game", subjectId: gid, scores, adjust,
+  id: `r${i}`, author: "me", subjectKind: "game" as const, subjectId: gid, scores, adjust, extra: null,
   overall: overallOf(scores, adjust) ?? 7, oneLiner, notes, status, recommend,
   finishedAt: status === "finished" || status === "completed" ? now() - i * 20 * 86_400_000 : null,
   createdAt: now() - i * 86_400_000, updatedAt: now() - i * 86_400_000,
@@ -257,6 +257,38 @@ const clipList: Clip[] = (
   id: `c${i}`, path: "/ornek/klip.mp4", name, kind, source, gameId, gameHint: gameId ? null : "Desktop", title, size, duration,
   width: 1920, height: 1080, thumb: thumb(color, "#121417", (title ?? name).slice(0, 18).toUpperCase()), favorite,
   createdAt: now() - hoursAgo * 3_600_000,
+}));
+
+// ---- Film & Dizi Arşivi ----
+const poster = (c: string, t: string) =>
+  "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="#0c0d10"/></linearGradient></defs><rect width="200" height="300" fill="url(#g)"/><text x="14" y="270" font-family="Segoe UI,sans-serif" font-size="20" font-weight="800" fill="rgba(255,255,255,.9)">${t}</text></svg>`);
+const titles: Title[] = (
+  [
+    ["t0", "movie", "Başlangıç", "Inception", 2010, "#2a4a6a", ["Christopher Nolan"], ["Leonardo DiCaprio", "Joseph Gordon-Levitt", "Elliot Page"], ["Bilimkurgu", "Aksiyon", "Gerilim"], 148, null],
+    ["t1", "series", "Breaking Bad", null, 2008, "#4a6a2a", ["Vince Gilligan"], ["Bryan Cranston", "Aaron Paul"], ["Suç", "Dram", "Gerilim"], null, 5],
+    ["t2", "movie", "Esaretin Bedeli", "The Shawshank Redemption", 1994, "#6a4a2a", ["Frank Darabont"], ["Tim Robbins", "Morgan Freeman"], ["Dram"], 142, null],
+    ["t3", "series", "Dark", null, 2017, "#2a2a4a", ["Baran bo Odar", "Jantje Friese"], ["Louis Hofmann", "Lisa Vicari"], ["Bilimkurgu", "Gizem"], null, 3],
+    ["t4", "movie", "Yıldızlararası", "Interstellar", 2014, "#3a3a5a", ["Christopher Nolan"], ["Matthew McConaughey", "Anne Hathaway"], ["Bilimkurgu", "Dram"], 169, null],
+    ["t5", "movie", "Dune: İkinci Bölüm", "Dune: Part Two", 2024, "#7a5a2a", ["Denis Villeneuve"], ["Timothée Chalamet", "Zendaya"], ["Bilimkurgu", "Macera"], 166, null],
+  ] as [string, "movie" | "series", string, string | null, number, string, string[], string[], string[], number | null, number | null][]
+).map(([id, kind, name, original, year, color, directors, cast, genres, runtime, seasons], i) => ({
+  id, kind, name, original, year, poster: poster(color, name.toUpperCase().slice(0, 14)),
+  summary: "Kısa özet Türkçe Vikipedi'den gelir. Filmin konusu birkaç cümleyle anlatılır; spoiler içermez.",
+  directors, cast, genres, runtime, seasons, episodes: seasons ? seasons * 10 : null, wikiTitle: original ?? name, addedAt: now() - i * 86_400_000,
+}));
+const tsc = (st: number, ac: number, di: number, pa: number, en: number) => ({ story: st, acting: ac, direction: di, pace: pa, enjoyment: en });
+const titleReviews: Review[] = (
+  [
+    ["t0", tsc(9, 9, 10, 8, 10), "Rüya içinde rüya, sonu hâlâ tartışılıyor.", "watched", "yes", { where: "Sinema", with: "Arkadaşlarla" }],
+    ["t1", tsc(10, 10, 9, 8, 10), "Say my name.", "watching", "yes", { season: 4, episode: 6, where: "Netflix" }],
+    ["t2", tsc(10, 10, 9, 8, 10), "Umut asla ölmez.", "watched", "yes", { where: "Televizyon" }],
+    ["t3", tsc(9, 8, 9, 6, 8), "Kafa karıştırıcı ama değer.", "dropped", "maybe", { season: 2, episode: 3, where: "Netflix" }],
+    ["t5", null, "Herkes ikincisinin daha iyi olduğunu söylüyor.", "watchlist", null, null],
+  ] as [string, Scores | null, string, ReviewStatus, Recommend | null, ReviewExtra | null][]
+).map(([tid, scores, oneLiner, status, recommend, extra], i) => ({
+  id: `tr${i}`, author: "me", subjectKind: "title" as const, subjectId: tid, scores: scores ?? {}, adjust: 0, extra,
+  overall: scores ? overallOf(scores, 0, "title") : null, oneLiner, notes: null, status, recommend,
+  finishedAt: status === "watched" ? now() - i * 30 * 86_400_000 : null, createdAt: now() - i * 86_400_000, updatedAt: now() - i * 86_400_000,
 }));
 
 // ---- Kendi çalma listeleri ----
@@ -657,19 +689,21 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return "C:\\Users\\Merkut\\Documents\\GMID Tool\\Discord'a Hazır\\klip (Discord).mp4";
     }
     case "reviews_list":
-      return reviews;
+      return a.kind === "title" ? titleReviews : reviews;
     case "review_save": {
       const input = a.input as ReviewInput;
-      const wish = input.status === "wishlist";
-      const overall = wish ? null : overallOf(input.scores, input.adjust);
+      const list = input.subjectKind === "title" ? titleReviews : reviews;
+      const wish = input.status === "wishlist" || input.status === "watchlist";
+      const overall = wish ? null : overallOf(input.scores, input.adjust, input.subjectKind);
       if (!wish && overall == null) throw "En az bir soruya puan ver";
       if (wish) input.recommend = null;
-      const old = reviews.find((r) => r.subjectId === input.subjectId);
-      const r: Review = { id: old?.id ?? `r${Date.now()}`, author: "me", ...input, adjust: Math.max(-1, Math.min(1, input.adjust)), overall,
-        finishedAt: input.status === "finished" || input.status === "completed" ? (old?.finishedAt ?? now()) : null,
+      const old = list.find((r) => r.subjectId === input.subjectId);
+      const r: Review = { id: old?.id ?? `r${Date.now()}`, author: "me", ...input, extra: input.extra ?? null, adjust: Math.max(-1, Math.min(1, input.adjust)), overall,
+        finishedAt: ["finished", "completed", "watched"].includes(input.status ?? "") ? (old?.finishedAt ?? now()) : null,
         createdAt: old?.createdAt ?? now(), updatedAt: now() };
       if (old) Object.assign(old, r);
-      else reviews.unshift(r);
+      else list.unshift(r);
+      emit(input.subjectKind === "title" ? "titles-changed" : "reviews-changed");
       return r;
     }
     case "review_delete": {
@@ -680,8 +714,43 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         const gi = libGames.findIndex((g) => g.id === gid && !g.inLibrary);
         if (gi >= 0) libGames.splice(gi, 1);
       }
+      const j = titleReviews.findIndex((r) => r.id === a.id);
+      if (j >= 0) {
+        const tid = titleReviews[j].subjectId;
+        titleReviews.splice(j, 1);
+        titles.splice(titles.findIndex((t) => t.id === tid), 1);
+        emit("titles-changed");
+      }
       return;
     }
+    case "titles_list":
+      return titles;
+    case "titles_search": {
+      const q = String(a.term).toLocaleLowerCase("tr-TR");
+      const hits: TitleHit[] = [
+        { wikiTitle: "The Matrix", name: "The Matrix", description: "1999 film by the Wachowskis", image: poster("#1a4a2a", "MATRIX"), wikidata: "Q83495", kind: "movie", year: 1999 },
+        { wikiTitle: "The Matrix Reloaded", name: "The Matrix Reloaded", description: "2003 film by the Wachowskis", image: poster("#1a3a2a", "RELOADED"), wikidata: "Q189600", kind: "movie", year: 2003 },
+        { wikiTitle: "Dark (TV series)", name: "Dark", description: "German science fiction television series", image: poster("#2a2a4a", "DARK"), wikidata: "Q27877", kind: "series", year: null },
+      ];
+      return hits.filter((h) => h.name.toLocaleLowerCase("tr-TR").includes(q) || q.length < 3);
+    }
+    case "titles_add": {
+      const h = a.hit as TitleHit | null;
+      const t: Title = { id: `t${Date.now()}`, kind: h?.kind ?? ((a.kind as "movie" | "series") || "movie"), name: h?.name ?? String(a.name), original: null,
+        year: h?.year ?? null, poster: h?.image ?? null, summary: null, directors: [], cast: [], genres: [], runtime: null, seasons: null, episodes: null,
+        wikiTitle: h?.wikiTitle ?? null, addedAt: now() };
+      titles.unshift(t);
+      return t;
+    }
+    case "titles_discard": {
+      if (!titleReviews.some((r) => r.subjectId === a.id)) {
+        const i = titles.findIndex((t) => t.id === a.id);
+        if (i >= 0) titles.splice(i, 1);
+      }
+      return;
+    }
+    case "titles_refresh":
+      return;
     case "games_store_search": {
       const t = String(a.term).toLocaleLowerCase("tr-TR");
       return [

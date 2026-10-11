@@ -188,9 +188,13 @@ pub fn games_add_archive(app: AppHandle, appid: Option<i64>, name: String) -> Cm
     app.state::<Games>().add_archive(&app, appid, &name)
 }
 
+/// `kind`: game (varsayılan) | title (film/dizi).
 #[tauri::command]
-pub fn reviews_list(db: State<'_, Db>) -> CmdResult<Vec<crate::reviews::Review>> {
-    crate::reviews::list(&db, "game")
+pub fn reviews_list(
+    db: State<'_, Db>,
+    kind: Option<String>,
+) -> CmdResult<Vec<crate::reviews::Review>> {
+    crate::reviews::list(&db, kind.as_deref().unwrap_or("game"))
 }
 
 #[tauri::command]
@@ -208,7 +212,55 @@ pub fn review_delete(app: AppHandle, id: String) -> CmdResult<()> {
     crate::reviews::delete(&app.state::<Db>(), &id)?;
     let _ = app.emit("reviews-changed", ());
     let _ = app.emit("games-changed", ());
+    let _ = app.emit("titles-changed", ());
     Ok(())
+}
+
+// ---- Film & Dizi Arşivi ----
+
+#[tauri::command]
+pub fn titles_list(db: State<'_, Db>) -> CmdResult<Vec<crate::titles::Title>> {
+    crate::titles::list(&db)
+}
+
+/// Wikipedia'da film/dizi arar.
+#[tauri::command]
+pub async fn titles_search(app: AppHandle, term: String) -> CmdResult<Vec<crate::titles::Hit>> {
+    if term.trim().chars().count() < 2 {
+        return Ok(Vec::new());
+    }
+    blocking(app, move |_| crate::titles::search(&term)).await?
+}
+
+/// Arama sonucundan (`hit`) ya da yalnızca adıyla ekler.
+#[tauri::command]
+pub fn titles_add(
+    app: AppHandle,
+    hit: Option<crate::titles::Hit>,
+    name: Option<String>,
+    kind: Option<String>,
+) -> CmdResult<crate::titles::Title> {
+    let t = crate::titles::add(
+        &app,
+        hit,
+        name.as_deref().unwrap_or_default(),
+        kind.as_deref().unwrap_or("movie"),
+    )?;
+    let _ = app.emit("titles-changed", ());
+    Ok(t)
+}
+
+/// Puanlanmadan vazgeçildiyse eklenen film/dizi geri alınır.
+#[tauri::command]
+pub fn titles_discard(app: AppHandle, id: String) -> CmdResult<()> {
+    crate::titles::remove_if_unrated(&app.state::<Db>(), &id)?;
+    let _ = app.emit("titles-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn titles_refresh(app: AppHandle, id: String) -> CmdResult<()> {
+    crate::titles::refresh(&app, &id)
 }
 
 /// Kütüphanede olmayan, açıldığı görülen oyunlar ("Kütüphaneye ekleyeyim mi?").
