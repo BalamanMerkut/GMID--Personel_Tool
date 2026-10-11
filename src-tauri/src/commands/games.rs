@@ -2,7 +2,7 @@
 
 use crate::db::Db;
 use crate::games::{scan::Found, Game, Games, RunningApp, Session};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 type CmdResult<T> = Result<T, String>;
@@ -129,4 +129,47 @@ pub fn games_reveal(
     app.opener()
         .open_path(dir, None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+// ---- Oyun Arşivi ----
+
+/// Steam mağazasında adıyla arar (arşive kütüphanede olmayan oyun eklemek için).
+#[tauri::command]
+pub async fn games_store_search(
+    app: AppHandle,
+    term: String,
+) -> CmdResult<Vec<crate::games::meta::StoreHit>> {
+    if term.trim().len() < 2 {
+        return Ok(Vec::new());
+    }
+    blocking(app, move |_| crate::games::meta::store_search(&term)).await?
+}
+
+/// Arşive oyun ekler (Steam kimliğiyle ya da yalnızca adıyla); oyunun kimliği.
+#[tauri::command]
+pub fn games_add_archive(app: AppHandle, appid: Option<i64>, name: String) -> CmdResult<String> {
+    app.state::<Games>().add_archive(&app, appid, &name)
+}
+
+#[tauri::command]
+pub fn reviews_list(db: State<'_, Db>) -> CmdResult<Vec<crate::reviews::Review>> {
+    crate::reviews::list(&db, "game")
+}
+
+#[tauri::command]
+pub fn review_save(
+    app: AppHandle,
+    input: crate::reviews::ReviewInput,
+) -> CmdResult<crate::reviews::Review> {
+    let r = crate::reviews::save(&app.state::<Db>(), input)?;
+    let _ = app.emit("reviews-changed", ());
+    Ok(r)
+}
+
+#[tauri::command]
+pub fn review_delete(app: AppHandle, id: String) -> CmdResult<()> {
+    crate::reviews::delete(&app.state::<Db>(), &id)?;
+    let _ = app.emit("reviews-changed", ());
+    let _ = app.emit("games-changed", ());
+    Ok(())
 }

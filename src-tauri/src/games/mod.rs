@@ -49,6 +49,10 @@ pub struct Game {
     pub description: Option<String>,
     pub genres: Vec<String>,
     pub categories: Vec<String>,
+    /// Türkçe etiketler (Roguelike, Co-op, Açık dünya…): Oyun Arşivi süzgeci.
+    pub tags: Vec<String>,
+    /// Kütüphanede mi (yoksa yalnızca Oyun Arşivi'nde: puanlanmış ama kurulu değil).
+    pub in_library: bool,
     pub platform_minutes: i64,
     pub platform_last_played: Option<i64>,
     pub hidden: bool,
@@ -101,7 +105,8 @@ fn json_list(s: Option<String>) -> Vec<String> {
 const COLUMNS: &str = "g.id, g.name, g.source, g.source_id, g.install_dir, g.exes, g.launch,
     g.steam_appid, g.cover, g.header, g.developer, g.publisher, g.year, g.description, g.genres,
     g.categories, g.platform_minutes, g.platform_last_played, g.hidden, g.added_at,
-    COALESCE(SUM(s.seconds), 0), COUNT(s.id), MAX(COALESCE(s.ended_at, s.started_at))";
+    COALESCE(SUM(s.seconds), 0), COUNT(s.id), MAX(COALESCE(s.ended_at, s.started_at)),
+    g.tags, g.in_library";
 
 fn from_row(r: &Row) -> rusqlite::Result<Game> {
     let platform_last: Option<i64> = r.get(17)?;
@@ -123,6 +128,8 @@ fn from_row(r: &Row) -> rusqlite::Result<Game> {
         description: r.get(13)?,
         genres: json_list(r.get(14)?),
         categories: json_list(r.get(15)?),
+        tags: json_list(r.get(23)?),
+        in_library: r.get::<_, i64>(24)? != 0,
         platform_minutes: r.get(16)?,
         platform_last_played: platform_last,
         hidden: r.get::<_, i64>(18)? != 0,
@@ -174,10 +181,11 @@ impl Games {
     pub fn scan(&self, db: &Db) -> Vec<Found> {
         let have: Vec<(String, String)> = {
             let conn = db.conn();
-            let mut stmt = match conn.prepare("SELECT source, source_id FROM games") {
-                Ok(s) => s,
-                Err(_) => return Vec::new(),
-            };
+            let mut stmt =
+                match conn.prepare("SELECT source, source_id FROM games WHERE in_library = 1") {
+                    Ok(s) => s,
+                    Err(_) => return Vec::new(),
+                };
             stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
                 .map(|rows| rows.filter_map(Result::ok).collect())
                 .unwrap_or_default()
@@ -207,7 +215,7 @@ impl Games {
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                          ON CONFLICT(source, source_id) DO UPDATE SET
                             install_dir = excluded.install_dir, exes = excluded.exes,
-                            launch = excluded.launch, hidden = 0,
+                            launch = excluded.launch, hidden = 0, in_library = 1,
                             platform_minutes = MAX(platform_minutes, excluded.platform_minutes),
                             platform_last_played = COALESCE(excluded.platform_last_played, platform_last_played)",
                         params![
@@ -268,6 +276,43 @@ impl Games {
         .map(|_| ())
     }
 
+    /// Oyun Arşivi'ne kütüphanede olmayan bir oyun ekler (konsolda oynanan, silinmiş, istek listesi…).
+    /// Steam'de bulunduysa onun kimliğiyle (bilgi ve kapak gelir); yoksa yalnızca adıyla.
+    pub fn add_archive(
+        &self,
+        app: &AppHandle,
+        appid: Option<i64>,
+        name: &str,
+    ) -> Result<String, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Oyunun adını yaz".into());
+        }
+        let id = {
+            let db = app.state::<Db>();
+            let conn = db.conn();
+            let (source, source_id) = match appid {
+                Some(a) => ("steam".to_string(), a.to_string()),
+                None => ("archive".to_string(), new_id()),
+            };
+            conn.execute(
+                "INSERT INTO games (id, name, source, source_id, steam_appid, in_library, added_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6) ON CONFLICT(source, source_id) DO NOTHING",
+                params![new_id(), name, source, source_id, appid, now_ms()],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.query_row(
+                "SELECT id FROM games WHERE source = ?1 AND source_id = ?2",
+                params![source, source_id],
+                |r| r.get::<_, String>(0),
+            )
+            .map_err(|e| e.to_string())?
+        };
+        let _ = app.emit("games-changed", ());
+        self.fetch_meta(app);
+        Ok(id)
+    }
+
     pub fn set_hidden(&self, app: &AppHandle, id: &str, hidden: bool) -> Result<(), String> {
         app.state::<Db>()
             .conn()
@@ -297,16 +342,38 @@ impl Games {
         Ok(())
     }
 
-    /// Kütüphaneden kaldırır (oturumları da). Oyunun kendisine dokunulmaz.
+    /// Kütüphaneden kaldırır (oturumları da). Oyunun kendisine dokunulmaz. Puanlanmışsa
+    /// Oyun Arşivi'nde kalır (puanı ve süreleri durur), yalnızca algılanmaz olur.
     pub fn remove(&self, app: &AppHandle, id: &str) -> Result<(), String> {
-        self.running
+        if let Some(r) = self
+            .running
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .remove(id);
-        app.state::<Db>()
-            .conn()
-            .execute("DELETE FROM games WHERE id = ?1", [id])
+            .remove(id)
+        {
+            finish(&app.state::<Db>(), &r, now_ms());
+        }
+        {
+            let db = app.state::<Db>();
+            let conn = db.conn();
+            let reviewed: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM reviews WHERE subject_kind = 'game' AND subject_id = ?1)",
+                    [id],
+                    |r| r.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+            if reviewed {
+                conn.execute(
+                    "UPDATE games SET in_library = 0, install_dir = NULL, exes = '[]', launch = NULL
+                     WHERE id = ?1",
+                    [id],
+                )
+            } else {
+                conn.execute("DELETE FROM games WHERE id = ?1", [id])
+            }
             .map_err(|e| e.to_string())?;
+        }
         self.invalidate();
         let _ = app.emit("games-changed", ());
         Ok(())
@@ -403,7 +470,7 @@ impl Games {
         if guard.is_none() {
             let conn = db.conn();
             let list = conn
-                .prepare("SELECT id, source, install_dir, exes FROM games WHERE hidden = 0")
+                .prepare("SELECT id, source, install_dir, exes FROM games WHERE hidden = 0 AND in_library = 1")
                 .and_then(|mut stmt| {
                     stmt.query_map([], |r| {
                         let source: String = r.get(1)?;
@@ -597,6 +664,7 @@ fn fill_meta(
         return Ok(());
     };
     let m = meta::details(appid)?.unwrap_or_default();
+    let tags = meta::tr_tags(&meta::store_tags(appid), &m.categories);
     let cover_path: PathBuf = covers.join(format!("{appid}.jpg"));
     let cover = meta::download_cover(appid, m.header.as_deref(), &cover_path)
         .map(|_| cover_path.to_string_lossy().into_owned())
@@ -605,7 +673,7 @@ fn fill_meta(
         .execute(
             "UPDATE games SET steam_appid = ?2, cover = COALESCE(?3, cover), header = ?4,
                 developer = ?5, publisher = ?6, year = ?7, description = ?8, genres = ?9,
-                categories = ?10, meta_at = ?11 WHERE id = ?1",
+                categories = ?10, meta_at = ?11, tags = ?12 WHERE id = ?1",
             params![
                 id,
                 appid,
@@ -617,7 +685,8 @@ fn fill_meta(
                 m.description,
                 serde_json::to_string(&m.genres).unwrap_or_else(|_| "[]".into()),
                 serde_json::to_string(&m.categories).unwrap_or_else(|_| "[]".into()),
-                now_ms()
+                now_ms(),
+                serde_json::to_string(&tags).unwrap_or_else(|_| "[]".into())
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -685,7 +754,7 @@ mod tests {
             !games.step(&db, std::slice::from_ref(&game)),
             "değişiklik yok"
         );
-        assert_eq!(games.list(&db).unwrap()[0].running_since.is_some(), true);
+        assert!(games.list(&db).unwrap()[0].running_since.is_some());
         // Kısa oturum (yanlışlıkla açma) kaydedilmez.
         assert!(games.step(&db, &[]));
         assert!(games.sessions(&db, 0).unwrap().is_empty());

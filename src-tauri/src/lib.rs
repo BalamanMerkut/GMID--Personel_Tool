@@ -13,6 +13,7 @@ mod overlay;
 mod paths;
 mod playlists;
 mod reminders;
+mod reviews;
 mod scheduler;
 mod servers;
 mod timers;
@@ -233,6 +234,11 @@ pub fn run() {
             commands::games::games_sessions,
             commands::games::games_launch,
             commands::games::games_reveal,
+            commands::games::games_store_search,
+            commands::games::games_add_archive,
+            commands::games::reviews_list,
+            commands::games::review_save,
+            commands::games::review_delete,
             commands::dictation::dictation_apply,
             commands::dictation::dictation_install,
             commands::dictation::dictation_warm_up,

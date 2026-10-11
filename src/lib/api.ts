@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, FoundGame, Game, PlaySession, RunningApp, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, FoundGame, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -254,6 +254,16 @@ export const api = {
       });
       return typeof picked === "string" ? picked : null;
     },
+    /** Steam mağazasında adıyla arama (Oyun Arşivi'ne ekleme). */
+    storeSearch: (term: string) => call<StoreHit[]>("games_store_search", { term }),
+    /** Arşive oyun ekler; oyunun kimliği. */
+    addArchive: (appid: number | null, name: string) => call<string>("games_add_archive", { appid, name }),
+  },
+
+  reviews: {
+    list: () => call<Review[]>("reviews_list"),
+    save: (input: ReviewInput) => call<Review>("review_save", { input }),
+    remove: (id: string) => call<void>("review_delete", { id }),
   },
 
   dictation: {

@@ -15,6 +15,7 @@
   import Media from "./lib/screens/Media.svelte";
   import Library from "./lib/screens/Library.svelte";
   import Sessions from "./lib/screens/Sessions.svelte";
+  import Archive from "./lib/screens/Archive.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
@@ -147,6 +148,8 @@
           <Media onnavigate={navigate} />
         {:else if route === "library"}
           <Library />
+        {:else if route === "archive"}
+          <Archive />
         {:else if route === "sessions"}
           <Sessions onnavigate={navigate} />
         {:else if route === "servers"}

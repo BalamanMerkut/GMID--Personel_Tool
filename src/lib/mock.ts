@@ -1,8 +1,9 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, DictationStatus, Download, Game, PlaySession, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Countdown, Device, DictationStatus, Download, Game, PlaySession, Review, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
+import { overallOf } from "./review";
 
 const emit = (name: string, detail?: unknown) => localBus.dispatchEvent(new CustomEvent(name, { detail }));
 const now = () => Date.now();
@@ -156,6 +157,17 @@ const probeResult: Probe = {
 };
 
 // ---- Oyunlar ----
+const gameTags: string[][] = [
+  ["Roguelike", "Hack and Slash", "Zor", "Tek oyunculu", "Fantastik"],
+  ["FPS", "Rekabetçi", "Çok oyunculu", "Taktik"],
+  ["Soulslike", "Açık dünya", "Zor", "Fantastik", "Atmosferik", "Co-op"],
+  ["Rahatlatıcı", "Piksel grafik", "Co-op", "Üretim"],
+  ["Battle Royale", "Çok oyunculu", "İnşa"],
+  ["FPS", "Taktik", "Rekabetçi", "Çok oyunculu"],
+  ["Sandbox", "Hayatta kalma", "Co-op", "Üretim", "Açık dünya"],
+  ["Metroidvania", "Zor", "Atmosferik", "Piksel grafik"],
+  ["Açık dünya", "Hikâye odaklı", "Atmosferik"],
+];
 const gameNames: [string, string, string, number, string[], number][] = [
   // ad, kaynak, renk, Steam dakikası, türler, yıl
   ["Hades II", "steam", "#7848a8", 2950, ["Aksiyon", "Bağımsız", "RPG"], 2025],
@@ -165,23 +177,26 @@ const gameNames: [string, string, string, number, string[], number][] = [
   ["Fortnite", "epic", "#35a0a2", 0, ["Aksiyon"], 2017],
   ["Valorant", "manual", "#e06a6a", 0, ["Aksiyon"], 2020],
   ["Minecraft", "manual", "#5c8a3a", 0, ["Macera"], 2011],
+  ["Hollow Knight", "steam", "#4a6a9a", 0, ["Aksiyon", "Bağımsız", "Macera"], 2017],
+  ["Red Dead Redemption 2", "archive", "#9a4a3a", 0, ["Aksiyon", "Macera"], 2019],
 ];
 const libGames: Game[] = gameNames.map(([name, source, color, minutes, genres, year], i) => ({
   id: `g${i}`, name, source: source as Game["source"], sourceId: String(1000 + i), installDir: null, exes: [], launch: null,
   steamAppid: source === "steam" ? 1000 + i : null, cover: thumb(color, "#121417", name.toUpperCase()), header: null,
-  developer: ["Supergiant Games", "Valve", "FromSoftware", "ConcernedApe", "Epic Games", "Riot Games", "Mojang"][i],
+  developer: ["Supergiant Games", "Valve", "FromSoftware", "ConcernedApe", "Epic Games", "Riot Games", "Mojang", "Team Cherry", "Rockstar Games"][i],
   publisher: null, year, description: "Kısa oyun açıklaması Steam mağazasından Türkçe gelir.", genres, categories: ["Tek oyunculu"],
+  tags: gameTags[i], inLibrary: i < 7,
   platformMinutes: minutes, platformLastPlayed: null, hidden: false, addedAt: now() - 9 * 86_400_000,
   playedSeconds: 0, sessions: 0, lastPlayed: null, runningSince: null,
 }));
 const playSessions: PlaySession[] = [];
 {
-  const weights = [5, 4, 2, 2, 1, 2, 1];
+  const weights = [5, 4, 2, 2, 1, 2, 1, 0, 0];
   let k = 0;
   for (let day = 20; day >= 0; day--) {
     const n = (day * 7 + 3) % 4;
     for (let j = 0; j < n; j++) {
-      const gi = (day * 3 + j * 5) % libGames.length;
+      const gi = (day * 3 + j * 5) % 7;
       const secs = Math.round((25 + ((day * 37 + j * 53) % 140)) * 60 * (weights[gi] / 3 + 0.4));
       const start = now() - day * 86_400_000 - (j + 1) * 4 * 3_600_000;
       playSessions.push({ id: `s${k++}`, gameId: libGames[gi].id, startedAt: start, endedAt: start + secs * 1000, seconds: secs });
@@ -195,6 +210,25 @@ const playSessions: PlaySession[] = [];
   }
   libGames[0].runningSince = now() - 47 * 60_000;
 }
+
+// ---- Oyun Arşivi ----
+const sc = (g: number, st: number | null, e: number, v: number, p: number | null) => ({ gameplay: g, story: st, enjoyment: e, visuals: v, performance: p });
+const reviews: Review[] = (
+  [
+    ["g0", sc(9, 8, 10, 9, 9), 0, "Bir tur daha derken sabah oldu.", "finished", "yes", "Zagreus'tan bile iyi. ||Son boss'ta Chronos ikinci fazda saati durduruyor||, kalkanı aç."],
+    ["g1", sc(8, null, 8, 7, 6), 0, "Arkadaşlarla akşamları vazgeçilmez.", "playing", "yes", null],
+    ["g2", sc(10, 9, 10, 10, 6), 0.5, "Zor ama her ölüm bir ders.", "completed", "yes", "Malenia için bleed build."],
+    ["g3", sc(8, 6, 9, 8, 10), 0, "Kafa dağıtmak için birebir.", "playing", "maybe", null],
+    ["g4", sc(6, null, 5, 7, 7), 0, "Eskisi gibi değil.", "dropped", "no", null],
+    ["g7", sc(9, 8, 9, 9, 9), 0, "Metroidvania'nın zirvesi.", "finished", "yes", null],
+    ["g8", sc(8, 10, 9, 10, 7), 0, "Arthur'u unutmak mümkün değil.", "finished", "yes", "PS4'te oynadım."],
+  ] as [string, Scores, number, string, ReviewStatus, Recommend, string | null][]
+).map(([gid, scores, adjust, oneLiner, status, recommend, notes], i) => ({
+  id: `r${i}`, author: "me", subjectKind: "game", subjectId: gid, scores, adjust,
+  overall: overallOf(scores, adjust) ?? 7, oneLiner, notes, status, recommend,
+  finishedAt: status === "finished" || status === "completed" ? now() - i * 20 * 86_400_000 : null,
+  createdAt: now() - i * 86_400_000, updatedAt: now() - i * 86_400_000,
+}));
 
 // ---- Kendi çalma listeleri ----
 const userPlaylists: UserPlaylist[] = [];
@@ -539,6 +573,46 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "games_reveal":
       if (cmd === "games_set_hidden") libGames.find((g) => g.id === a.id)!.hidden = a.hidden as boolean;
       return;
+    case "reviews_list":
+      return reviews;
+    case "review_save": {
+      const input = a.input as ReviewInput;
+      const overall = overallOf(input.scores, input.adjust);
+      if (overall == null) throw "En az bir soruya puan ver";
+      const old = reviews.find((r) => r.subjectId === input.subjectId);
+      const r: Review = { id: old?.id ?? `r${Date.now()}`, author: "me", ...input, adjust: Math.max(-1, Math.min(1, input.adjust)), overall,
+        finishedAt: input.status === "finished" || input.status === "completed" ? (old?.finishedAt ?? now()) : null,
+        createdAt: old?.createdAt ?? now(), updatedAt: now() };
+      if (old) Object.assign(old, r);
+      else reviews.unshift(r);
+      return r;
+    }
+    case "review_delete": {
+      const i = reviews.findIndex((r) => r.id === a.id);
+      if (i >= 0) {
+        const gid = reviews[i].subjectId;
+        reviews.splice(i, 1);
+        const gi = libGames.findIndex((g) => g.id === gid && !g.inLibrary);
+        if (gi >= 0) libGames.splice(gi, 1);
+      }
+      return;
+    }
+    case "games_store_search": {
+      const t = String(a.term).toLocaleLowerCase("tr-TR");
+      return [
+        { appid: 1086940, name: "Baldur's Gate 3", image: thumb("#6a3a2a", "#121417", "BG3") },
+        { appid: 367520, name: "Hollow Knight", image: thumb("#4a6a9a", "#121417", "HK") },
+        { appid: 1145360, name: "Hades", image: thumb("#a84838", "#121417", "HADES") },
+        { appid: 504230, name: "Celeste", image: thumb("#8a4a9a", "#121417", "CELESTE") },
+      ].filter((h) => h.name.toLocaleLowerCase("tr-TR").includes(t));
+    }
+    case "games_add_archive": {
+      const id = `g${Date.now()}`;
+      libGames.push({ ...libGames[0], id, name: String(a.name), source: a.appid ? "steam" : "archive", steamAppid: (a.appid as number) ?? null,
+        cover: thumb("#3a5a7a", "#121417", String(a.name).toUpperCase()), tags: [], genres: [], inLibrary: false, developer: null, year: null,
+        playedSeconds: 0, sessions: 0, lastPlayed: null, runningSince: null, platformMinutes: 0 });
+      return id;
+    }
     case "games_sessions":
       return playSessions.filter((s) => (s.endedAt ?? s.startedAt) >= (a.since as number));
     case "playlists_list":

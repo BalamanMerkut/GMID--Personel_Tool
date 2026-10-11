@@ -151,6 +151,33 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX play_sessions_game ON play_sessions (game_id, started_at);
     CREATE INDEX play_sessions_time ON play_sessions (started_at);",
+    // 10 — Oyun Arşivi: Türkçe etiketler, arşivde olup kütüphanede olmayan oyunlar, puanlar (Faz 3b)
+    "ALTER TABLE games ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE games ADD COLUMN in_library INTEGER NOT NULL DEFAULT 1;
+    -- etiketler için bilgiler bir kez yeniden alınır
+    UPDATE games SET meta_at = NULL;
+    CREATE TABLE reviews (
+        id           TEXT PRIMARY KEY,
+        -- şimdilik hep 'me'; ortak arşivde arkadaşlar
+        author       TEXT NOT NULL DEFAULT 'me',
+        -- game (ileride film/dizi)
+        subject_kind TEXT NOT NULL,
+        subject_id   TEXT NOT NULL,
+        -- soru → puan ya da null ('Yok') (JSON)
+        scores       TEXT NOT NULL,
+        adjust       REAL NOT NULL DEFAULT 0,
+        overall      REAL NOT NULL,
+        one_liner    TEXT,
+        notes        TEXT,
+        -- playing | finished | completed | dropped | wishlist
+        status       TEXT,
+        -- yes | maybe | no
+        recommend    TEXT,
+        finished_at  INTEGER,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        UNIQUE (author, subject_kind, subject_id)
+    );",
 ];
 
 pub struct Db(Mutex<Connection>);

@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı; Faz 3b (Oyun) sürüyor — Kütüphanem ve Oturum Geçmişi hazır. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı; Faz 3b (Oyun) sürüyor — Kütüphanem, Oturum Geçmişi ve Oyun Arşivi hazır. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -29,6 +29,16 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 - **Kütüphanem:** kapak ızgarası (kapak ve bilgiler Steam mağazasından kendiliğinden, Türkçe), arama, kaynak süzgeci,
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
+
+### Faz 3b — Oyun (2. bölüm: Oyun Arşivi)
+
+- **5 kısa soruyla puanla:** oynanış, hikâye, keyif, görsellik, performans (kaydırıcılar 7'den başlar). Hikâyesi olmayan
+  oyunda **Yok** de: puanı düşürmez. Genel puan kendiliğinden hesaplanır; içine sinmezse ±1 oynatabilirsin. Tek cümle,
+  durum (Oynuyorum, Bitirdim, %100, Bıraktım, İstiyorum), tavsiye ve notlar (`||spoiler||` gizlenir).
+- **Keşfet:** sağdaki filtre kutusundan tür ve etiket (Roguelike, Co-op, Açık dünya… Steam'den Türkçe), puan, durum,
+  tavsiye, mağaza. Her seçeneğin yanında kaç oyun kalacağı yazar. **🎲 Bana bir oyun seç** filtreye uyanlardan birini önerir.
+- Kütüphanende olmayan oyunlar (konsolda oynadığın, sildiğin) Steam'de adıyla aratılıp eklenir. Son oynayıp
+  puanlamadığın oyunlar arşivin üstünde hatırlatılır.
 
 ### Faz 5 — Video İndirici
 

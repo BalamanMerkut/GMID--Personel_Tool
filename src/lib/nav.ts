@@ -38,7 +38,7 @@ export const ROOMS: Room[] = [
   {
     name: "Eğlence Salonu",
     screens: [
-      { id: "archive", label: "Oyun Arşivi", icon: "star", phase: 3,
+      { id: "archive", label: "Oyun Arşivi", icon: "star", phase: null,
         description: "Oyunlarını 5 kısa soruyla puanla, yorum ve not yaz. Sağdaki filtre kutusuyla türe, etikete ve puana göre bul." },
       { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: 6,
         description: "Film ve dizileri aynı sade kartla puanla; afiş, özet ve oyuncular TMDB'den Türkçe gelir." },

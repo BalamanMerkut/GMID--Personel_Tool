@@ -20,7 +20,8 @@ export type AppEvent =
   | "dictation-entry"
   | "dikte"
   | "dikte-level"
-  | "games-changed";
+  | "games-changed"
+  | "reviews-changed";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

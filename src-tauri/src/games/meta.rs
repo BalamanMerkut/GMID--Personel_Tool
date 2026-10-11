@@ -120,16 +120,7 @@ fn normalize(s: &str) -> String {
 
 /// Adıyla mağazada arar; adı birebir (harf/rakam olarak) tutan ilk sonucun kimliği.
 pub fn search(name: &str) -> Result<Option<i64>, String> {
-    let mut url =
-        String::from("https://store.steampowered.com/api/storesearch/?l=turkish&cc=TR&term=");
-    for b in name.trim().bytes() {
-        if b.is_ascii_alphanumeric() {
-            url.push(b as char);
-        } else {
-            url.push_str(&format!("%{b:02X}"));
-        }
-    }
-    let json = get_json(&url)?;
+    let json = get_json(&search_url(name))?;
     let want = normalize(name);
     Ok(json["items"].as_array().and_then(|items| {
         items
@@ -137,6 +128,238 @@ pub fn search(name: &str) -> Result<Option<i64>, String> {
             .find(|i| i["name"].as_str().is_some_and(|n| normalize(n) == want))
             .and_then(|i| i["id"].as_i64())
     }))
+}
+
+/// Steam kullanıcı etiketleri (İngilizce, en çok oylanandan aza), mağaza sayfasından.
+/// Yaş doğrulaması çerezle geçilir. Sayfa okunamazsa boş liste: etiketsiz de olur.
+pub fn store_tags(appid: i64) -> Vec<String> {
+    let html = (|| -> Result<String, String> {
+        let mut r = agent()
+            .get(&format!(
+                "https://store.steampowered.com/app/{appid}/?l=english"
+            ))
+            .header(
+                "Cookie",
+                "birthtime=0; lastagecheckage=1-0-1990; wants_mature_content=1",
+            )
+            .call()
+            .map_err(|e| e.to_string())?;
+        r.body_mut()
+            .with_config()
+            .limit(6 * 1024 * 1024)
+            .read_to_string()
+            .map_err(|e| e.to_string())
+    })();
+    html.map(|h| parse_store_tags(&h)).unwrap_or_default()
+}
+
+pub fn parse_store_tags(html: &str) -> Vec<String> {
+    // 1) Sayfadaki betik: InitAppTagModal( 123, [{"tagid":1716,"name":"Roguelike",…}, …], …
+    if let Some(i) = html.find("InitAppTagModal(") {
+        let rest = &html[i..];
+        if let Some(j) = rest.find('[') {
+            let mut it =
+                serde_json::Deserializer::from_str(&rest[j..]).into_iter::<serde_json::Value>();
+            if let Some(Ok(serde_json::Value::Array(list))) = it.next() {
+                let tags: Vec<String> = list
+                    .iter()
+                    .filter_map(|t| t["name"].as_str().map(str::to_string))
+                    .collect();
+                if !tags.is_empty() {
+                    return tags;
+                }
+            }
+        }
+    }
+    // 2) Yedek: görünen etiket bağlantıları.
+    html.split(r#"class="app_tag""#)
+        .skip(1)
+        .filter_map(|part| {
+            let text = part.split_once('>')?.1.split('<').next()?.trim();
+            (!text.is_empty() && text != "+").then(|| text.to_string())
+        })
+        .collect()
+}
+
+/// Steam etiketleri ve kategorileri tek bir Türkçe listeye: "Rogue-like", "Roguelite",
+/// "Action Roguelike" hepsi **Roguelike**. Bilinmeyen etiketler alınmaz (filtre kalabalıklaşmasın).
+const TAGS: &[(&[&str], &str)] = &[
+    (
+        &[
+            "roguelike",
+            "roguelite",
+            "action roguelike",
+            "rogue-like",
+            "rogue-lite",
+            "traditional roguelike",
+        ],
+        "Roguelike",
+    ),
+    (&["souls-like", "soulslike"], "Soulslike"),
+    (&["metroidvania"], "Metroidvania"),
+    (
+        &["co-op", "online co-op", "local co-op", "co-op campaign"],
+        "Co-op",
+    ),
+    (&["open world", "open world survival craft"], "Açık dünya"),
+    (&["survival"], "Hayatta kalma"),
+    (&["story rich"], "Hikâye odaklı"),
+    (
+        &["multiplayer", "massively multiplayer", "online pvp"],
+        "Çok oyunculu",
+    ),
+    (&["singleplayer"], "Tek oyunculu"),
+    (&["fps"], "FPS"),
+    (
+        &[
+            "shooter",
+            "third-person shooter",
+            "looter shooter",
+            "hero shooter",
+        ],
+        "Nişancı",
+    ),
+    (
+        &["horror", "survival horror", "psychological horror"],
+        "Korku",
+    ),
+    (&["puzzle", "puzzle platformer"], "Bulmaca"),
+    (
+        &[
+            "platformer",
+            "2d platformer",
+            "3d platformer",
+            "precision platformer",
+        ],
+        "Platform",
+    ),
+    (
+        &[
+            "strategy",
+            "rts",
+            "turn-based strategy",
+            "grand strategy",
+            "4x",
+        ],
+        "Strateji",
+    ),
+    (
+        &["rpg", "action rpg", "jrpg", "crpg", "party-based rpg"],
+        "RPG",
+    ),
+    (&["simulation", "life sim"], "Simülasyon"),
+    (&["racing", "driving"], "Yarış"),
+    (&["sports", "football (soccer)"], "Spor"),
+    (&["sandbox"], "Sandbox"),
+    (&["crafting"], "Üretim"),
+    (
+        &["building", "base building", "city builder", "colony sim"],
+        "İnşa",
+    ),
+    (&["battle royale"], "Battle Royale"),
+    (&["competitive", "pvp", "esports"], "Rekabetçi"),
+    (&["indie"], "Bağımsız"),
+    (&["pixel graphics"], "Piksel grafik"),
+    (&["anime"], "Anime"),
+    (
+        &["hack and slash", "character action game", "beat 'em up"],
+        "Hack and Slash",
+    ),
+    (&["fighting", "2d fighter", "3d fighter"], "Dövüş"),
+    (&["stealth"], "Gizlilik"),
+    (&["deckbuilding", "card game", "card battler"], "Kart"),
+    (&["tactical", "tactical rpg"], "Taktik"),
+    (
+        &["turn-based", "turn-based combat", "turn-based tactics"],
+        "Sıra tabanlı",
+    ),
+    (&["exploration"], "Keşif"),
+    (&["atmospheric"], "Atmosferik"),
+    (&["difficult"], "Zor"),
+    (&["relaxing", "cozy", "casual"], "Rahatlatıcı"),
+    (&["short"], "Kısa"),
+    (&["funny", "comedy"], "Komik"),
+    (&["sci-fi", "space"], "Bilim kurgu"),
+    (&["fantasy", "dark fantasy"], "Fantastik"),
+    (&["post-apocalyptic"], "Kıyamet sonrası"),
+    (&["zombies"], "Zombi"),
+    (&["mystery", "detective"], "Gizem"),
+    (&["visual novel"], "Görsel roman"),
+    (&["party game", "party"], "Parti"),
+    (&["isometric"], "İzometrik"),
+    (&["war", "military", "world war ii"], "Savaş"),
+    (&["historical"], "Tarihi"),
+    (&["choices matter", "multiple endings"], "Seçimler önemli"),
+];
+
+pub fn tr_tags(steam_tags: &[String], categories: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |t: &str| {
+        if !out.iter().any(|o| o == t) {
+            out.push(t.to_string());
+        }
+    };
+    // En çok oylanan 20 etiket yeter; sonrası oyunu pek anlatmıyor.
+    for t in steam_tags.iter().take(20) {
+        let low = t.to_lowercase();
+        if let Some((_, tr)) = TAGS.iter().find(|(en, _)| en.contains(&low.as_str())) {
+            push(tr);
+        }
+    }
+    // Mağaza kategorileri (Türkçe gelir): "Çevrimiçi Co-op", "Çok oyunculu", "Tek oyunculu"…
+    for c in categories {
+        let low = c.to_lowercase();
+        if low.contains("co-op") || low.contains("ortak") {
+            push("Co-op");
+        } else if low.contains("çok oyunculu") || low.contains("multi-player") {
+            push("Çok oyunculu");
+        } else if low.contains("tek oyunculu") || low.contains("single-player") {
+            push("Tek oyunculu");
+        }
+    }
+    out
+}
+
+/// Mağazada adıyla arama: Oyun Arşivi'ne kütüphanede olmayan bir oyun eklerken.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreHit {
+    pub appid: i64,
+    pub name: String,
+    pub image: Option<String>,
+}
+
+pub fn store_search(term: &str) -> Result<Vec<StoreHit>, String> {
+    let json = get_json(&search_url(term))?;
+    Ok(json["items"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|i| {
+                    Some(StoreHit {
+                        appid: i["id"].as_i64()?,
+                        name: i["name"].as_str()?.to_string(),
+                        image: i["tiny_image"].as_str().map(str::to_string),
+                    })
+                })
+                .take(10)
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+fn search_url(term: &str) -> String {
+    let mut url =
+        String::from("https://store.steampowered.com/api/storesearch/?l=turkish&cc=TR&term=");
+    for b in term.trim().bytes() {
+        if b.is_ascii_alphanumeric() {
+            url.push(b as char);
+        } else {
+            url.push_str(&format!("%{b:02X}"));
+        }
+    }
+    url
 }
 
 /// Dikey kapak (600×900). Bulunamazsa yatay başlık resmi.
@@ -202,5 +425,23 @@ mod tests {
         assert!(parse_details(1, &fail).is_none());
         assert_eq!(year_of("Oct 17, 2024"), Some(2024));
         assert_eq!(normalize("Hades II™"), "hadesii");
+    }
+
+    #[test]
+    fn store_tags_are_parsed_and_translated() {
+        let html = r#"<script>InitAppTagModal( 1145350,
+            [{"tagid":42804,"name":"Action Roguelike","count":900,"browseable":true},
+             {"tagid":1716,"name":"Roguelike","count":800,"browseable":true},
+             {"tagid":4166,"name":"Atmospheric","count":300,"browseable":true},
+             {"tagid":1,"name":"Great Soundtrack","count":200,"browseable":true}],
+            [], "x", "y", false );</script>"#;
+        let tags = parse_store_tags(html);
+        assert_eq!(tags[0], "Action Roguelike");
+        assert_eq!(tags.len(), 4);
+        let fallback = r#"<a href="/tags/en/Souls-like/" class="app_tag" style="">
+            Souls-like </a><a class="app_tag" >Open World</a><div class="app_tag add_button">+</div>"#;
+        assert_eq!(parse_store_tags(fallback), ["Souls-like", "Open World"]);
+        let tr = tr_tags(&tags, &["Çevrimiçi Co-op".into(), "Tek oyunculu".into()]);
+        assert_eq!(tr, ["Roguelike", "Atmosferik", "Co-op", "Tek oyunculu"]);
     }
 }

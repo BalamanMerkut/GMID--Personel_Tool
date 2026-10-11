@@ -4,11 +4,13 @@
   import { onMount } from "svelte";
   import { api } from "../api";
   import { on } from "../bus";
+  import RatingCard from "../components/RatingCard.svelte";
   import Icon from "../Icon.svelte";
+  import { fmtScore, scoreTone } from "../review";
   import { getJson, setJson } from "../settings.svelte";
   import { ago, playtime } from "../time";
   import { notify } from "../toast.svelte";
-  import type { FoundGame, Game, PlaySession, RunningApp } from "../types";
+  import type { FoundGame, Game, PlaySession, Review, RunningApp } from "../types";
 
   type Source = "all" | "steam" | "epic" | "manual";
   type Sort = "recent" | "played" | "name" | "platform";
@@ -34,9 +36,14 @@
   let detail: Game | null = $state(null);
   let detailSessions: PlaySession[] = $state([]);
   let armedRemove = $state(false);
+  let reviews: Review[] = $state([]);
+  let rating: Game | null = $state(null);
 
   async function load() {
-    games = await api.games.list().catch(() => []);
+    const [g, r] = await Promise.all([api.games.list().catch(() => []), api.reviews.list().catch(() => [])]);
+    // Yalnızca arşivde olanlar (puanlanmış ama kurulu değil) burada görünmez.
+    games = g.filter((x) => x.inLibrary);
+    reviews = r;
     loadedAt = Date.now();
     loaded = true;
     if (detail) detail = games.find((g) => g.id === detail?.id) ?? null;
@@ -45,10 +52,12 @@
   onMount(() => {
     void load();
     const stop = on("games-changed", () => void load());
+    const stopReviews = on("reviews-changed", () => void load());
     const timer = setInterval(() => (now = Date.now()), 30_000);
     return () => {
       clearInterval(timer);
       void stop.then((f) => f());
+      void stopReviews.then((f) => f());
     };
   });
 
@@ -69,6 +78,7 @@
     return [...list].sort(by[sort]);
   });
   const running = $derived(games.filter((g) => g.runningSince));
+  const reviewOf = (g: Game) => reviews.find((r) => r.subjectId === g.id) ?? null;
   const hiddenCount = $derived(games.filter((g) => g.hidden).length);
 
   const cover = (g: { cover: string | null }) => (!g.cover ? null : /^(https?:|data:)/.test(g.cover) ? g.cover : api.fileSrc(g.cover));
@@ -212,6 +222,7 @@
               {#if cover(g)}<img src={cover(g)} alt="" loading="lazy" />{:else}<span class="ph">{g.name}</span>{/if}
               {#if g.runningSince}<span class="badge"><span class="dot"></span>Oynuyor</span>{/if}
               <span class="src">{sourceLabel(g.source)}</span>
+              {#if reviewOf(g)}{@const r = reviewOf(g)!}<span class={`score tone-${scoreTone(r.overall)}`}>{fmtScore(r.overall)}</span>{/if}
             </div>
             <b class="nm">{g.name}</b>
             <span class="sub small tnum">
@@ -315,6 +326,12 @@
           {#if g.description}<p class="desc small">{g.description}</p>{/if}
           <div class="row">
             {#if g.launch}<button class="btn" onclick={() => act(api.games.launch(g.id))}><Icon name="play" size={17} />Oyna</button>{/if}
+            {#if reviewOf(g)}
+              {@const r = reviewOf(g)!}
+              <button class="btn ghost sm" onclick={() => (rating = g)} title="Puanını düzenle">⭐ <b class={`tone-${scoreTone(r.overall)}`}>{fmtScore(r.overall)}</b> · Düzenle</button>
+            {:else}
+              <button class="btn ghost sm" onclick={() => (rating = g)}><Icon name="star" size={15} />Puanla</button>
+            {/if}
             <button class="btn ghost sm" onclick={() => act(api.games.reveal(g.id))}><Icon name="folder" size={15} />Klasör</button>
             <button class="btn ghost sm" onclick={() => act(api.games.refreshMeta(g.id), "Bilgiler yenileniyor")}><Icon name="refresh" size={15} />Bilgileri yenile</button>
           </div>
@@ -337,10 +354,16 @@
         <button class="link" onclick={() => act(api.games.setHidden(g.id, !g.hidden), g.hidden ? "Kütüphanede gösteriliyor" : "Gizlendi; süresi tutulmaz")}>
           {g.hidden ? "Göster ve izle" : "Gizle (süre tutma)"}
         </button>
-        <button class="link danger" onclick={() => removeGame(g)}>{armedRemove ? "Emin misin? Oturumlar da silinir" : "Kütüphaneden kaldır"}</button>
+        <button class="link danger" onclick={() => removeGame(g)}>
+          {armedRemove ? (reviewOf(g) ? "Emin misin? Puanı arşivde kalır" : "Emin misin? Oturumlar da silinir") : "Kütüphaneden kaldır"}
+        </button>
       </div>
     </div>
   </div>
+{/if}
+
+{#if rating}
+  <RatingCard game={rating} review={reviewOf(rating)} onclose={() => (rating = null)} onsaved={() => void load()} ondeleted={() => void load()} />
 {/if}
 
 <style>
@@ -366,6 +389,11 @@
   .ph { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; text-align: center; font-family: var(--f-display); font-weight: 700; color: var(--muted); }
   .badge { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 5px; background: rgba(12, 14, 17, 0.88); color: var(--good); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
   .src { position: absolute; right: 6px; bottom: 6px; background: rgba(12, 14, 17, 0.8); color: var(--muted); font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 5px; }
+  .score { position: absolute; top: 8px; right: 8px; padding: 2px 7px; border-radius: 8px; background: rgba(12, 14, 17, 0.9); font-family: var(--f-display); font-weight: 800; font-size: 14px; border: 1px solid currentColor; }
+  .tone-gold { color: var(--gold-glow); }
+  .tone-good { color: var(--good); }
+  .tone-mid { color: #e0a84a; }
+  .tone-low { color: var(--bad); }
   .nm { font-weight: 600; font-size: 14px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 40px 20px; color: var(--muted); }
   .empty h3 { margin: 0; color: var(--text); font-family: var(--f-display); }

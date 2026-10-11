@@ -245,6 +245,20 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >   `library_600x900` kapak `Kapaklar/Oyunlar/`). Kütüphanem: kapak ızgarası, kaynak süzgeci, arama, sıralama,
 >   "Şu an oynuyorsun" şeridi, ayrıntı penceresinde Oyna / Klasör / **Gerçek oynama** ve **Steam'deki süre** ayrı.
 >   Oturum Geçmişi: 7/30 gün, günlük yığılmış çubuk grafik (ilk 5 oyun renkli, gerisi "Diğer"), gün gün oturumlar.
+> - **v0.18 — Faz 3b-2 (Oyun Arşivi):** göç 10: `reviews` (yazar, konu, soru puanları JSON — `null` = "Yok",
+>   elle düzeltme, genel puan, tek cümle, notlar, durum, tavsiye, bitirme tarihi; yazar+konu tekil), `games.tags`
+>   (Türkçe etiket listesi) ve `games.in_library` (puanlanmış ama kurulu olmayan oyunlar yalnızca arşivde).
+>   Etiketler Steam mağaza sayfasındaki kullanıcı etiketlerinden (`InitAppTagModal`) ve kategorilerden tek bir Türkçe
+>   listeye çevrilir ("Action Roguelike", "Rogue-lite" → **Roguelike**; bilinmeyenler alınmaz). Puanlama kartı:
+>   5 kaydırıcı (7'den başlar), Hikâye ve Performans'ta **Yok**, genel puan otomatik (35/20/20/15/10, "Yok"un payı
+>   oransal dağılır) + yarımşar ±1 elle; durum (Oynuyorum · Bitirdim · %100 · Bıraktım · İstiyorum), tavsiye, notlarda
+>   `||spoiler||`. Keşfet: sağda filtre kutusu (tür ve etiket — ilk 8 + "Tümünü göster", etiketler VE ile; puan 7+/8+/9+;
+>   durum, tavsiye, mağaza VEYA ile), her seçeneğin yanında seçilirse kalacak oyun sayısı, sıfırsa soluk; seçilenler
+>   ✕'li etiketler, "Temizle"; dar pencerede sağdan çekmece. Sıralama: puan, son oynama, süre, çıkış yılı, son puanlanan.
+>   **Bana bir oyun seç**: filtreye uyanlardan (bırakılan ve "uzak dur" denenler hariç) rastgele, kısa bir zar animasyonu.
+>   Arşive ekleme: kütüphaneden ya da Steam'de adıyla aratarak; Steam'de yoksa yalnızca adıyla. Son 30 günde oynanıp
+>   puanlanmamış oyunlar arşivin üstünde "puanını bekliyor" şeridinde. Kütüphanem kartlarında puan rozeti, oyun
+>   penceresinde "Puanla"; puanlanmış oyun kütüphaneden kaldırılırsa arşivde kalır.
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -931,7 +945,7 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **1 — İskelet** ✅ *kodlandı* | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
 | **2 — Günlük araçlar** ✅ *kodlandı* | Ses & Mikrofon (kilit, kısayollar, ekran göstergesi), Notlar (+ hızlı not, yapışkan not), Hatırlatıcılar, Sayaç | Her gün kullandığın araçlar |
 | **3a — Sunucular** ✅ *kodlandı* | Topluluk ve kendi sunucuların, canlı oyuncu sayısı/harita, tek tıkla Bağlan, GitHub'dan güncellenen topluluk listesi | Discord'daki sunucuları uygulamadan görüp girmek |
-| **3b — Oyun** 🔨 *sürüyor (3b-1 kodlandı)* | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
+| **3b — Oyun** 🔨 *sürüyor (3b-1, 3b-2 kodlandı)* | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
@@ -1006,6 +1020,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.18 | 2026-10-11 | Faz 3b-2 kodlandı: Oyun Arşivi (5 soruluk puan kartı, Yok seçeneği, otomatik genel puan), Türkçe etiketler, Keşfet filtre kutusu, Bana bir oyun seç, arşive Steam'den arayarak ekleme |
 | v0.17 | 2026-10-11 | Faz 3b-1 kodlandı: Kütüphanem (Steam/Epic tarama, elle ekleme, otomatik bilgi ve kapak, oyunu başlatma), canlı oyun algılama ve Oturum Geçmişi (grafik) |
 | v0.16 | 2026-10-11 | Kendi çalma listeleri, tam ekran kontrol şeridi, mini videoda kapat/büyüt, sesle yazmada alt ortada yazısız gösterge |
 | v0.15 | 2026-10-11 | Medya: Müzik ve Videolar sekmeleri, eski şarkılarda düz sözlerin hizalanması, sesle yazmada geri bildirim sesi ve hızlı açılış |

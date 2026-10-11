@@ -405,7 +405,7 @@ export interface UserPlaylist {
 export interface Game {
   id: string;
   name: string;
-  source: "steam" | "epic" | "manual";
+  source: "steam" | "epic" | "manual" | "archive";
   sourceId: string;
   installDir: string | null;
   exes: string[];
@@ -419,6 +419,10 @@ export interface Game {
   description: string | null;
   genres: string[];
   categories: string[];
+  /** Türkçe etiketler (Roguelike, Co-op…). */
+  tags: string[];
+  /** Kütüphanede mi; değilse yalnızca Oyun Arşivi'nde. */
+  inLibrary: boolean;
   /** Platformun (Steam) tuttuğu süre, dakika. */
   platformMinutes: number;
   platformLastPlayed: number | null;
@@ -458,4 +462,52 @@ export interface RunningApp {
   name: string;
   path: string;
   title: string;
+}
+
+/** Puanlama kartının 5 sorusu; `null` = "Yok". */
+export interface Scores {
+  gameplay: number | null;
+  story: number | null;
+  enjoyment: number | null;
+  visuals: number | null;
+  performance: number | null;
+}
+
+export type ReviewStatus = "playing" | "finished" | "completed" | "dropped" | "wishlist";
+export type Recommend = "yes" | "maybe" | "no";
+
+export interface Review {
+  id: string;
+  author: string;
+  subjectKind: "game";
+  subjectId: string;
+  scores: Scores;
+  /** Elle düzeltme (−1 … +1). */
+  adjust: number;
+  overall: number;
+  oneLiner: string | null;
+  notes: string | null;
+  status: ReviewStatus | null;
+  recommend: Recommend | null;
+  finishedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ReviewInput {
+  subjectKind: "game";
+  subjectId: string;
+  scores: Scores;
+  adjust: number;
+  oneLiner: string | null;
+  notes: string | null;
+  status: ReviewStatus | null;
+  recommend: Recommend | null;
+}
+
+/** Steam mağazası arama sonucu. */
+export interface StoreHit {
+  appid: number;
+  name: string;
+  image: string | null;
 }
