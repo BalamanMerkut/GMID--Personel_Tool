@@ -260,3 +260,13 @@ pub fn playlist_save(
 pub fn playlist_delete(db: State<'_, Db>, id: String) -> CmdResult<()> {
     crate::playlists::delete(&db, &id)
 }
+
+/// Kartta küçük resim açılamadıysa (silinmiş, adresi bozulmuş) onarmayı dener; onarıldıysa `true`.
+#[tauri::command]
+pub async fn videos_repair_thumb(app: AppHandle, id: String) -> CmdResult<bool> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::downloader::thumbs::repair(&app, Some(&id)) > 0
+    })
+    .await
+    .map_err(|e| e.to_string())
+}

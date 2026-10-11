@@ -59,7 +59,7 @@
     {#if view.state === "listening"}
       <span class="rec"></span>
       <span class="wave" aria-hidden="true">
-        {#each bars as b, i (i)}<i style:height="{Math.round(b * 30) + 3}px"></i>{/each}
+        {#each bars as b, i (i)}<i style:height="{Math.round(b * 17) + 3}px"></i>{/each}
       </span>
       <span class="t">{time}</span>
     {:else if view.state === "processing"}
@@ -74,23 +74,24 @@
   :global(html), :global(body) { background: transparent !important; overflow: hidden; }
   .pill {
     position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    height: 48px; min-width: 64px; padding: 0 16px; border-radius: 999px;
-    display: flex; align-items: center; justify-content: center; gap: 12px;
-    background: rgba(12, 14, 17, 0.94); border: 1px solid rgba(227, 194, 112, 0.55);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(227, 194, 112, 0.12);
+    /* İnce ama okunur: 34 px boy, ince altın çizgi. */
+    height: 34px; min-width: 52px; padding: 0 12px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    background: rgba(12, 14, 17, 0.92); border: 1px solid rgba(227, 194, 112, 0.38);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4), 0 0 12px rgba(227, 194, 112, 0.08);
     animation: pop 0.16s ease-out;
   }
   .pill.err { border-color: rgba(224, 106, 106, 0.8); }
-  .rec { width: 10px; height: 10px; border-radius: 50%; background: #e06a6a; box-shadow: 0 0 10px rgba(224, 106, 106, 0.9); animation: blink 1.2s ease-in-out infinite; }
-  .wave { display: flex; align-items: center; gap: 3px; height: 34px; }
-  .wave i { display: block; width: 4px; border-radius: 4px; background: linear-gradient(var(--gold-glow), var(--gold)); transition: height 0.06s linear; }
-  .t { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; }
-  .dots { display: flex; gap: 6px; }
-  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: bounce 0.9s ease-in-out infinite; }
+  .rec { width: 7px; height: 7px; border-radius: 50%; background: #e06a6a; box-shadow: 0 0 10px rgba(224, 106, 106, 0.9); animation: blink 1.2s ease-in-out infinite; }
+  .wave { display: flex; align-items: center; gap: 2px; height: 22px; }
+  .wave i { display: block; width: 3px; border-radius: 4px; background: linear-gradient(var(--gold-glow), var(--gold)); transition: height 0.06s linear; }
+  .t { font-size: 11.5px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 28px; }
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); animation: bounce 0.9s ease-in-out infinite; }
   .dots i:nth-child(2) { animation-delay: 0.15s; }
   .dots i:nth-child(3) { animation-delay: 0.3s; }
-  .bang { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #e06a6a; color: #fff; font-weight: 800; }
+  .bang { width: 16px; height: 16px; font-size: 11px; border-radius: 50%; display: grid; place-items: center; background: #e06a6a; color: #fff; font-weight: 800; }
   @keyframes pop { from { opacity: 0; transform: translate(-50%, -40%) scale(0.92); } }
   @keyframes blink { 50% { opacity: 0.35; } }
-  @keyframes bounce { 0%, 100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-6px); opacity: 1; } }
+  @keyframes bounce { 0%, 100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-4px); opacity: 1; } }
 </style>

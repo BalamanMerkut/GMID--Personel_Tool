@@ -196,6 +196,8 @@ export const api = {
   },
 
   videos: {
+    /** Küçük resim açılamadıysa onarır (siteden yeniden indirir ya da videodan kare çıkarır). */
+    repairThumb: (id: string) => call<boolean>("videos_repair_thumb", { id }),
     tools: () => call<ToolsState>("videos_tools"),
     installTools: (force = false) => call<ToolsState>("videos_install_tools", { force }),
     update: (force = false) => call<ToolsState>("videos_update", { force }),

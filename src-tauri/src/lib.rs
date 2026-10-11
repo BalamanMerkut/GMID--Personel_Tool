@@ -126,6 +126,11 @@ pub fn run() {
                     }
                 }
                 h.state::<downloader::Downloader>().pump(&h);
+                // Kaybolmuş ya da hiç gelmemiş video küçük resimlerini onar.
+                let n = downloader::thumbs::repair(&h, None);
+                if n > 0 {
+                    log!("{n} video küçük resmi onarıldı");
+                }
             });
             window::restore_stickies(handle);
 
@@ -203,6 +208,7 @@ pub fn run() {
             commands::videos::videos_download,
             commands::videos::media_tracks,
             commands::videos::playlists_list,
+            commands::videos::videos_repair_thumb,
             commands::videos::playlist_save,
             commands::videos::playlist_delete,
             commands::videos::media_track,

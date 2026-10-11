@@ -113,6 +113,9 @@ struct SuggestState {
     fullscreen: Option<(u32, i64)>,
     /// Şu an kartı gösterilen öneriler (yollar).
     showing: Vec<String>,
+    /// Oyun sırasında sorulanlar: tam ekran oyunun üstünde kart görünmeyebilir, oyun kapanınca yeniden
+    /// gösterilir (cevaplanmadıysa). yol → pid
+    after_exit: HashMap<String, u32>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -659,6 +662,30 @@ impl Games {
         st.seen
             .retain(|path, _| procs.iter().any(|p| &p.path == path));
         let mut raised = false;
+        // Oyun kapandı: cevaplanmadıysa kart yeniden (artık masaüstündesin, görünür).
+        let closed: Vec<String> = st
+            .after_exit
+            .iter()
+            .filter(|(_, pid)| !procs.iter().any(|p| p.pid == **pid))
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in closed {
+            st.after_exit.remove(&path);
+            let pending: bool = db
+                .conn()
+                .query_row(
+                    "SELECT state = 'pending' FROM game_suggestions WHERE path = ?1",
+                    [&path],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if pending {
+                if !st.showing.contains(&path) {
+                    st.showing.push(path);
+                }
+                raised = true;
+            }
+        }
         let guard = self.matchers(&db);
         let matchers = guard.as_deref().unwrap_or_default();
         for (p, name, reason) in candidates {
@@ -699,6 +726,7 @@ impl Games {
                  ON CONFLICT(path) DO UPDATE SET seen_at = excluded.seen_at",
                 params![key, p.name, name, reason, now],
             );
+            st.after_exit.insert(key.clone(), p.pid);
             if !st.showing.contains(&key) {
                 st.showing.push(key);
             }
@@ -766,11 +794,11 @@ impl Games {
         name: Option<String>,
     ) -> Result<(), String> {
         let db = app.state::<Db>();
-        self.suggest
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .showing
-            .retain(|p| p != path);
+        {
+            let mut st = self.suggest.lock().unwrap_or_else(|e| e.into_inner());
+            st.showing.retain(|p| p != path);
+            st.after_exit.remove(path);
+        }
         match action {
             "add" => {
                 let row = Self::suggestion_rows(&db, Some(&[path.to_string()]))
@@ -911,38 +939,48 @@ fn fill_meta(
         None => meta::search(name)?,
     };
     let Some(appid) = appid else {
-        // Steam'de yok: kapak Wikipedia'dan (VALORANT, LoL, Minecraft…). Elle seçilen kapağa dokunulmaz.
+        // Steam'de yok: kapak Microsoft Store'un dikey posterinden, yoksa Wikipedia'dan (VALORANT, LoL,
+        // Minecraft…). Elle seçilen kapağa dokunulmaz; Wikipedia'dan gelen (çoğu zaman yatay logo) yenilenebilir.
         // Bir daha sorulmasın (elle "Bilgileri yenile" ile tekrar denenir).
-        let has_cover: bool = db
+        let manual_cover: bool = db
             .conn()
             .query_row(
-                "SELECT cover IS NOT NULL FROM games WHERE id = ?1",
+                "SELECT cover IS NOT NULL AND cover NOT LIKE '%wiki-%' FROM games WHERE id = ?1",
                 [id],
                 |r| r.get(0),
             )
             .unwrap_or(false);
-        let cover = if has_cover {
+        let cover = if manual_cover {
             None
         } else {
-            match meta::wiki_image(name) {
-                Ok(Some(url)) => {
-                    let ext = if url.to_lowercase().ends_with(".png") {
-                        "png"
-                    } else {
-                        "jpg"
-                    };
-                    let dest = covers.join(format!("wiki-{id}.{ext}"));
-                    meta::download_image(&url, &dest)
-                        .map(|_| dest.to_string_lossy().into_owned())
-                        .map_err(|e| crate::log!("Wikipedia kapağı indirilemedi ({name}): {e}"))
-                        .ok()
-                }
-                Ok(None) => None,
-                Err(e) => {
-                    crate::log!("Wikipedia'ya ulaşılamadı ({name}): {e}");
-                    None
-                }
+            let ms = meta::ms_store_image(name)
+                .map_err(|e| crate::log!("Microsoft Store'a ulaşılamadı ({name}): {e}"))
+                .ok()
+                .flatten()
+                .map(|u| (u, "ms"));
+            let found = ms.or_else(|| {
+                meta::wiki_image(name)
+                    .map_err(|e| crate::log!("Wikipedia'ya ulaşılamadı ({name}): {e}"))
+                    .ok()
+                    .flatten()
+                    .map(|u| (u, "wiki"))
+            });
+            let cover = found.and_then(|(url, kind)| {
+                let ext = if url.to_lowercase().ends_with(".png") {
+                    "png"
+                } else {
+                    "jpg"
+                };
+                let dest = covers.join(format!("{kind}-{id}.{ext}"));
+                meta::download_image(&url, &dest)
+                    .map(|_| dest.to_string_lossy().into_owned())
+                    .map_err(|e| crate::log!("Kapak indirilemedi ({name}): {e}"))
+                    .ok()
+            });
+            if cover.is_none() {
+                crate::log!("Kapak bulunamadı: {name}");
             }
+            cover
         };
         db.conn()
             .execute(

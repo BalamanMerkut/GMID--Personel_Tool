@@ -136,6 +136,19 @@
   }
 
   const thumbSrc = (t: string | null) => (!t ? null : /^(https?:|data:)/.test(t) ? t : api.fileSrc(t));
+  // Açılamayan küçük resim: bir kez onarmayı dene (siteden yeniden ya da videodan kare); olmazsa simge göster.
+  let brokenThumbs: Record<string, boolean> = $state({});
+  const repairing = new Set<string>();
+  async function thumbFailed(d: Download) {
+    if (repairing.has(d.id)) {
+      brokenThumbs[d.id] = true;
+      return;
+    }
+    repairing.add(d.id);
+    const ok = await api.videos.repairThumb(d.id).catch(() => false);
+    if (!ok) brokenThumbs[d.id] = true;
+  }
+  const thumbOf = (d: Download) => (brokenThumbs[d.id] ? null : thumbSrc(d.thumbnail));
   const previewable = (d: Download) => !!d.filePath && /\.(mp4|webm)$/i.test(d.filePath);
 </script>
 
@@ -235,7 +248,7 @@
             <button class="tn tnum" title="Çal" onclick={() => (on ? (player.open = true) : play(d, shown))}>
               {#if on && player.playing}<span class="eq"><i></i><i></i><i></i></span>{:else}<span class="num">{i + 1}</span><span class="pl"><Icon name="play" size={15} /></span>{/if}
             </button>
-            <span class="tthumb">{#if thumbSrc(d.thumbnail)}<img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />{:else}<Icon name="headphones" size={16} />{/if}</span>
+            <span class="tthumb">{#if thumbOf(d)}<img src={thumbOf(d)} alt="" loading="lazy" onerror={() => thumbFailed(d)} />{:else}<Icon name="headphones" size={16} />{/if}</span>
             <span class="ttx">
               <b title={d.title}>{d.title}</b>
               <span class="sub small">{d.uploader}</span>
@@ -284,8 +297,8 @@
               {#if hovering === d.id && previewable(d) && inTauri}
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <video src={api.fileSrc(d.filePath ?? "")} autoplay muted loop playsinline></video>
-              {:else if thumbSrc(d.thumbnail)}
-                <img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />
+              {:else if thumbOf(d)}
+                <img src={thumbOf(d)} alt="" loading="lazy" onerror={() => thumbFailed(d)} />
               {:else}
                 <span class="ph"><Icon name="film" size={30} /></span>
               {/if}

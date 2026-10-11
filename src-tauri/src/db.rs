@@ -241,6 +241,9 @@ const MIGRATIONS: &[&str] = &[
         state      TEXT NOT NULL DEFAULT 'pending',
         seen_at    INTEGER NOT NULL
     );",
+    // 14 — Steam dışı oyunlar Microsoft Store'un dikey posterini denesin (Minecraft; Wikipedia'dan gelenler yatay logo)
+    "UPDATE games SET meta_at = NULL
+     WHERE steam_appid IS NULL AND (cover IS NULL OR cover LIKE '%wiki-%');",
 ];
 
 pub struct Db(Mutex<Connection>);

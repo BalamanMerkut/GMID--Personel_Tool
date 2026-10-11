@@ -735,6 +735,8 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       ] };
     case "whisper_install":
       return { program: true, ready: true, selected: a.model, models: [] };
+    case "videos_repair_thumb":
+      return false;
     case "videos_open":
     case "videos_reveal":
       return;

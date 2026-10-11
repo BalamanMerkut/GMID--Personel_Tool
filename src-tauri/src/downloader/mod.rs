@@ -7,6 +7,7 @@
 pub mod bridge;
 pub mod extension;
 pub mod subs;
+pub mod thumbs;
 pub mod tools;
 pub mod ytdlp;
 
@@ -786,6 +787,14 @@ impl Downloader {
                         params![id, f, size, thumb, now_ms()],
                     );
                     self.drop_cookies(id);
+                    // Yerel resim yazılamadıysa (ya da site vermediyse) arka planda onar.
+                    {
+                        let app = app.clone();
+                        let id = id.to_string();
+                        std::thread::spawn(move || {
+                            thumbs::repair(&app, Some(&id));
+                        });
+                    }
                     self.attempts
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
@@ -959,10 +968,13 @@ impl Downloader {
             }
         }
         crate::transcript::delete(&db, id);
+        // Aynı videonun başka bir indirmesi aynı küçük resmi kullanıyorsa silinmez
+        // (müzik + video olarak iki kez inen videolarda öteki kartın resmi kayboluyordu).
         if let Some(t) = d
             .thumbnail
             .as_deref()
             .filter(|t| inside(t, &thumbs_dir(&dir)))
+            .filter(|t| !thumbs::shared(&db, t, id))
         {
             let _ = std::fs::remove_file(t);
         }

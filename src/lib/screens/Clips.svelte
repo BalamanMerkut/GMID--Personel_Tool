@@ -38,6 +38,8 @@
   let view: Clip | null = $state(null);
   let titleDraft = $state("");
   let armedDelete = $state(false);
+  /** Kartta "Sil?" onayı bekleyen klip. */
+  let armed: string | null = $state(null);
 
   async function load() {
     const [c, g] = await Promise.all([api.clips.list().catch(() => []), api.games.list().catch(() => [])]);
@@ -163,6 +165,17 @@
     }
   }
 
+  /** Karttan silme: ilk tık "Sil?" sorar (3 sn), ikinci tık Geri Dönüşüm Kutusu'na gönderir. */
+  async function removeQuick(c: Clip) {
+    if (armed !== c.id) {
+      armed = c.id;
+      setTimeout(() => armed === c.id && (armed = null), 3000);
+      return;
+    }
+    armed = null;
+    if (await act(api.clips.remove(c.id), "Geri Dönüşüm Kutusu'na gönderildi")) await load();
+  }
+
   function step(d: number) {
     if (!view) return;
     const i = filtered.findIndex((c) => c.id === view?.id);
@@ -252,7 +265,15 @@
                   {/if}
                 </div>
                 <b class="nm">{label(c)}</b>
-                <span class="sub small tnum">{ago(c.createdAt, now)} · {mb(c.size)}</span>
+                <div class="crow">
+                  <span class="sub small tnum">{ago(c.createdAt, now)} · {mb(c.size)}</span>
+                  <span class="cacts">
+                    <button class="mini" title="Klasörde göster" onclick={(e) => (e.stopPropagation(), act(api.clips.reveal(c.id)))}><Icon name="folder" size={16} /></button>
+                    <button class="mini" class:armed={armed === c.id} title="Sil (Geri Dönüşüm Kutusu'na)" onclick={(e) => (e.stopPropagation(), removeQuick(c))}>
+                      <Icon name="trash" size={16} />{#if armed === c.id}<span>Sil?</span>{/if}
+                    </button>
+                  </span>
+                </div>
               </div>
             {/each}
           </div>
@@ -349,6 +370,12 @@
   .fit { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; background: rgba(8, 10, 12, 0.72); font-size: 13px; font-weight: 700; }
   .pb { width: 70%; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
   .pb span { display: block; height: 100%; background: #5865f2; transition: width 0.3s; }
+  .crow { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .cacts { display: flex; opacity: 0.5; transition: opacity 0.15s; }
+  .card:hover .cacts, .cacts:has(.armed) { opacity: 1; }
+  .mini { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--muted); padding: 4px 6px; border-radius: 7px; font-size: 12px; font-weight: 700; }
+  .mini:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+  .mini.armed { color: var(--bad); background: rgba(224, 106, 106, 0.12); }
   .nm { font-weight: 600; font-size: 13.5px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link { border: 0; background: none; padding: 0; color: var(--teal); font-weight: 600; align-self: flex-start; }
   .link:hover { color: var(--neon); }

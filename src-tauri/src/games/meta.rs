@@ -362,6 +362,95 @@ fn search_url(term: &str) -> String {
     url
 }
 
+/// Microsoft Store (anahtar gerekmez): adıyla arar, oyunun dikey posterini (2:3) döndürür. Minecraft, VALORANT,
+/// League of Legends ve Xbox uygulaması oyunları burada var; Wikipedia'daki resimler çoğu zaman yatay logo.
+pub fn ms_store_image(name: &str) -> Result<Option<String>, String> {
+    let mut q = String::new();
+    for b in name.trim().bytes() {
+        if b.is_ascii_alphanumeric() {
+            q.push(b as char);
+        } else {
+            q.push_str(&format!("%{b:02X}"));
+        }
+    }
+    let suggest = get_json(&format!(
+        "https://displaycatalog.mp.microsoft.com/v7.0/productFamilies/autosuggest?market=US&languages=en-US\
+         &productFamilyNames=Games,Apps&query={q}"
+    ))?;
+    let Some((id, fallback)) = pick_ms_product(&suggest, name).or_else(|| {
+        // Minecraft'ın mağaza adı "Minecraft: Java & Bedrock Edition for PC".
+        normalize(name)
+            .starts_with("minecraft")
+            .then(|| ("9NXP44L49SHJ".to_string(), None))
+    }) else {
+        return Ok(None);
+    };
+    let products = get_json(&format!(
+        "https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds={id}&market=US&languages=en-US"
+    ))?;
+    Ok(pick_ms_poster(&products).or(fallback))
+}
+
+/// Arama önerilerinden adı tutan ürünün kimliği (ve önerideki küçük resim).
+pub fn pick_ms_product(json: &serde_json::Value, name: &str) -> Option<(String, Option<String>)> {
+    let want = normalize(name);
+    let suggests: Vec<&serde_json::Value> = json["ResultSets"]
+        .as_array()?
+        .iter()
+        .flat_map(|r| r["Suggests"].as_array().into_iter().flatten())
+        .collect();
+    let id_of = |s: &serde_json::Value| -> Option<String> {
+        s["Metas"].as_array()?.iter().find_map(|m| {
+            (m["Key"].as_str() == Some("BigCatalogId"))
+                .then(|| m["Value"].as_str().map(str::to_string))
+                .flatten()
+        })
+    };
+    let title = |s: &serde_json::Value| normalize(s["Title"].as_str().unwrap_or_default());
+    // Önce birebir ad, sonra "Ad: …" ile başlayan (Minecraft: Java & Bedrock Edition).
+    let found = suggests
+        .iter()
+        .find(|s| title(s) == want && id_of(s).is_some())
+        .or_else(|| {
+            suggests.iter().find(|s| {
+                let raw = s["Title"].as_str().unwrap_or_default().to_lowercase();
+                want.len() >= 4
+                    && title(s).starts_with(&want)
+                    && raw.contains(':')
+                    && id_of(s).is_some()
+            })
+        })?;
+    let image = found["ImageUrl"].as_str().map(fix_ms_url);
+    Some((id_of(found)?, image))
+}
+
+fn fix_ms_url(u: &str) -> String {
+    if u.starts_with("//") {
+        format!("https:{u}")
+    } else {
+        u.to_string()
+    }
+}
+
+/// Ürün bilgisinden dikey poster; yoksa kutu resmi.
+pub fn pick_ms_poster(json: &serde_json::Value) -> Option<String> {
+    let images: Vec<&serde_json::Value> = json["Products"]
+        .as_array()?
+        .iter()
+        .flat_map(|p| p["LocalizedProperties"].as_array().into_iter().flatten())
+        .flat_map(|l| l["Images"].as_array().into_iter().flatten())
+        .collect();
+    let by = |purpose: &str| {
+        images
+            .iter()
+            .filter(|i| i["ImagePurpose"].as_str() == Some(purpose))
+            .max_by_key(|i| i["Height"].as_i64().unwrap_or(0))
+            .and_then(|i| i["Uri"].as_str())
+            .map(fix_ms_url)
+    };
+    by("Poster").or_else(|| by("BoxArt"))
+}
+
 /// Steam'de olmayan oyunlar (VALORANT, League of Legends, Minecraft…) için yedek kapak: İngilizce Wikipedia'da
 /// "<ad> video game" araması, kısa açıklaması "video game" olan ilk sayfanın kutu resmi (600 px önizleme).
 pub fn wiki_image(name: &str) -> Result<Option<String>, String> {
@@ -503,6 +592,41 @@ mod tests {
         assert!(parse_details(1, &fail).is_none());
         assert_eq!(year_of("Oct 17, 2024"), Some(2024));
         assert_eq!(normalize("Hades II™"), "hadesii");
+    }
+
+    #[test]
+    fn ms_store_poster_is_picked() {
+        let suggest: serde_json::Value = serde_json::from_str(
+            r#"{"ResultSets":[{"Source":"Games","Suggests":[
+              {"Source":"Games","Title":"Minecraft Dungeons","ImageUrl":"//store-images.s-microsoft.com/d","Metas":[{"Key":"BigCatalogId","Value":"9N8NJ74FVX8Q"}]},
+              {"Source":"Games","Title":"Minecraft: Java & Bedrock Edition for PC","ImageUrl":"//store-images.s-microsoft.com/m","Metas":[{"Key":"ProductType","Value":"Game"},{"Key":"BigCatalogId","Value":"9NXP44L49SHJ"}]},
+              {"Source":"Games","Title":"VALORANT","ImageUrl":"//store-images.s-microsoft.com/v","Metas":[{"Key":"BigCatalogId","Value":"9NBLWGW0CJMS"}]}
+            ]}]}"#,
+        )
+        .unwrap();
+        let (id, img) = pick_ms_product(&suggest, "Minecraft").unwrap();
+        assert_eq!(id, "9NXP44L49SHJ");
+        assert_eq!(
+            img.as_deref(),
+            Some("https://store-images.s-microsoft.com/m")
+        );
+        assert_eq!(
+            pick_ms_product(&suggest, "VALORANT").unwrap().0,
+            "9NBLWGW0CJMS"
+        );
+        assert!(pick_ms_product(&suggest, "Hades").is_none());
+        let products: serde_json::Value = serde_json::from_str(
+            r#"{"Products":[{"LocalizedProperties":[{"Images":[
+              {"ImagePurpose":"BoxArt","Uri":"//store-images.s-microsoft.com/box","Height":1080},
+              {"ImagePurpose":"Poster","Uri":"//store-images.s-microsoft.com/p-small","Height":600},
+              {"ImagePurpose":"Poster","Uri":"//store-images.s-microsoft.com/p-big","Height":1440}
+            ]}]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            pick_ms_poster(&products).as_deref(),
+            Some("https://store-images.s-microsoft.com/p-big")
+        );
     }
 
     #[test]
