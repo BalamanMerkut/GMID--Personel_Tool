@@ -29,7 +29,7 @@ export const ROOMS: Room[] = [
         description: "Steam, Epic ve elle eklediğin oyunlar; kapakları, türleri ve gerçek oynama süreleriyle. Açtığın oyunlar Discord'daki gibi kendiliğinden yakalanır." },
       { id: "sessions", label: "Oturum Geçmişi", icon: "clock", phase: null,
         description: "Hangi gün hangi oyunu ne kadar oynadığın: günlük ve haftalık grafikler, en uzun oturumlar." },
-      { id: "clips", label: "Kliplerim", icon: "clip", phase: 3,
+      { id: "clips", label: "Kliplerim", icon: "clip", phase: null,
         description: "NVIDIA Instant Replay, Xbox Game Bar ve Steam kayıtların oyuna göre tek yerde. Dosyalar yerinde kalır, çift tıklayınca açılır." },
       { id: "gamemode", label: "Oyun Modu", icon: "bolt", phase: 4,
         description: "Tek tıkla oyuna hazırlan: güç planı, kulaklığa geçiş, mikrofon kilidi, bildirimleri susturma. Oyun kapanınca hepsi geri alınır." },

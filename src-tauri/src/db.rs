@@ -178,6 +178,33 @@ const MIGRATIONS: &[&str] = &[
         updated_at   INTEGER NOT NULL,
         UNIQUE (author, subject_kind, subject_id)
     );",
+    // 11 — Kliplerim: kayıt programlarının klip ve ekran görüntüleri (dosyalar yerinde kalır)
+    "CREATE TABLE captures (
+        id          TEXT PRIMARY KEY,
+        path        TEXT NOT NULL UNIQUE,
+        -- clip | shot
+        kind        TEXT NOT NULL,
+        -- nvidia | xbox | amd | obs | steam | medal | folder
+        source      TEXT NOT NULL,
+        game_id     TEXT REFERENCES games(id) ON DELETE SET NULL,
+        -- klasör ya da dosya adındaki oyun adı
+        game_hint   TEXT,
+        steam_appid INTEGER,
+        -- elle verilen ad (dosyanın kendisi yeniden adlandırılmaz)
+        title       TEXT,
+        size        INTEGER NOT NULL,
+        duration    REAL,
+        width       INTEGER,
+        height      INTEGER,
+        thumb       TEXT,
+        thumb_at    INTEGER,
+        favorite    INTEGER NOT NULL DEFAULT 0,
+        -- oyun elle seçildiyse kendiliğinden değiştirilmez
+        manual_game INTEGER NOT NULL DEFAULT 0,
+        created_at  INTEGER NOT NULL,
+        added_at    INTEGER NOT NULL
+    );
+    CREATE INDEX captures_time ON captures (created_at);",
 ];
 
 pub struct Db(Mutex<Connection>);

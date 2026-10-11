@@ -511,3 +511,30 @@ export interface StoreHit {
   name: string;
   image: string | null;
 }
+
+/** Kliplerim: kayıt programlarının klip ve ekran görüntüleri (dosyalar yerinde). */
+export interface Clip {
+  id: string;
+  path: string;
+  /** Dosya adı (uzantısız). */
+  name: string;
+  kind: "clip" | "shot";
+  source: "nvidia" | "xbox" | "amd" | "obs" | "steam" | "medal" | "folder";
+  gameId: string | null;
+  gameHint: string | null;
+  title: string | null;
+  size: number;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  thumb: string | null;
+  favorite: boolean;
+  createdAt: number;
+}
+
+export interface ClipRoot {
+  path: string;
+  label: string;
+  custom: boolean;
+  exists: boolean;
+}

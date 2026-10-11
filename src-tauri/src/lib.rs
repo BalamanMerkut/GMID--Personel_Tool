@@ -1,5 +1,6 @@
 mod audio;
 mod backup;
+mod clips;
 mod commands;
 mod db;
 mod dictation;
@@ -100,6 +101,7 @@ pub fn run() {
             app.manage(transcript::Transcriber::default());
             app.manage(dictation::Dictation::default());
             app.manage(games::Games::default());
+            app.manage(clips::Clips::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -112,6 +114,7 @@ pub fn run() {
             downloader::bridge::start(handle.clone());
             dictation::apply(handle);
             games::start(handle);
+            clips::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -239,6 +242,16 @@ pub fn run() {
             commands::games::reviews_list,
             commands::games::review_save,
             commands::games::review_delete,
+            commands::clips::clips_list,
+            commands::clips::clips_roots,
+            commands::clips::clips_rescan,
+            commands::clips::clips_set_favorite,
+            commands::clips::clips_rename,
+            commands::clips::clips_set_game,
+            commands::clips::clips_delete,
+            commands::clips::clips_open,
+            commands::clips::clips_reveal,
+            commands::clips::clips_fit_discord,
             commands::dictation::dictation_apply,
             commands::dictation::dictation_install,
             commands::dictation::dictation_warm_up,

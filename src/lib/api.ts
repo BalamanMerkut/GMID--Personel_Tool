@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BridgeStatus, DictationStatus, FoundGame, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -258,6 +258,28 @@ export const api = {
     storeSearch: (term: string) => call<StoreHit[]>("games_store_search", { term }),
     /** Arşive oyun ekler; oyunun kimliği. */
     addArchive: (appid: number | null, name: string) => call<string>("games_add_archive", { appid, name }),
+  },
+
+  clips: {
+    list: () => call<Clip[]>("clips_list"),
+    roots: () => call<ClipRoot[]>("clips_roots"),
+    rescan: () => call<void>("clips_rescan"),
+    setFavorite: (id: string, on: boolean) => call<void>("clips_set_favorite", { id, on }),
+    rename: (id: string, title: string) => call<void>("clips_rename", { id, title }),
+    setGame: (id: string, game: string | null) => call<void>("clips_set_game", { id, game }),
+    /** Geri Dönüşüm Kutusu'na. */
+    remove: (id: string) => call<void>("clips_delete", { id }),
+    open: (id: string) => call<void>("clips_open", { id }),
+    reveal: (id: string) => call<void>("clips_reveal", { id }),
+    /** 10 MB'a sığan kopya panoya; kopyanın yolu. */
+    fitDiscord: (id: string) => call<string>("clips_fit_discord", { id }),
+    /** İzlenecek klasör seçtirir. */
+    pickFolder: async (): Promise<string | null> => {
+      if (!inTauri) return "D:\\Kayıtlar";
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ multiple: false, directory: true, title: "Klip klasörünü seç" });
+      return typeof picked === "string" ? picked : null;
+    },
   },
 
   reviews: {

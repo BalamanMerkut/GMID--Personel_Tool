@@ -1,5 +1,6 @@
 //! Arayüzün çağırdığı komutlar.
 
+pub mod clips;
 pub mod dictation;
 pub mod games;
 pub mod servers;

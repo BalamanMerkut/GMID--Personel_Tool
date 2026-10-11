@@ -6,7 +6,7 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
-> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular) ve Faz 5 (Video İndirici) kodlandı; Faz 3b (Oyun) sürüyor — Kütüphanem, Oturum Geçmişi ve Oyun Arşivi hazır. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
+> **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular), Faz 3b (Oyun: Kütüphanem, Oturum Geçmişi, Oyun Arşivi, Kliplerim) ve Faz 5 (Video İndirici) kodlandı. Sonraki fazlar için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
 
@@ -29,6 +29,17 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 - **Kütüphanem:** kapak ızgarası (kapak ve bilgiler Steam mağazasından kendiliğinden, Türkçe), arama, kaynak süzgeci,
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
+
+### Faz 3b — Oyun (3. bölüm: Kliplerim)
+
+- NVIDIA (Alt+F10), Xbox Game Bar, AMD, OBS, Steam (F12) ve Medal kayıtları **kendiliğinden bulunur**; dosyalar
+  taşınmaz, yerinde kalır. Başka bir klasöre kaydediyorsan Kontrol Odası → Oyunlar'dan ekle.
+- Her klip **hangi oyunda çekildiyse** onun altında görünür (o an açık oyun, Steam'in kendi bilgisi ya da klasör adı);
+  yanlışsa büyük görünümden değiştir. Yeni klipte köşede "Klip kaydedildi — Valorant (0:30)".
+- Üzerine gelince sessiz önizleme, tıklayınca büyük görünüm (← → ile gezin), çift tıklayınca varsayılan oynatıcı.
+  Favori, yeniden adlandır, klasörde göster, sil (Geri Dönüşüm Kutusu'na; geri alınabilir).
+- **Discord'a sığdır:** klibin 10 MB'a sığan bir kopyası hazırlanır ve panoya konur; Discord'da **Ctrl+V** yeter.
+  (Kopyalar `Belgeler\GMID Tool\Discord'a Hazır` içinde, 3 gün sonra silinir. ffmpeg gerekir: Video İndirici'nin araçları.)
 
 ### Faz 3b — Oyun (2. bölüm: Oyun Arşivi)
 

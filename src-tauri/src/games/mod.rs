@@ -563,6 +563,16 @@ impl Games {
     }
 
     /// Uygulama kapanırken açık oturumları bitirir.
+    /// Şu an açık oyunların kimlikleri (klipleri o anki oyuna bağlamak için).
+    pub fn running_ids(&self) -> Vec<String> {
+        self.running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .keys()
+            .cloned()
+            .collect()
+    }
+
     pub fn shutdown(&self, db: &Db) {
         let now = now_ms();
         for (_, r) in self

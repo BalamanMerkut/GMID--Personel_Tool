@@ -1,7 +1,7 @@
 // Tarayıcıda (Tauri olmadan) geliştirirken kullanılan taklit çekirdek. Uygulamanın kendisinde yüklenmez.
 import { localBus } from "./bus";
 import type {
-  Countdown, Device, DictationStatus, Download, Game, PlaySession, Review, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
+  Clip, Countdown, Device, DictationStatus, Download, Game, PlaySession, Review, ReviewInput, ReviewStatus, Recommend, Scores, UserPlaylist, GameInfo, Live, Probe, Segment, Transcript, HotkeyStatus, Note, NoteInput, Reminder, ReminderInput, Server, ServerInput, ServerStatus,
 } from "./types";
 import { overallOf } from "./review";
 
@@ -228,6 +228,26 @@ const reviews: Review[] = (
   overall: overallOf(scores, adjust) ?? 7, oneLiner, notes, status, recommend,
   finishedAt: status === "finished" || status === "completed" ? now() - i * 20 * 86_400_000 : null,
   createdAt: now() - i * 86_400_000, updatedAt: now() - i * 86_400_000,
+}));
+
+// ---- Kliplerim ----
+const clipList: Clip[] = (
+  [
+    ["g1", "nvidia", "clip", "Counter-strike 2 2026.10.11 - 21.33.12.02.DVR", "ACE · Mirage", 30, 48_000_000, "#c9a35a", 0.2, true],
+    ["g1", "nvidia", "clip", "Counter-strike 2 2026.10.11 - 20.10.44.01.DVR", null, 30, 46_000_000, "#a8843a", 1.5, false],
+    ["g1", "nvidia", "clip", "Counter-strike 2 2026.10.10 - 23.02.10.03.DVR", "Clutch 1v3", 60, 95_000_000, "#8a6a2a", 20, false],
+    ["g0", "xbox", "clip", "Hades II 2026-10-11 18-05-00", null, 45, 31_000_000, "#7848a8", 3, false],
+    ["g0", "steam", "shot", "20261011181233_1", null, null, 2_400_000, "#9a58c8", 3.2, true],
+    ["g0", "steam", "shot", "20261011181530_1", null, null, 2_100_000, "#5a3888", 3.3, false],
+    ["g2", "nvidia", "clip", "Elden Ring 2026.10.09 - 22.40.11.04.DVR", "Malenia ikinci faz", 120, 230_000_000, "#8a7646", 50, true],
+    ["g5", "nvidia", "clip", "Valorant 2026.10.11 - 12.40.00.01.DVR", null, 20, 28_000_000, "#e06a6a", 8, false],
+    ["g5", "nvidia", "shot", "Valorant Screenshot 2026.10.11 - 12.41.00.01", null, null, 3_100_000, "#c04a4a", 8.1, false],
+    [null, "obs", "clip", "2026-10-08 19-00-12", null, 300, 410_000_000, "#3a5a7a", 70, false],
+  ] as [string | null, Clip["source"], Clip["kind"], string, string | null, number | null, number, string, number, boolean][]
+).map(([gameId, source, kind, name, title, duration, size, color, hoursAgo, favorite], i) => ({
+  id: `c${i}`, path: "/ornek/klip.mp4", name, kind, source, gameId, gameHint: gameId ? null : "Desktop", title, size, duration,
+  width: 1920, height: 1080, thumb: thumb(color, "#121417", (title ?? name).slice(0, 18).toUpperCase()), favorite,
+  createdAt: now() - hoursAgo * 3_600_000,
 }));
 
 // ---- Kendi çalma listeleri ----
@@ -573,6 +593,37 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "games_reveal":
       if (cmd === "games_set_hidden") libGames.find((g) => g.id === a.id)!.hidden = a.hidden as boolean;
       return;
+    case "clips_list":
+      return clipList;
+    case "clips_roots":
+      return [
+        { path: "C:\\Users\\Merkut\\Videos", label: "Videolar (NVIDIA, Xbox Game Bar, AMD, OBS)", custom: false, exists: true },
+        { path: "C:\\Program Files (x86)\\Steam\\userdata", label: "Steam ekran görüntüleri", custom: false, exists: true },
+      ];
+    case "clips_rescan":
+    case "clips_open":
+    case "clips_reveal":
+      return;
+    case "clips_set_favorite":
+    case "clips_rename":
+    case "clips_set_game":
+    case "clips_delete": {
+      const c = clipList.find((x) => x.id === a.id);
+      if (!c) return;
+      if (cmd === "clips_set_favorite") c.favorite = a.on as boolean;
+      if (cmd === "clips_rename") c.title = String(a.title).trim() || null;
+      if (cmd === "clips_set_game") c.gameId = (a.game as string) ?? null;
+      if (cmd === "clips_delete") clipList.splice(clipList.indexOf(c), 1);
+      emit("clips-changed");
+      return;
+    }
+    case "clips_fit_discord": {
+      for (let k = 1; k <= 10; k++) {
+        await new Promise((r) => setTimeout(r, 150));
+        emit("clip-fit", { id: a.id, progress: k / 10 });
+      }
+      return "C:\\Users\\Merkut\\Documents\\GMID Tool\\Discord'a Hazır\\klip (Discord).mp4";
+    }
     case "reviews_list":
       return reviews;
     case "review_save": {

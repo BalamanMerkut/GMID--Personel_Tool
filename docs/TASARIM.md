@@ -259,6 +259,19 @@ Her modül için: **Amaç → MVP (ilk sürümde olacaklar) → Sonra (sonraki s
 >   Arşive ekleme: kütüphaneden ya da Steam'de adıyla aratarak; Steam'de yoksa yalnızca adıyla. Son 30 günde oynanıp
 >   puanlanmamış oyunlar arşivin üstünde "puanını bekliyor" şeridinde. Kütüphanem kartlarında puan rozeti, oyun
 >   penceresinde "Puanla"; puanlanmış oyun kütüphaneden kaldırılırsa arşivde kalır.
+> - **v0.19 — Faz 3b-3 (Kliplerim):** göç 11: `captures` (yol tekil, tür, kaynak, oyun, klasör/dosya adındaki oyun
+>   ipucu, elle ad, boyut, süre, çözünürlük, küçük resim, favori, elle seçilen oyun). İzleme 15 sn'de bir:
+>   Videolar kökünde OBS adları, `Captures` (Xbox), `Radeon ReLive` (AMD), `NVIDIA\<Oyun>` ve NVIDIA adlandırmasına
+>   uyan (`Oyun 2024.10.11 - 21.33.12.02.DVR.mp4`) oyun klasörleri; Steam `userdata\*\760\remote\<appid>\screenshots`;
+>   `C:\Medal`; kullanıcının eklediği klasörler. Kökteki rastgele filmler alınmaz. Dosya boyutu bir tur sabit kalınca
+>   eklenir. Oyun: Steam appid → çekildiği an açık oyun (oturum ±) → klasör/dosya adı; kütüphaneye sonradan eklenen oyunla
+>   10 dakikada bir yeniden eşleşir; elle seçilen korunur. Küçük resim ve süre ffmpeg ile (`Kapaklar\Klipler`).
+>   Yeni klipte gösterge ("Klip kaydedildi — Valorant (0:30)"). Ekran: tür süzgeci, oyun seçimi, oyuna göre gruplar,
+>   üzerine gelince sessiz önizleme, tıklayınca büyük görünüm (←/→), çift tıkla varsayılan programda açma; favori,
+>   ad, oyun değiştirme, klasörde göster, sil (Geri Dönüşüm Kutusu). **Discord'a sığdır:** süreye göre bit hızı ve
+>   çözünürlük (≤ 10 MB, gerekirse yeniden), kopya `Discord'a Hazır` (3 gün sonra silinir) ve panoya **dosya** olarak
+>   (Discord'da Ctrl+V); zaten küçükse kendisi. Kontrol Odası → Oyunlar: klasörler, gösterge, eski klip temizliği
+>   (favori olmayan, 30/60/90 günden eski; varsayılan kapalı).
 
 **Amaç:** O an açık sekmedeki videoyu (YouTube, Twitter/X, Instagram…) yakalamak, mevcut
 çözünürlükleri listelemek, seçileni **uygulamanın kendi Videolar klasörüne** indirmek.
@@ -945,7 +958,7 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **1 — İskelet** ✅ *kodlandı* | Tauri projesi, Malikâne teması ve logolar, **açılış animasyonu**, sol menü, Kontrol Odası (ayarlar), veri klasörü, SQLite, tepsi ikonu, Windows ile başlatma, arka plan (resim/GIF/video), otomatik yedek | Boş ama şık, tepside duran uygulama |
 | **2 — Günlük araçlar** ✅ *kodlandı* | Ses & Mikrofon (kilit, kısayollar, ekran göstergesi), Notlar (+ hızlı not, yapışkan not), Hatırlatıcılar, Sayaç | Her gün kullandığın araçlar |
 | **3a — Sunucular** ✅ *kodlandı* | Topluluk ve kendi sunucuların, canlı oyuncu sayısı/harita, tek tıkla Bağlan, GitHub'dan güncellenen topluluk listesi | Discord'daki sunucuları uygulamadan görüp girmek |
-| **3b — Oyun** 🔨 *sürüyor (3b-1, 3b-2 kodlandı)* | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
+| **3b — Oyun** ✅ *kodlandı* | Oyun algılama, Steam/Epic/EA içe aktarma, kütüphane, otomatik bilgi ve kapak, Oyun Arşivi (puan, yorum, keşfet), Kliplerim | Discord gibi oyun yakalayan, puanlayıp filtreleyebildiğin arşiv |
 | **3c — Sohbet** *(barındırma kararından sonra)* | Discord ile giriş, arkadaş listesi + kim ne oynuyor, özel mesaj ve ortak oda | Steam sohbeti gibi pencere |
 | **4 — Oyun içi deneyim** | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
@@ -1020,6 +1033,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.19 | 2026-10-11 | Faz 3b-3 kodlandı (Faz 3b tamam): Kliplerim — NVIDIA/Xbox/AMD/OBS/Steam/Medal klasörleri, oyuna göre gruplama, önizleme, Discord'a sığdır (10 MB, panoya dosya), Geri Dönüşüm Kutusu'na silme, eski klip temizliği |
 | v0.18 | 2026-10-11 | Faz 3b-2 kodlandı: Oyun Arşivi (5 soruluk puan kartı, Yok seçeneği, otomatik genel puan), Türkçe etiketler, Keşfet filtre kutusu, Bana bir oyun seç, arşive Steam'den arayarak ekleme |
 | v0.17 | 2026-10-11 | Faz 3b-1 kodlandı: Kütüphanem (Steam/Epic tarama, elle ekleme, otomatik bilgi ve kapak, oyunu başlatma), canlı oyun algılama ve Oturum Geçmişi (grafik) |
 | v0.16 | 2026-10-11 | Kendi çalma listeleri, tam ekran kontrol şeridi, mini videoda kapat/büyüt, sesle yazmada alt ortada yazısız gösterge |

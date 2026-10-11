@@ -5,6 +5,7 @@
   import { api, inTauri, type AppInfo } from "../api";
   import Hotkeys from "../components/Hotkeys.svelte";
   import Switch from "../components/Switch.svelte";
+  import ClipsSettings from "../settings/ClipsSettings.svelte";
   import Icon from "../Icon.svelte";
   import type { IconName } from "../icons";
   import Appearance from "../settings/Appearance.svelte";
@@ -44,7 +45,7 @@
     { id: "ses", label: "Ses & Mikrofon", icon: "speaker", keys: "mikrofon kilit seviye gösterge osd kulaklık hoparlör" },
     { id: "bildirimler", label: "Bildirimler", icon: "bell", keys: "bildirim ses uyarı hatırlatıcı windows sayaç indirme bitti" },
     { id: "indirici", label: "Video İndirici", icon: "download", keys: "video indirme yt-dlp ffmpeg deno araç güncelle eklenti chrome opera aynı anda klasör" },
-    { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip" },
+    { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü discord" },
     { id: "sunucular", label: "Sunucular", icon: "server", keys: "sunucu topluluk liste adres github" },
     { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun" },
     { id: "hakkinda", label: "Hakkında", icon: "info", keys: "sürüm hakkında merkut gmid" },
@@ -272,6 +273,7 @@
           <Switch label="Oyun algılama" checked={gamesTrack} onchange={(v) => toggle("games.track", v, (x) => (gamesTrack = x))} />
         </div>
       </section>
+      <ClipsSettings />
     {:else if tab === "sunucular"}
       <ServersList />
     {:else if tab === "veri"}
