@@ -676,6 +676,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       emit("gamemode", gameMode);
       return gameMode;
     case "panel_hide":
+    case "panel_focus":
       return;
     case "clips_list":
       return clipList;

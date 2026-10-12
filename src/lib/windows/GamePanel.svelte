@@ -147,7 +147,7 @@
         <span class="sub">Şu an algılanan bir oyun yok</span>
       {/if}
       <span class="clock tnum">{timeStr}</span>
-      <button class="x" onclick={close} title="Kapat (Esc · Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
+      <button class="x" onclick={close} title="Kapat (Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
     </header>
 
     <div class="grid">
@@ -209,7 +209,7 @@
 
       <section class="card wide">
         <h3><Icon name="note" size={17} />{game ? `${game.name} notu` : "Not"}<span class="sub small saved">{noteSaved ? "kaydedildi" : "yazılıyor…"}</span></h3>
-        <textarea value={noteText} oninput={(e) => onNote(e.currentTarget.value)} onblur={saveNote} placeholder="Build, kod, nerede kaldın… (Notlar'da da görünür)"></textarea>
+        <textarea value={noteText} onpointerdown={() => api.panel.focus()} onfocus={() => api.panel.focus()} oninput={(e) => onNote(e.currentTarget.value)} onblur={saveNote} placeholder="Build, kod, nerede kaldın… (Notlar'da da görünür)"></textarea>
       </section>
 
       <section class="card">

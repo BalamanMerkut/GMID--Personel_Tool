@@ -263,6 +263,18 @@ pub fn titles_refresh(app: AppHandle, id: String) -> CmdResult<()> {
     crate::titles::refresh(&app, &id)
 }
 
+/// Elle seçilen afiş.
+#[tauri::command]
+pub fn titles_set_poster(app: AppHandle, id: String, source: String) -> CmdResult<()> {
+    let posters = app
+        .state::<crate::paths::DataDir>()
+        .folder(Some("Kapaklar"))
+        .join("Filmler");
+    crate::titles::set_poster(&app.state::<Db>(), &posters, &id, &source)?;
+    let _ = app.emit("titles-changed", ());
+    Ok(())
+}
+
 /// Kütüphanede olmayan, açıldığı görülen oyunlar ("Kütüphaneye ekleyeyim mi?").
 #[tauri::command]
 pub fn games_suggestions(
@@ -310,4 +322,10 @@ pub async fn gamemode_set(app: AppHandle, on: bool) -> CmdResult<crate::gamemode
 #[tauri::command]
 pub fn panel_hide(app: AppHandle) {
     crate::panel::hide(&app);
+}
+
+/// Not yazmak için panel klavye odağını alır.
+#[tauri::command]
+pub fn panel_focus(app: AppHandle) {
+    crate::panel::take_focus(&app);
 }

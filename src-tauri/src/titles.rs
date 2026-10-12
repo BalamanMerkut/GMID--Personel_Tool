@@ -170,6 +170,8 @@ pub struct Facts {
     pub cast: Vec<String>,
     pub genres: Vec<String>,
     pub tr_wiki: Option<String>,
+    /// Commons'taki afiş (P3383) ya da resim (P18) dosya adı.
+    pub image: Option<String>,
 }
 
 fn claim_ids(entity: &Value, prop: &str, max: usize) -> Vec<String> {
@@ -204,6 +206,14 @@ fn claim_year(entity: &Value, prop: &str) -> Option<i64> {
         .min()
 }
 
+fn claim_string(entity: &Value, prop: &str) -> Option<String> {
+    entity["claims"][prop]
+        .as_array()?
+        .iter()
+        .find_map(|c| c["mainsnak"]["datavalue"]["value"].as_str())
+        .map(str::to_string)
+}
+
 fn label(entity: &Value, lang: &str) -> Option<String> {
     entity["labels"][lang]["value"].as_str().map(str::to_string)
 }
@@ -221,6 +231,7 @@ pub fn parse_entity(json: &Value, id: &str) -> (Facts, Vec<String>, Vec<String>,
         tr_wiki: e["sitelinks"]["trwiki"]["title"]
             .as_str()
             .map(str::to_string),
+        image: claim_string(e, "P3383").or_else(|| claim_string(e, "P18")),
         ..Default::default()
     };
     let mut directors = claim_ids(e, "P57", 3);
@@ -317,22 +328,131 @@ fn summary(lang: &str, title: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-fn poster_url(wiki_title: &str) -> Option<String> {
+/// Vikipedi sayfasının ana resmi (filmlerde genellikle afiş).
+fn wiki_poster(lang: &str, wiki_title: &str) -> Result<Option<String>, String> {
     let json = get_json(&format!(
-        "https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&prop=pageimages\
-         &piprop=thumbnail&pithumbsize=600&pilicense=any&titles={}",
+        "https://{lang}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&prop=pageimages\
+         &piprop=thumbnail%7Coriginal&pithumbsize=600&pilicense=any&titles={}",
         enc(wiki_title)
-    ))
-    .ok()?;
-    json["query"]["pages"][0]["thumbnail"]["source"]
+    ))?;
+    let page = &json["query"]["pages"][0];
+    Ok(page["thumbnail"]["source"]
         .as_str()
-        .map(str::to_string)
+        .or(page["original"]["source"].as_str())
+        .map(str::to_string))
+}
+
+/// Karşılaştırma için: küçük harf, yalnız harf ve rakam ("The Matrix: Reloaded" → "thematrixreloaded").
+fn norm(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Ad tutuyor ve (biliniyorsa) yıl en fazla bir yıl şaşıyor mu.
+fn matches(found: &str, found_year: Option<i64>, names: &[String], year: Option<i64>) -> bool {
+    let f = norm(found);
+    !f.is_empty()
+        && names.iter().any(|n| norm(n) == f)
+        && match (found_year, year) {
+            (Some(a), Some(b)) => (a - b).abs() <= 1,
+            _ => true,
+        }
+}
+
+/// iTunes film araması (anahtarsız): ad ve yıl tutan ilk sonucun büyük afişi.
+pub fn pick_itunes(json: &Value, names: &[String], year: Option<i64>) -> Option<String> {
+    json["results"].as_array()?.iter().find_map(|r| {
+        let name = r["trackName"].as_str()?;
+        let y = r["releaseDate"].as_str().and_then(year_in);
+        let art = r["artworkUrl100"].as_str()?;
+        matches(name, y, names, year).then(|| art.replace("100x100bb", "600x900bb"))
+    })
+}
+
+/// TVmaze dizi araması (anahtarsız).
+pub fn pick_tvmaze(json: &Value, names: &[String], year: Option<i64>) -> Option<String> {
+    json.as_array()?.iter().find_map(|r| {
+        let show = &r["show"];
+        let name = show["name"].as_str()?;
+        let y = show["premiered"].as_str().and_then(year_in);
+        let img = show["image"]["original"]
+            .as_str()
+            .or(show["image"]["medium"].as_str())?;
+        matches(name, y, names, year).then(|| img.to_string())
+    })
+}
+
+/// Afiş adayları sırayla denenir; ilk indirilebilen kullanılır. Hepsi anahtarsız.
+fn find_poster(
+    dest: &Path,
+    kind: &str,
+    names: &[String],
+    year: Option<i64>,
+    wiki: Option<&str>,
+    f: &Facts,
+) -> Option<String> {
+    let mut tried: Vec<String> = Vec::new();
+    let mut attempt = |source: &str, url: Result<Option<String>, String>| -> bool {
+        match url {
+            Ok(Some(u)) => match download(&u, dest) {
+                Ok(()) => return true,
+                Err(e) => tried.push(format!("{source}: {e}")),
+            },
+            Ok(None) => tried.push(format!("{source}: yok")),
+            Err(e) => tried.push(format!("{source}: {e}")),
+        }
+        false
+    };
+    if let Some(w) = wiki {
+        if attempt("Vikipedi", wiki_poster("en", w)) {
+            return Some(dest.to_string_lossy().into_owned());
+        }
+    }
+    if let Some(w) = f.tr_wiki.as_deref() {
+        if attempt("Türkçe Vikipedi", wiki_poster("tr", w)) {
+            return Some(dest.to_string_lossy().into_owned());
+        }
+    }
+    if let Some(file) = f.image.as_deref() {
+        let url = format!(
+            "https://commons.wikimedia.org/wiki/Special:FilePath/{}?width=600",
+            enc(&file.replace(' ', "_"))
+        );
+        if attempt("Commons", Ok(Some(url))) {
+            return Some(dest.to_string_lossy().into_owned());
+        }
+    }
+    for n in names {
+        let found = if kind == "series" {
+            get_json(&format!("https://api.tvmaze.com/search/shows?q={}", enc(n)))
+                .map(|j| pick_tvmaze(&j, names, year))
+        } else {
+            get_json(&format!(
+                "https://itunes.apple.com/search?term={}&media=movie&entity=movie&limit=15",
+                enc(n)
+            ))
+            .map(|j| pick_itunes(&j, names, year))
+        };
+        let source = if kind == "series" { "TVmaze" } else { "iTunes" };
+        if attempt(source, found) {
+            return Some(dest.to_string_lossy().into_owned());
+        }
+    }
+    crate::log!(
+        "Afiş bulunamadı ({}): {}",
+        names.first().map(String::as_str).unwrap_or(""),
+        tried.join(" · ")
+    );
+    None
 }
 
 fn download(url: &str, dest: &Path) -> Result<(), String> {
     let mut r = agent()
         .get(url)
         .header("User-Agent", UA)
+        .header("Accept", "image/*")
         .call()
         .map_err(|e| e.to_string())?;
     let bytes = r
@@ -446,8 +566,8 @@ pub fn add(app: &AppHandle, hit: Option<Hit>, name: &str, kind: &str) -> Result<
                 hit.as_ref().and_then(|h| h.year),
                 hit.as_ref().and_then(|h| h.wikidata.clone()),
                 hit.as_ref().map(|h| h.wiki_title.clone()),
-                // Elle eklenenin aranacak bilgisi yok.
-                hit.is_none().then(now_ms),
+                // Elle eklenenin de afişi adından aranır.
+                None::<i64>,
                 now_ms()
             ],
         )
@@ -472,12 +592,29 @@ pub fn remove_if_unrated(db: &Db, id: &str) -> Result<(), String> {
 pub fn refresh(app: &AppHandle, id: &str) -> Result<(), String> {
     app.state::<Db>()
         .conn()
-        .execute(
-            "UPDATE titles SET meta_at = NULL WHERE id = ?1 AND wiki_title IS NOT NULL",
-            [id],
-        )
+        .execute("UPDATE titles SET meta_at = NULL WHERE id = ?1", [id])
         .map_err(|e| e.to_string())?;
     fetch_meta(app);
+    Ok(())
+}
+
+/// Elle seçilen afiş `Kapaklar\Filmler` içine kopyalanır.
+pub fn set_poster(db: &Db, posters: &Path, id: &str, source: &str) -> Result<(), String> {
+    let src = Path::new(source);
+    let ext = src
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .filter(|e| ["jpg", "jpeg", "png", "webp", "gif"].contains(&e.as_str()))
+        .ok_or("Bir resim seç (JPG, PNG, WebP, GIF)")?;
+    std::fs::create_dir_all(posters).map_err(|e| e.to_string())?;
+    let dest = posters.join(format!("elle-{id}-{}.{ext}", now_ms()));
+    std::fs::copy(src, &dest).map_err(|e| format!("Resim kopyalanamadı: {e}"))?;
+    db.conn()
+        .execute(
+            "UPDATE titles SET poster = ?2 WHERE id = ?1",
+            params![id, dest.to_string_lossy()],
+        )
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -497,18 +634,30 @@ pub fn fetch_meta(app: &AppHandle) {
             .folder(Some("Kapaklar"))
             .join("Filmler");
         loop {
-            let next: Option<(String, Option<String>, Option<String>)> = db
+            let next: Option<Pending> = db
                 .conn()
                 .query_row(
-                    "SELECT id, wikidata, wiki_title FROM titles WHERE meta_at IS NULL LIMIT 1",
+                    "SELECT id, wikidata, wiki_title, kind, name, original, year, poster
+                     FROM titles WHERE meta_at IS NULL LIMIT 1",
                     [],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                    |r| {
+                        Ok(Pending {
+                            id: r.get(0)?,
+                            qid: r.get(1)?,
+                            wiki: r.get(2)?,
+                            kind: r.get(3)?,
+                            name: r.get(4)?,
+                            original: r.get(5)?,
+                            year: r.get(6)?,
+                            poster: r.get(7)?,
+                        })
+                    },
                 )
                 .optional()
                 .ok()
                 .flatten();
-            let Some((id, qid, wiki)) = next else { break };
-            if let Err(e) = fill(&db, &posters, &id, qid.as_deref(), wiki.as_deref()) {
+            let Some(p) = next else { break };
+            if let Err(e) = fill(&db, &posters, &p) {
                 crate::log!("Film bilgisi alınamadı: {e}");
                 break;
             }
@@ -519,14 +668,20 @@ pub fn fetch_meta(app: &AppHandle) {
     });
 }
 
-fn fill(
-    db: &Db,
-    posters: &Path,
-    id: &str,
-    qid: Option<&str>,
-    wiki: Option<&str>,
-) -> Result<(), String> {
-    let f = match qid {
+struct Pending {
+    id: String,
+    qid: Option<String>,
+    wiki: Option<String>,
+    kind: String,
+    name: String,
+    original: Option<String>,
+    year: Option<i64>,
+    poster: Option<String>,
+}
+
+fn fill(db: &Db, posters: &Path, p: &Pending) -> Result<(), String> {
+    let (id, wiki) = (p.id.as_str(), p.wiki.as_deref());
+    let f = match p.qid.as_deref() {
         Some(q) => facts(q)?,
         None => Facts::default(),
     };
@@ -535,13 +690,35 @@ fn fill(
         .as_deref()
         .and_then(|t| summary("tr", t))
         .or_else(|| wiki.and_then(|t| summary("en", t)));
-    let poster = wiki.and_then(poster_url).and_then(|url| {
-        let dest = posters.join(format!("{id}.jpg"));
-        download(&url, &dest)
-            .map(|_| dest.to_string_lossy().into_owned())
-            .map_err(|e| crate::log!("Afiş indirilemedi: {e}"))
-            .ok()
-    });
+    // Elle seçilmiş ya da önceden inmiş afiş korunur.
+    let has_poster = p.poster.as_deref().is_some_and(|x| Path::new(x).is_file());
+    let poster = if has_poster {
+        None
+    } else {
+        // İngilizce ad önce (iTunes/TVmaze İngilizce), sonra Türkçe/girilen ad.
+        let mut names: Vec<String> = Vec::new();
+        for n in [
+            f.label_en.clone(),
+            p.original.clone(),
+            Some(p.name.clone()),
+            f.label_tr.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !n.trim().is_empty() && !names.iter().any(|x| norm(x) == norm(&n)) {
+                names.push(n);
+            }
+        }
+        find_poster(
+            &posters.join(format!("{id}.jpg")),
+            &p.kind,
+            &names,
+            f.year.or(p.year),
+            wiki,
+            &f,
+        )
+    };
     let name = f.label_tr.clone().or(f.label_en.clone());
     let original = f.label_en.clone().filter(|en| Some(en) != name.as_ref());
     let j = |v: &Vec<String>| serde_json::to_string(v).unwrap_or_else(|_| "[]".into());
@@ -574,6 +751,34 @@ fn fill(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn itunes_and_tvmaze_posters_need_matching_name_and_year() {
+        let it: Value = serde_json::from_str(
+            r#"{"results":[
+              {"trackName":"Office Space 2","releaseDate":"2030-01-01T08:00:00Z","artworkUrl100":"https://a/x/100x100bb.jpg"},
+              {"trackName":"Office Space","releaseDate":"1999-02-19T08:00:00Z","artworkUrl100":"https://a/os/100x100bb.jpg"}
+            ]}"#,
+        )
+        .unwrap();
+        let names = vec!["Office Space".to_string()];
+        assert_eq!(
+            pick_itunes(&it, &names, Some(1999)).as_deref(),
+            Some("https://a/os/600x900bb.jpg")
+        );
+        // Yıl tutmazsa başka bir filmin afişi gelmesin.
+        assert_eq!(pick_itunes(&it, &names, Some(2010)), None);
+        let tv: Value = serde_json::from_str(
+            r#"[{"show":{"name":"Dark Matter","premiered":"2015-06-12","image":{"original":"https://t/dm.jpg"}}},
+                {"show":{"name":"Dark","premiered":"2017-12-01","image":{"medium":"https://t/m.jpg","original":"https://t/dark.jpg"}}}]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            pick_tvmaze(&tv, &["Dark".to_string()], Some(2017)).as_deref(),
+            Some("https://t/dark.jpg")
+        );
+        assert_eq!(norm("The Matrix: Reloaded"), "thematrixreloaded");
+    }
 
     #[test]
     fn search_results_are_films_and_series_only() {

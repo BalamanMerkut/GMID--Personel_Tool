@@ -337,7 +337,7 @@ fn place(w: &WebviewWindow, size: (f64, f64), corner: Corner) {
 
 /// Pencereyi öne getirir ama odağı almaz: oyun ya da yazdığın şey kesilmez.
 #[cfg(windows)]
-fn show_no_activate(w: &WebviewWindow) {
+pub(crate) fn show_no_activate(w: &WebviewWindow) {
     use windows::Win32::UI::WindowsAndMessaging::{
         GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, SetWindowPos, ShowWindow,
         GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_SHOWNOACTIVATE,
@@ -376,7 +376,7 @@ fn show_no_activate(w: &WebviewWindow) {
 /// ve kendi `hide()` çağrısı hiçbir şey yapmıyordu: gösterge ekranda takılı kalıyordu. Önce Windows'a
 /// doğrudan gizlet, sonra Tauri'nin durumunu da eşitle.
 #[cfg(windows)]
-fn hide_window(w: &WebviewWindow) {
+pub(crate) fn hide_window(w: &WebviewWindow) {
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
     if let Ok(hwnd) = w.hwnd() {
         unsafe {
@@ -387,12 +387,12 @@ fn hide_window(w: &WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn hide_window(w: &WebviewWindow) {
+pub(crate) fn hide_window(w: &WebviewWindow) {
     let _ = w.hide();
 }
 
 #[cfg(not(windows))]
-fn show_no_activate(w: &WebviewWindow) {
+pub(crate) fn show_no_activate(w: &WebviewWindow) {
     let _ = w.show();
 }
 

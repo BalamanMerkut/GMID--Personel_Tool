@@ -132,8 +132,10 @@
     <h3 class="h2"><Icon name="stage" />Oyun İçi Panel</h3>
     <p class="sub">
       Oyundayken <b>Ctrl+Shift+G</b>: oyunun üstünde yarı saydam bir panel açılır. Ses, mikrofon, Oyun Modu, sayaç, oyuna not ve
-      son klibin elinin altında. Aynı tuş ya da <b>Esc</b> ile kapanır, oyuna geri dönersin. Oyuna hiçbir şey eklenmez
-      (anti-cheat güvenli); çerçevesiz ya da pencereli oyunlarda görünür.
+      son klibin elinin altında. Panel oyundan odağı almaz, yani oyun küçülmez; fare imleci görünmüyorsa oyunun menüsünü
+      (Esc) açıp tıklayabilirsin. Aynı tuşla kapanır. Oyuna hiçbir şey eklenmez (anti-cheat güvenli). Panelin görünmesi
+      için oyunun görüntü ayarında <b>Kenarlıksız / Borderless</b> ya da <b>Pencereli</b> seçili olmalı; “Tam ekran
+      (özel)” modunda Windows hiçbir pencereyi oyunun üstünde göstermez.
     </p>
   </section>
 </div>

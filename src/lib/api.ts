@@ -312,6 +312,8 @@ export const api = {
   panel: {
     /** Oyun İçi Panel'i kapatır, odak oyuna döner. */
     hide: () => call<void>("panel_hide"),
+    /** Nota yazmak için klavye odağı (panel normalde odak almaz, oyun önde kalır). */
+    focus: () => call<void>("panel_focus"),
   },
 
   install: {
@@ -370,6 +372,20 @@ export const api = {
     /** Puanlanmadan vazgeçildiyse geri alır. */
     discard: (id: string) => call<void>("titles_discard", { id }),
     refresh: (id: string) => call<void>("titles_refresh", { id }),
+    /** Afişi elle seçtirir; vazgeçilirse `false`. */
+    pickPoster: async (id: string): Promise<boolean> => {
+      if (!inTauri) return false;
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        title: "Afiş seç (dikey resimler en iyi görünür)",
+        filters: [{ name: "Resim", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
+      });
+      if (typeof picked !== "string") return false;
+      await invoke("titles_set_poster", { id, source: picked });
+      return true;
+    },
   },
 
   reviews: {

@@ -267,6 +267,8 @@ const MIGRATIONS: &[&str] = &[
         added_at   INTEGER NOT NULL
     );
     ALTER TABLE reviews ADD COLUMN extra TEXT;",
+    // 16: afişi gelmeyen film/diziler yeni kaynaklarla (Türkçe Vikipedi, Commons, iTunes, TVmaze) yeniden denensin.
+    "UPDATE titles SET meta_at = NULL WHERE poster IS NULL;",
 ];
 
 pub struct Db(Mutex<Connection>);

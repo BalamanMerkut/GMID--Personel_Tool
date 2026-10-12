@@ -1,7 +1,12 @@
 //! Oyun İçi Panel (Steam'deki Shift+Tab gibi): `Ctrl+Shift+G` ile oyunun bulunduğu ekranın üstünde yarı saydam
-//! bir pencere açılır; aynı tuş ya da `Esc` ile kapanır ve odak oyuna geri döner. Oyuna hiçbir şey enjekte
+//! bir pencere açılır; aynı tuş, kapat düğmesi ya da (yazarken) `Esc` ile kapanır. Oyuna hiçbir şey enjekte
 //! edilmez: panel, oyunun üstünde duran ayrı bir pencere (çerçevesiz/pencereli oyunlarda görünür).
+//!
+//! Panel **odak almadan** açılır: oyun ön planda kalır. Odak oyundan giderse birçok oyun (özellikle tam ekranda)
+//! kendini simge durumuna küçültür, alt-tab yapılmış gibi masaüstüne düşülür. Fareyle tıklamak odağı almaz;
+//! yalnızca nota yazmak için metin kutusuna tıklayınca klavye odağı alınır, kapanınca oyuna geri verilir.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{
     AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
@@ -18,6 +23,8 @@ type Rect = (i32, i32, u32, u32);
 pub struct Panel {
     #[allow(dead_code)]
     previous: Mutex<Option<isize>>,
+    /// Panel klavye odağını aldıysa (not yazmak için) kapanınca odak oyuna geri verilir.
+    focused: AtomicBool,
 }
 
 fn window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
@@ -32,6 +39,8 @@ fn window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
+        .focused(false)
+        .focusable(false)
         .visible(false)
         .build()
 }
@@ -51,10 +60,9 @@ pub fn toggle(app: &AppHandle) {
 pub fn show(app: &AppHandle) {
     // Ön plandaki pencere ve bulunduğu ekran (oyun hangi ekrandaysa panel orada açılır).
     let (prev, rect) = foreground();
-    *app.state::<Panel>()
-        .previous
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = prev;
+    let state = app.state::<Panel>();
+    *state.previous.lock().unwrap_or_else(|e| e.into_inner()) = prev;
+    state.focused.store(false, Ordering::Relaxed);
     crate::window::on_ui_thread(app, "Oyun paneli", move |app| {
         let w = window(app)?;
         if let Some((x, y, width, height)) = rect {
@@ -65,24 +73,57 @@ pub fn show(app: &AppHandle) {
             let _ = w.set_size(*m.size());
         }
         let _ = tauri::Emitter::emit_to(app, PANEL, "panel-open", ());
-        w.show()?;
-        w.set_focus()?;
+        // Odak oyunda kalsın (alt-tab olmasın).
+        crate::overlay::show_no_activate(&w);
         Ok(())
     });
 }
 
+/// Not yazmak için klavye odağı (yalnız kullanıcı metin kutusuna tıklayınca).
+pub fn take_focus(app: &AppHandle) {
+    let Some(w) = app.get_webview_window(PANEL) else {
+        return;
+    };
+    if app.state::<Panel>().focused.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    set_activatable(&w, true);
+    let _ = w.set_focus();
+}
+
 pub fn hide(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(PANEL) {
-        let _ = w.hide();
+        crate::overlay::hide_window(&w);
+        set_activatable(&w, false);
     }
-    let prev = app
-        .state::<Panel>()
+    let state = app.state::<Panel>();
+    let prev = state
         .previous
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .take();
+    state.focused.store(false, Ordering::Relaxed);
+    // Oyun hâlâ öndeyse dokunulmaz; değilse (panel odak aldıysa ya da oyun küçüldüyse) geri getirilir.
     restore_focus(prev);
 }
+
+#[cfg(windows)]
+fn set_activatable(w: &WebviewWindow, on: bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE,
+    };
+    let Ok(hwnd) = w.hwnd() else {
+        return;
+    };
+    unsafe {
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let bit = WS_EX_NOACTIVATE.0 as isize;
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, if on { ex & !bit } else { ex | bit });
+    }
+}
+
+#[cfg(not(windows))]
+fn set_activatable(_w: &WebviewWindow, _on: bool) {}
 
 #[cfg(windows)]
 fn foreground() -> (Option<isize>, Option<Rect>) {
@@ -121,11 +162,17 @@ fn foreground() -> (Option<isize>, Option<Rect>) {
 #[cfg(windows)]
 fn restore_focus(prev: Option<isize>) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, IsIconic, IsWindow, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
     if let Some(h) = prev {
         let hwnd = HWND(h as *mut _);
         unsafe {
-            if IsWindow(Some(hwnd)).as_bool() {
+            if IsWindow(Some(hwnd)).as_bool() && GetForegroundWindow() != hwnd {
+                // Oyun yine de küçüldüyse geri büyüt.
+                if IsIconic(hwnd).as_bool() {
+                    let _ = ShowWindow(hwnd, SW_RESTORE);
+                }
                 let _ = SetForegroundWindow(hwnd);
             }
         }

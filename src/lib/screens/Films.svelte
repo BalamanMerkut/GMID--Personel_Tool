@@ -411,10 +411,11 @@
         </div>
       {/if}
       <div class="foot">
+        <button class="link sm" onclick={() => api.titles.pickPoster(d.t.id).then((ok) => ok && notify("Afiş değişti", "image")).catch((e) => notify(String(e), "info"))}>Afiş seç</button>
         <button class="link sm" onclick={() => api.titles.refresh(d.t.id).then(() => notify("Bilgiler yenileniyor", "check"))}>Bilgileri yenile</button>
         <button class="btn" onclick={() => (rating = { title: d.t, review: d.r, fresh: false })}><Icon name="edit" size={16} />Düzenle</button>
       </div>
-      <p class="sub small credit">Bilgiler: Wikipedia ve Wikidata</p>
+      <p class="sub small credit">Bilgiler: Wikipedia ve Wikidata · afiş: Wikipedia, iTunes ya da TVmaze</p>
     </div>
   </div>
 {/if}
