@@ -884,6 +884,30 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return;
     case "extension_install":
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Eklenti";
+    case "wrapped_get": {
+      const h = (n: number) => n * 3600;
+      const hours = Array.from({ length: 24 }, (_, i) => (i < 3 ? h(6) : i >= 20 ? h(9) : i >= 14 ? h(2) : 0));
+      return {
+        from: a.from, to: a.to, totalSeconds: h(87), sessions: 41, daysPlayed: 22, distinctGames: 9,
+        top: [
+          { name: "VALORANT", seconds: h(38), sessions: 17, cover: thumb("#c94a4a", "#121417", "VALORANT") },
+          { name: "Hades II", seconds: h(21), sessions: 9, cover: thumb("#5a2a6a", "#121417", "HADES II") },
+          { name: "Counter-Strike 2", seconds: h(14), sessions: 8, cover: thumb("#c9a35a", "#121417", "CS2") },
+          { name: "Minecraft", seconds: h(9), sessions: 4, cover: null },
+          { name: "Baldur's Gate 3", seconds: h(5), sessions: 3, cover: thumb("#8a5a2a", "#121417", "BG3") },
+        ],
+        longest: { game: "VALORANT", seconds: h(5) + 1200, at: now() - 6 * 86_400_000 },
+        bestWeekday: 5, hours, nightShare: 0.34, weekendShare: 0.48, newGames: 3, ratedGames: 4,
+        bestGame: ["Hades II", 9.4], titlesWatched: 6, bestTitle: ["Dark", 9.1], clips: 14, shots: 6, downloads: 11, notes: 7,
+        badges: [
+          { id: "night", title: "Gece Kuşu", desc: "Oyunlarının %34'i gece 00:00–05:00 arası" },
+          { id: "marathon", title: "Maratoncu", desc: "VALORANT ile 5 saatlik tek oturum" },
+          { id: "explorer", title: "Kâşif", desc: "9 farklı oyun" },
+        ],
+      };
+    }
+    case "wrapped_save":
+      return "C:\\Users\\Sen\\Documents\\GMID Tool\\Ozetler\\GMID Wrapped.png";
     case "deals_get":
       return dealsSnap;
     case "deals_refresh":

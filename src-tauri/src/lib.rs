@@ -29,6 +29,7 @@ mod tray;
 mod updater;
 mod util;
 mod window;
+mod wrapped;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
@@ -184,6 +185,8 @@ pub fn run() {
             commands::backup_now,
             commands::import_background,
             commands::open_url,
+            commands::wrapped_get,
+            commands::wrapped_save,
             commands::deals_get,
             commands::deals_refresh,
             commands::update_status,

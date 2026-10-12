@@ -21,6 +21,7 @@
   import Films from "./lib/screens/Films.svelte";
   import Install from "./lib/screens/Install.svelte";
   import Deals from "./lib/screens/Deals.svelte";
+  import WrappedScreen from "./lib/screens/Wrapped.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
@@ -155,6 +156,8 @@
           <Library />
         {:else if route === "films"}
           <Films />
+        {:else if route === "wrapped"}
+          <WrappedScreen />
         {:else if route === "deals"}
           <Deals onnavigate={navigate} />
         {:else if route === "install"}

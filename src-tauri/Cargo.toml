@@ -30,6 +30,7 @@ tauri-plugin-notification = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tiny_http = "0.12.0"
 sha2 = "0.10"
+base64 = "0.22"
 tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(windows)'.dependencies]

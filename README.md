@@ -37,6 +37,12 @@ sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar,
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
 
+### GMID Wrapped
+
+- Ayın ya da yılın özeti tek bir şık görselde: kaç saat oynadın, en çok oynadığın 5 oyun, en uzun oturumun, en
+  sevdiğin gün ve saat, rozetlerin (Gece Kuşu, Maratoncu, Kâşif…), puanladıkların ve izlediklerin. PNG olarak kaydet
+  ya da panoya kopyala, Discord'a yapıştır.
+
 ### Fırsatlar
 
 - Epic, Steam, GOG, PlayStation, Xbox, Ubisoft, EA, Prime Gaming ve itch'te **şu an ücretsiz** oyunlar; Epic'in

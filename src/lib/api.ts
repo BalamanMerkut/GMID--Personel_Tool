@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BackupManifest, DealsSnapshot, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BackupManifest, DealsSnapshot, Wrapped, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -320,6 +320,12 @@ export const api = {
 
   /** Bağlantıyı varsayılan tarayıcıda açar (yalnız https). */
   openUrl: (url: string) => (inTauri ? invoke<void>("open_url", { url }) : (window.open(url, "_blank"), Promise.resolve())),
+
+  wrapped: {
+    get: (from: number, to: number) => call<Wrapped>("wrapped_get", { from, to }),
+    /** PNG'yi (data: adresi) Ozetler klasörüne kaydeder, klasörde gösterir; yolu döner. */
+    save: (name: string, png: string) => call<string>("wrapped_save", { name, png }),
+  },
 
   deals: {
     get: () => call<DealsSnapshot>("deals_get"),

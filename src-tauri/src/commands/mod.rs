@@ -188,3 +188,33 @@ pub fn open_url(url: String) -> CmdResult<()> {
     }
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
+
+/// Dönem özeti (`from`–`to`, ms).
+#[tauri::command]
+pub async fn wrapped_get(app: AppHandle, from: i64, to: i64) -> CmdResult<crate::wrapped::Wrapped> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        crate::wrapped::compute(&app.state::<Db>(), from, to)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Özet görselini `Ozetler` klasörüne kaydeder ve klasörde gösterir.
+#[tauri::command]
+pub fn wrapped_save(
+    app: AppHandle,
+    dir: State<'_, DataDir>,
+    name: String,
+    png: String,
+) -> CmdResult<String> {
+    use base64::Engine;
+    // data:image/png;base64,… ya da yalnız base64.
+    let b64 = png.split_once(',').map_or(png.as_str(), |(_, b)| b);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64.trim())
+        .map_err(|_| "Görsel okunamadı".to_string())?;
+    let path = crate::wrapped::save(&dir.folder(Some("Ozetler")), &name, &bytes)?;
+    let _ = app.opener().reveal_item_in_dir(&path);
+    Ok(path)
+}

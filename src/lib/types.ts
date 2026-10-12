@@ -759,3 +759,30 @@ export interface DealsPrefs {
   notifyWish: boolean;
   minDiscount: number;
 }
+
+/** GMID Wrapped: dönem özeti. */
+export interface Wrapped {
+  from: number;
+  to: number;
+  totalSeconds: number;
+  sessions: number;
+  daysPlayed: number;
+  distinctGames: number;
+  top: { name: string; seconds: number; sessions: number; cover: string | null }[];
+  longest: { game: string; seconds: number; at: number } | null;
+  /** 0 = Pazartesi */
+  bestWeekday: number | null;
+  hours: number[];
+  nightShare: number;
+  weekendShare: number;
+  newGames: number;
+  ratedGames: number;
+  bestGame: [string, number] | null;
+  titlesWatched: number;
+  bestTitle: [string, number] | null;
+  clips: number;
+  shots: number;
+  downloads: number;
+  notes: number;
+  badges: { id: string; title: string; desc: string }[];
+}
