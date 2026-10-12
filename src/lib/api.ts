@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -471,6 +471,14 @@ export const api = {
     /** `part`: "whisper" | "gpu" (NVIDIA hızlandırma) | "llm" (toparlayıcı) */
     install: (part: "whisper" | "gpu" | "llm") => call<DictationStatus>("dictation_install", { part }),
     warmUp: () => call<DictationStatus>("dictation_warm_up"),
+    /** Öğrenen sözlük: "şunu duyunca bunu yaz". */
+    rules: () => call<DictRule[]>("dictation_rules"),
+    ruleAdd: (from: string, to: string) => call<DictRule[]>("dictation_rule_add", { from, to }),
+    ruleRemove: (from: string) => call<DictRule[]>("dictation_rule_remove", { from }),
+    /** "Bunu böyle mi yazayım?" kartına yanıt. */
+    learn: (id: number, accept: boolean) => call<void>("dictation_learn", { id, accept }),
+    /** Son diktelerden birini düzelt: öğrenilecek [eski, yeni] çiftleri. */
+    correct: (at: number, text: string) => call<[string, string][]>("dictation_correct", { at, text }),
   },
 
   transcripts: {

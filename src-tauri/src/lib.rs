@@ -356,6 +356,11 @@ pub fn run() {
             commands::dictation::dictation_apply,
             commands::dictation::dictation_install,
             commands::dictation::dictation_warm_up,
+            commands::dictation::dictation_rules,
+            commands::dictation::dictation_rule_add,
+            commands::dictation::dictation_rule_remove,
+            commands::dictation::dictation_learn,
+            commands::dictation::dictation_correct,
         ])
         .build(tauri::generate_context!())
         .expect("GMID Tool başlatılamadı")

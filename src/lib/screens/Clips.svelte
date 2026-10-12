@@ -138,6 +138,21 @@
     }
   }
 
+  /** Tek tık: son seçilen (yoksa çözünürlüğü koruyan) ayarla hazırla, panoya koy. */
+  async function fit(c: Clip) {
+    if (c.id in fitting) return;
+    fitting = { ...fitting, [c.id]: 0 };
+    try {
+      const r = await api.clips.fitDiscord(c.id);
+      notify(`Discord'a hazır · ${(r.size / 1e6).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB${r.height ? ` · ${r.height}p` : ""} · panoya kopyalandı, Discord'da Ctrl+V`, "check");
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      const { [c.id]: _, ...rest } = fitting;
+      fitting = rest;
+    }
+  }
+
   // Aramadan gelen istek: o klibi büyük görünümde aç.
   $effect(() => {
     void focus.n;
@@ -262,7 +277,10 @@
                   {#if c.kind === "clip" && c.duration}<span class="dur tnum">{dur(c.duration)}</span>{/if}
                   <button class="fav" class:on={c.favorite} onclick={(e) => (e.stopPropagation(), act(api.clips.setFavorite(c.id, !c.favorite)))} title={c.favorite ? "Favoriden çıkar" : "Favori"}>{c.favorite ? "★" : "☆"}</button>
                   {#if c.kind === "clip"}
-                    <button class="dc" onclick={(e) => (e.stopPropagation(), (trim = c))} title="Boyut ve netlik seçenekleri, kırpma, önizleme">Discord'a sığdır</button>
+                    <span class="dcs">
+                      <button class="dc" onclick={(e) => (e.stopPropagation(), fit(c))} title="Tek tık: çözünürlük korunarak küçültülür, panoya kopyalanır (Discord'da Ctrl+V)">Discord'a sığdır</button>
+                      <button class="dc more" onclick={(e) => (e.stopPropagation(), (trim = c))} title="Seçenekler: boyut, kırpma, önizleme"><Icon name="gear" size={13} /></button>
+                    </span>
                   {/if}
                   {#if c.id in fitting}
                     <div class="fit"><span>Hazırlanıyor %{Math.round(fitting[c.id] * 100)}</span><span class="pb"><span style={`width:${fitting[c.id] * 100}%`}></span></span></div>
@@ -379,9 +397,12 @@
   .dur { position: absolute; right: 6px; bottom: 6px; background: rgba(12, 14, 17, 0.85); color: var(--text); font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 6px; }
   .fav { position: absolute; right: 6px; top: 4px; border: 0; background: none; color: rgba(255, 255, 255, 0.8); font-size: 20px; line-height: 1; padding: 2px; opacity: 0; transition: opacity 0.12s; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
   .fav.on { color: var(--gold-glow); opacity: 1; }
-  .dc { position: absolute; left: 6px; bottom: 6px; border: 0; border-radius: 7px; padding: 4px 9px; font-size: 12px; font-weight: 700; background: #5865f2; color: #fff; opacity: 0; transition: opacity 0.12s; }
+  .dcs { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+  .dc { border: 0; border-radius: 7px; padding: 4px 9px; font-size: 12px; font-weight: 700; background: #5865f2; color: #fff; }
+  .dc:first-child { border-radius: 7px 2px 2px 7px; }
+  .dc.more { border-radius: 2px 7px 7px 2px; padding: 4px 7px; display: grid; place-items: center; }
   .dc:hover { background: #4752c4; }
-  .card:hover .fav, .card:hover .dc, .card:focus-visible .dc { opacity: 1; }
+  .card:hover .fav, .card:hover .dcs, .card:focus-within .dcs { opacity: 1; }
   .fit { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; background: rgba(8, 10, 12, 0.72); font-size: 13px; font-weight: 700; }
   .pb { width: 70%; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
   .pb span { display: block; height: 100%; background: #5865f2; transition: width 0.3s; }

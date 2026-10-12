@@ -154,10 +154,31 @@ pub fn plan(
     codec: Codec,
     factor: f64,
 ) -> Plan {
-    plan_with(duration, limit, src, src_fps, codec, factor, false)
+    plan_with(
+        duration,
+        limit,
+        src,
+        src_fps,
+        codec,
+        factor,
+        Prefer::default(),
+    )
 }
 
-/// `smooth`: kaynağın kare hızı (ör. 60) korunur, gerekirse çözünürlük düşer ("akıcı").
+/// Ne korunsun.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Prefer {
+    /// Kaynağın kare hızı (ör. 60) korunur, gerekirse çözünürlük düşer ("akıcı").
+    pub smooth: bool,
+    /// Kaynağın çözünürlüğü korunur, gerekirse kare hızı 30'a iner; bit çok az kalırsa (görüntü kare kare
+    /// dağılacaksa) yine de küçültülür.
+    pub keep: bool,
+}
+
+/// Çözünürlük korunurken inilebilecek en düşük piksel başına bit (kodeğin "iyi" eşiğinin oranı). Ölçümle
+/// seçildi: bunun altında aynı boyutta bir alt çözünürlük belirgin şekilde daha net.
+const KEEP_FLOOR: f64 = 0.5;
+
 pub fn plan_with(
     duration: f64,
     limit: u64,
@@ -165,8 +186,9 @@ pub fn plan_with(
     src_fps: f64,
     codec: Codec,
     factor: f64,
-    smooth: bool,
+    prefer: Prefer,
 ) -> Plan {
+    let smooth = prefer.smooth;
     let total_kbps = (limit as f64 * 0.94 * 8.0 / 1000.0 / duration.max(1.0) * factor) as u32;
     let audio = match total_kbps {
         k if k < 600 => 64,
@@ -179,6 +201,30 @@ pub fn plan_with(
     let src_fps = src_fps.clamp(1.0, 60.0).round() as u32;
     let bpp =
         |h: u32, fps: u32| video as f64 * 1000.0 / (h as f64 * aspect * h as f64 * fps as f64);
+    if prefer.keep {
+        // Çözünürlük aynı kalır; 60 kare sığmıyorsa 30.
+        let h = sh.min(2160);
+        let fps = if bpp(h, src_fps) >= codec.min_bpp() * KEEP_FLOOR * 1.4 {
+            src_fps
+        } else {
+            src_fps.min(30)
+        };
+        let ratio = bpp(h, fps) / codec.min_bpp();
+        if ratio >= KEEP_FLOOR {
+            let quality = match ratio {
+                r if r >= 1.0 => "great",
+                r if r >= 0.75 => "good",
+                _ => "ok",
+            };
+            return Plan {
+                video,
+                audio,
+                height: h,
+                fps,
+                quality,
+            };
+        }
+    }
     let mut pick = None;
     'outer: for &h in HEIGHTS.iter().filter(|&&h| h <= sh) {
         let rates = if smooth {
@@ -219,8 +265,8 @@ pub struct Job {
     pub codec: Codec,
     pub src: (u32, u32),
     pub src_fps: f64,
-    /// Kare hızını koru (akıcı).
-    pub smooth: bool,
+    /// Kare hızı / çözünürlük tercihi.
+    pub prefer: Prefer,
 }
 
 fn null_sink() -> &'static str {
@@ -323,7 +369,7 @@ pub fn encode(
             job.src_fps,
             job.codec,
             factor,
-            job.smooth,
+            job.prefer,
         );
         last = Some(p);
         let vf = format!("scale=-2:{},fps={}", p.height, p.fps);
@@ -367,7 +413,8 @@ pub fn encode(
                     "-preset",
                     preset,
                     "-svtav1-params",
-                    "rc=1",
+                    // tune=0: görsel kalite (ölçümde aynı boyutta biraz daha net, kenarlar daha keskin).
+                    "rc=1:tune=0",
                 ])
                 .args(["-vf", &vf]);
                 rate(&mut c);
@@ -408,6 +455,7 @@ mod tests {
 
     #[test]
     fn smooth_keeps_frame_rate() {
+        let p = |smooth, keep| Prefer { smooth, keep };
         let sharp = plan_with(
             60.0,
             DISCORD_LIMIT,
@@ -415,7 +463,7 @@ mod tests {
             60.0,
             Codec::Av1,
             1.0,
-            false,
+            p(false, false),
         );
         let smooth = plan_with(
             60.0,
@@ -424,11 +472,47 @@ mod tests {
             60.0,
             Codec::Av1,
             1.0,
-            true,
+            p(true, false),
         );
         assert_eq!(sharp.fps, 30, "{sharp:?}");
         assert_eq!(smooth.fps, 60, "{smooth:?}");
         assert!(smooth.height < sharp.height, "{smooth:?} {sharp:?}");
+        // Çözünürlüğü koru: 60 sn 1080p 10 MB'ta 1080p30.
+        let keep = plan_with(
+            60.0,
+            DISCORD_LIMIT,
+            (1920, 1080),
+            60.0,
+            Codec::Av1,
+            1.0,
+            p(false, true),
+        );
+        assert_eq!((keep.height, keep.fps), (1080, 30), "{keep:?}");
+        // Kısa klipte 60 kare de kalır.
+        let short = plan_with(
+            10.0,
+            DISCORD_LIMIT,
+            (1920, 1080),
+            60.0,
+            Codec::Av1,
+            1.0,
+            p(false, true),
+        );
+        assert_eq!(
+            (short.height, short.fps, short.quality),
+            (1080, 60, "great")
+        );
+        // 5 dakika 10 MB'a 1440p: korunamaz, küçültülür.
+        let long = plan_with(
+            300.0,
+            DISCORD_LIMIT,
+            (2560, 1440),
+            60.0,
+            Codec::Av1,
+            1.0,
+            p(false, true),
+        );
+        assert!(long.height < 1440, "{long:?}");
     }
 
     #[test]
@@ -524,7 +608,7 @@ mod real_ffmpeg {
                 codec,
                 src: (1920, 1080),
                 src_fps: 60.0,
-                smooth: false,
+                prefer: Prefer::default(),
             };
             let p = encode(ff, &src, &out, &job, &|x| *last.lock().unwrap() = x).unwrap();
             let size = std::fs::metadata(&out).unwrap().len();

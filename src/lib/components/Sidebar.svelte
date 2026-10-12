@@ -50,7 +50,7 @@
   </nav>
   {#if community.discord}
     <button class="dc" onclick={joinDiscord} title="GMID Discord sunucusuna katıl ({community.discord.replace('https://', '')})">
-      <Icon name="discord" size={16} /><span>GMID Discord'a katıl</span>
+      <i class="logo"><Icon name="discord" size={17} /></i><span>GMID'e katıl</span>
     </button>
   {/if}
   {#if update?.available}
@@ -101,9 +101,12 @@
   .eq.paused i { animation: none; height: 4px; background: var(--dim); }
   .eq i:nth-child(3) { animation-delay: 0.4s; }
   @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
-  .dc { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(88, 101, 242, 0.55); background: rgba(88, 101, 242, 0.14); color: #c9cdfb; font-weight: 600; font-size: 13px; }
-  .dc:hover { background: rgba(88, 101, 242, 0.26); color: #fff; }
-  .upd { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.1); color: var(--gold-glow); font-weight: 600; font-size: 13px; }
+  /* button { width: 100% } + yan boşluk taşırıyordu: genişlik kenarlardan hesaplanır. */
+  .dc, .upd { width: auto; margin: 0 10px 6px; }
+  .dc { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 12px; border: 1px solid rgba(88, 101, 242, 0.45); background: rgba(88, 101, 242, 0.12); color: #dfe2ff; font-weight: 700; font-size: 13px; }
+  .dc .logo { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #5865f2; color: #fff; flex: none; font-style: normal; }
+  .dc:hover { background: rgba(88, 101, 242, 0.24); color: #fff; }
+  .upd { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.1); color: var(--gold-glow); font-weight: 600; font-size: 13px; }
   .upd:hover { background: rgba(227, 194, 112, 0.18); }
   .foot {
     margin-top: auto; padding: 12px 18px 14px; border-top: 1px solid var(--line);
@@ -117,6 +120,7 @@
     nav { padding: 6px 10px; gap: 4px; }
     .sep { display: block; height: 1px; background: var(--line); margin: 8px 6px; }
     button { justify-content: center; padding: 11px; position: relative; }
+    .dc { padding: 6px; justify-content: center; }
     .badge { position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   }
 </style>

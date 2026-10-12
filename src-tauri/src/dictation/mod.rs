@@ -13,6 +13,7 @@
 #![cfg_attr(not(windows), allow(dead_code))]
 
 pub mod engine;
+pub mod vocab;
 #[cfg(windows)]
 mod win;
 
@@ -21,7 +22,7 @@ use crate::paths::DataDir;
 use engine::{Engine, WhisperCfg};
 use serde::Serialize;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -43,6 +44,15 @@ pub struct Entry {
     pub tidied: bool,
 }
 
+/// "Bunu böyle mi yazayım?" sorusu (sağ alttaki kartta).
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Learn {
+    pub id: u64,
+    pub from: String,
+    pub to: String,
+}
+
 #[derive(Default)]
 pub struct Dictation {
     pub engine: Engine,
@@ -51,6 +61,10 @@ pub struct Dictation {
     busy: AtomicBool,
     phase: Mutex<(&'static str, Option<String>)>,
     history: Mutex<VecDeque<Entry>>,
+    /// Her dikte artırır: yapıştırılan yazının izlenmesi yeni diktede biter.
+    generation: AtomicU64,
+    pending: Mutex<Vec<Learn>>,
+    next_id: AtomicU64,
 }
 
 #[derive(Serialize)]
@@ -82,6 +96,7 @@ struct Settings {
     whisper: WhisperCfg,
     tidy: bool,
     words: String,
+    rules: Vec<vocab::Rule>,
 }
 
 fn settings(db: &Db) -> Settings {
@@ -101,6 +116,7 @@ fn settings(db: &Db) -> Settings {
         },
         tidy: db.setting_json("dictation.tidy").unwrap_or(false),
         words: db.setting_json("dictation.words").unwrap_or_default(),
+        rules: vocab::rules(db),
     }
 }
 
@@ -112,15 +128,93 @@ fn whisper_prompt(s: &Settings) -> String {
         "en" => "Hello, how are you? I'm writing my notes.",
         _ => "",
     };
-    let words = s.words.trim();
+    // Kullanıcının sözcükleri + sözlükteki doğru yazılışlar (Whisper bunları duyunca öyle yazmaya yatkın olur).
+    let mut words: Vec<String> = s
+        .words
+        .split(',')
+        .map(|w| w.trim().to_string())
+        .filter(|w| !w.is_empty())
+        .collect();
+    for w in vocab::hint_words(&s.rules) {
+        if !words.iter().any(|x| vocab::fold(x) == vocab::fold(&w)) {
+            words.push(w);
+        }
+    }
     if words.is_empty() {
         style.to_string()
     } else {
-        format!("{words}. {style}")
+        format!("{}. {style}", words.join(", "))
     }
 }
 
 impl Dictation {
+    /// Bekleyen "Bunu böyle mi yazayım?" soruları.
+    pub fn pending(&self) -> Vec<Learn> {
+        self.pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Yapıştırılan yazı sonradan düzeltildiyse: değişen parçaları sor (sağ altta kart).
+    pub fn propose(&self, app: &AppHandle, pasted: &str, edited: &str) {
+        let pairs = vocab::fresh(&app.state::<Db>(), vocab::suggest(pasted, edited));
+        if pairs.is_empty() {
+            return;
+        }
+        let mut p = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        for (from, to) in pairs {
+            if p.iter()
+                .any(|l| vocab::fold(&l.from) == vocab::fold(&from) && l.to == to)
+            {
+                continue;
+            }
+            crate::log!("Sesle yazma: düzeltme görüldü ({from} → {to})");
+            p.push(Learn {
+                id: self.next_id.fetch_add(1, Ordering::Relaxed) + 1,
+                from,
+                to,
+            });
+        }
+        let n = p.len();
+        if n > 6 {
+            p.drain(..n - 6);
+        }
+        drop(p);
+        crate::overlay::raise_alerts_quiet(app);
+    }
+
+    /// Kart yanıtı: `accept` ise kural eklenir, değilse bir daha sorulmaz.
+    pub fn answer(&self, app: &AppHandle, id: u64, accept: bool) -> Result<(), String> {
+        let item = {
+            let mut p = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            let i = p.iter().position(|l| l.id == id).ok_or("Bulunamadı")?;
+            p.remove(i)
+        };
+        let db = app.state::<Db>();
+        if accept {
+            vocab::add(&db, &item.from, &item.to)?;
+        } else {
+            vocab::reject(&db, &item.from, &item.to);
+        }
+        let _ = app.emit("alerts-changed", ());
+        let _ = app.emit("dictation-rules", ());
+        Ok(())
+    }
+
+    /// Kontrol Odası'ndaki "Son dikteler"den düzeltme: o diktenin yazısıyla karşılaştırır, önerileri döner.
+    pub fn correct(&self, app: &AppHandle, at: i64, edited: &str) -> Vec<(String, String)> {
+        let text = self
+            .history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|e| e.at == at)
+            .map(|e| e.text.clone());
+        text.map(|t| vocab::fresh(&app.state::<Db>(), vocab::suggest(&t, edited)))
+            .unwrap_or_default()
+    }
+
     fn set_phase(&self, app: &AppHandle, phase: &'static str, error: Option<String>) {
         let _ = app.emit(
             "dictation-state",
@@ -356,6 +450,7 @@ fn sounds_on(app: &AppHandle) -> bool {
 fn process(app: &AppHandle, rec: win::Recorder) {
     let d = app.state::<Dictation>();
     d.busy.store(true, Ordering::SeqCst);
+    d.generation.fetch_add(1, Ordering::SeqCst);
     let released = std::time::Instant::now();
     // Son hece kesilmesin.
     std::thread::sleep(std::time::Duration::from_millis(200));
@@ -421,19 +516,35 @@ fn run(
     if raw.is_empty() {
         return Ok(None);
     }
-    let mut text = raw.clone();
+    // Sözlük: toparlamadan önce (yapay zekâ doğru sözcüğü görsün) ve sonra (geri bozduysa).
+    let (fixed, mut used) = vocab::apply(&raw, &s.rules);
+    let mut text = fixed.clone();
     let mut tidied = false;
     if s.tidy && engine::llm_ready(dir.root()) {
         d.set_phase(app, "tidying", None);
-        match d.engine.tidy(dir.root(), &raw, &s.whisper.lang) {
+        match d.engine.tidy(dir.root(), &fixed, &s.whisper.lang) {
             Ok(t) => {
-                tidied = t != raw;
+                tidied = t != fixed;
+                let (t, more) = vocab::apply(&t, &s.rules);
+                used.extend(more);
                 text = t;
             }
             Err(e) => crate::log!("Toparlanamadı (ham yazı yapıştırılıyor): {e}"),
         }
     }
+    used.sort_unstable();
+    used.dedup();
+    vocab::count_hits(&db, &used);
     win::paste(app, &text)?;
+    // Yapıştırılan yerde düzeltilirse öğren (yazı alanı okunabiliyorsa; şifre alanlarına bakılmaz).
+    let gen = d.generation.load(Ordering::SeqCst);
+    let (app2, pasted) = (app.clone(), text.clone());
+    let app3 = app.clone();
+    win::watch_field(
+        text.clone(),
+        move || app2.state::<Dictation>().generation.load(Ordering::SeqCst) == gen,
+        move |edited| app3.state::<Dictation>().propose(&app3, &pasted, &edited),
+    );
     Ok(Some(Entry {
         text,
         raw,

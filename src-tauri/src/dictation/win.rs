@@ -307,3 +307,74 @@ fn record(stop: &AtomicBool, level: &AtomicU32) -> Result<Vec<i16>, String> {
         Ok(samples)
     }
 }
+
+/// Yazının yapıştırıldığı alanı (UI Automation ile) bir süre izler: kullanıcı yazıyı düzeltip gönderene ya da
+/// silene kadar son hali `done`a verilir. Şifre alanları ve okunamayan alanlar (oyunlar, bazı programlar)
+/// atlanır; yazı hiçbir yere kaydedilmez, yalnız karşılaştırılır. `alive` yeni dikte başlayınca `false` olur.
+pub fn watch_field(
+    pasted: String,
+    alive: impl Fn() -> bool + Send + 'static,
+    done: impl FnOnce(String) + Send + 'static,
+) {
+    use windows::Win32::System::Com::CLSCTX_INPROC_SERVER;
+    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
+    std::thread::spawn(move || unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        // Yapıştırma otursun.
+        std::thread::sleep(Duration::from_millis(500));
+        let Ok(uia) =
+            CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+        else {
+            return;
+        };
+        let Ok(el) = uia.GetFocusedElement() else {
+            return;
+        };
+        if el.CurrentIsPassword().is_ok_and(|p| p.as_bool()) {
+            return;
+        }
+        let mut last: Option<String> = None;
+        // En çok ~2 dakika: düzeltme genelde göndermeden hemen önce yapılır.
+        for _ in 0..80 {
+            if !alive() {
+                break;
+            }
+            let Some(text) = field_text(&el) else {
+                break;
+            };
+            // Gönderildi ya da silindi: son görülen hal karşılaştırılır.
+            if super::vocab::overlap(&pasted, &text) < 0.5 {
+                break;
+            }
+            last = Some(text);
+            std::thread::sleep(Duration::from_millis(1500));
+        }
+        if let Some(t) = last {
+            done(t);
+        }
+    });
+}
+
+/// Bir yazı alanının içeriği: önce değer (tek satırlık kutular), yoksa belge metni (zengin yazı alanları:
+/// Discord, tarayıcılar, Word). Çok uzunsa (belge) okunmaz.
+unsafe fn field_text(
+    el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
+) -> Option<String> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_TextPatternId, UIA_ValuePatternId,
+    };
+    if let Ok(v) = el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) {
+        if let Ok(s) = v.CurrentValue() {
+            let s = s.to_string();
+            if !s.is_empty() {
+                return Some(s);
+            }
+        }
+    }
+    let t = el
+        .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+        .ok()?;
+    let range = t.DocumentRange().ok()?;
+    let s = range.GetText(20_000).ok()?.to_string();
+    Some(s)
+}

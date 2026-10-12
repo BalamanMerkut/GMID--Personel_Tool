@@ -103,7 +103,10 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   yanlışsa büyük görünümden değiştir. Yeni klipte köşede "Klip kaydedildi — Valorant (0:30)".
 - Üzerine gelince sessiz önizleme, tıklayınca büyük görünüm (← → ile gezin), çift tıklayınca varsayılan oynatıcı.
   Favori, yeniden adlandır, klasörde göster, sil (Geri Dönüşüm Kutusu'na; geri alınabilir).
-- **Discord'a sığdır:** seçenekler yan yana çıkar — 10 MB'ta **Net** (AV1, en yüksek çözünürlük), **Akıcı** (60 fps),
+- **Discord'a sığdır (tek tık):** klip **çözünürlüğü korunarak** küçültülür (AV1, görsel kalite ayarı; gerekirse
+  30 kare) ve panoya konur — Discord'da **Ctrl+V**. Ölçümde aynı boyutta küçültmekten daha net çıktı. Klip o kadar
+  uzunsa ki çözünürlük korunursa görüntü dağılacak, o zaman küçültülür. Yanındaki ⚙ seçenekleri açar:
+- **Seçenekler:** yan yana — **Orijinal çözünürlük**, 10 MB'ta **Net** (AV1, en yüksek çözünürlük), **Akıcı** (60 fps),
   **Uyumlu** (H.264, her telefonda), **Nitro Basic** (50 MB), **Nitro** (500 MB) ya da sığıyorsa **Olduğu gibi**;
   her birinin yanında çözünürlük, kare hızı, **beklenen MB** ve netlik yazar. Uzun klipte "Son 30 sn" önerilir (kısa =
   çok daha net). Hazırlanan kopya pencerede oynar; beğenmezsen başka seçenekle dene, hepsi listede kalır. Seçilen kopya
@@ -173,6 +176,11 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   "yarın, yok yok cuma" gibi düzeltmeler ve devrik cümleler. Şüpheli sonuçta ham yazı yapıştırılır.
 - 15 dakika kullanılmazsa modeller bellekten çıkar (oyunda ekran kartı boş kalsın). Kontrol Odası → Sesle yazma:
   özel sözcükler, dil, deneme alanı, son dikteler (yapışmadıysa kopyala).
+- **Sözlük (kullandıkça öğrenir):** Whisper bir sözcüğü hep yanlış yazıyorsa ("GMID" → "GMD", "VDS" → "videoyu")
+  "şunu duyunca bunu yaz" kuralı olur; her diktede uygulanır ("GMD'ye" → "GMID'ye", ek korunur) ve doğru yazılış
+  Whisper'a ipucu olarak da verilir. Öğrenme: dikteden sonra yazıyı yapıştırıldığı yerde (Discord, tarayıcı, Word…)
+  düzeltirsen GMID gönderilmeden önceki halini okuyup karşılaştırır ve sağ altta **"Bunu böyle mi yazayım?"** diye
+  sorar; "Son dikteler"de ✎ ile de düzeltebilirsin. Yazı hiçbir yere kaydedilmez, şifre alanlarına bakılmaz.
 
 ### Kontrol Odası (ayarlar merkezi)
 

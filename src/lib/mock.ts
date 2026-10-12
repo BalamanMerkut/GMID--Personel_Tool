@@ -303,8 +303,11 @@ const dictation: DictationStatus = {
   history: [
     { text: "Yarın akşam 9'da Valorant turnuvası var, herkes Discord'da olsun.\n\nKazanan takıma Steam kartı veriyoruz.", raw: "yarın akşam dokuzda valorant turnuvası var herkes discordda olsun ee kazanan takıma steam kartı veriyoruz", at: now() - 120_000, ms: 1840, tidied: true },
     { text: "Toplantı cuma günü saat 3'te.", raw: "toplantı perşembe yok yok cuma günü saat üçte", at: now() - 600_000, ms: 2210, tidied: true },
+    { text: "Akşam GMD sunucusunda buluşalım, videoyu da kiraladım.", raw: "akşam gmd sunucusunda buluşalım videoyu da kiraladım", at: now() - 900_000, ms: 1500, tidied: false },
   ],
 };
+let dictRules = [{ from: "GMI", to: "GMID", hits: 4 }];
+let dictLearn = [{ id: 1, from: "videoyu", to: "VDS" }];
 
 // ---- Yazılar ----
 const lyric = (start: number, text: string): Segment => {
@@ -532,6 +535,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         reminders: reminders.filter((r) => r.notified && !r.done),
         timers: [{ id: "c9", label: "Fırın", totalMs: 1_200_000, endsAt: null, remainingMs: 0, finished: true }],
         games: suggestions.slice(0, 1),
+        words: dictLearn,
       };
     case "alerts_fit":
     case "alerts_close":
@@ -808,7 +812,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       const full = a.start == null;
       const d = Math.max(0.5, ((a.end as number | null) ?? c?.duration ?? 30) - ((a.start as number | null) ?? 0));
       const out: Record<string, unknown>[] = [];
-      const add = (key: string, title: string, note: string, mb: number, codec: string, smooth: boolean) => {
+      const add = (key: string, title: string, note: string, mb: number, codec: string, smooth: boolean, keep = false) => {
         if (full && (c?.size ?? 0) <= mb * 1e6) {
           if (!out.some((x) => x.key === "orijinal")) out.push({ key: "orijinal", title: "Olduğu gibi", note: `zaten ${mb} MB'tan küçük, orijinal kalite`, options: { limitMb: mb, codec, smooth }, height: c?.height ?? 1080, fps: 60, size: c?.size ?? 0, quality: "great", recommended: false });
           return;
@@ -817,17 +821,26 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         const bpp = codec === "av1" ? 0.022 : 0.065;
         const fpsList = smooth ? [60] : [60, 30];
         let pick: [number, number] | null = null;
-        for (const h of [1440, 1080, 900, 720, 540, 480, 360].filter((x) => x <= (c?.height ?? 1080))) {
+        if (keep) {
+          const h = c?.height ?? 1080;
+          const f = (kbps * 1000) / (h * h * 1.777 * 60) >= bpp * 0.7 ? 60 : 30;
+          if ((kbps * 1000) / (h * h * 1.777 * f) < bpp * 0.5) return;
+          pick = [h, f];
+        }
+        for (const h of [1440, 1080, 900, 720, 540, 480, 360].filter((x) => !pick && x <= (c?.height ?? 1080))) {
           for (const f of fpsList) if (!pick && (kbps * 1000) / (h * h * 1.777 * f) >= bpp) pick = [h, f];
         }
         const [h, f] = pick ?? [360, smooth ? 60 : 30];
-        out.push({ key, title, note, options: { limitMb: mb, codec, smooth, start: a.start, end: a.end }, height: h, fps: f, size: Math.min(mb * 1e6, (kbps * 1000 * d) / 8), quality: !pick ? "poor" : h >= 1080 ? "great" : h >= 720 ? "good" : h >= 480 ? "ok" : "poor", recommended: key === "net-10" });
+        out.push({ key, title, note, options: { limitMb: mb, codec, smooth, keep, start: a.start, end: a.end }, height: h, fps: f, size: Math.min(mb * 1e6, (kbps * 1000 * d) / 8), quality: !pick ? "poor" : h >= 1080 ? "great" : h >= 720 ? "good" : h >= 480 ? "ok" : "poor", recommended: false });
       };
+      add("orijinal-cozunurluk", "Orijinal çözünürlük", "Tek tık “Discord'a sığdır” böyle yapar · çözünürlük aynı kalır, gerekirse 30 kare", 10, "av1", false, true);
       add("net-10", "Net", "Discord ücretsiz · AV1: aynı boyutta en net görüntü", 10, "av1", false);
       add("akici-10", "Akıcı", "Discord ücretsiz · 60 kare korunur, görüntü biraz yumuşar", 10, "av1", true);
       add("uyumlu-10", "Uyumlu", "Discord ücretsiz · H.264: her telefonda oynar, biraz daha bulanık", 10, "h264", false);
       add("nitro-basic", "Nitro Basic", "50 MB sınırı olanlar için", 50, "av1", false);
       add("nitro", "Nitro", "500 MB · neredeyse orijinal, her yerde oynar", 500, "h264", false);
+      const first = out.find((x) => (x.options as { limitMb: number }).limitMb === 10);
+      if (first) first.recommended = true;
       return out;
     }
     case "clips_ready_copy":
@@ -936,6 +949,29 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       const demo = new URLSearchParams(location.search).get("demo") ?? "listening";
       if (demo === "listening") setInterval(() => emit("dikte-level", Math.random() * 0.8), 80);
       return { state: demo, secs: 7 };
+    }
+    case "dictation_rules":
+      return dictRules;
+    case "dictation_rule_add":
+      dictRules = [...dictRules.filter((r) => r.from.toLowerCase() !== String(a.from).toLowerCase()), { from: String(a.from), to: String(a.to), hits: 0 }];
+      return dictRules;
+    case "dictation_rule_remove":
+      dictRules = dictRules.filter((r) => r.from.toLowerCase() !== String(a.from).toLowerCase());
+      return dictRules;
+    case "dictation_learn": {
+      const l = dictLearn.find((x) => x.id === a.id);
+      dictLearn = dictLearn.filter((x) => x.id !== a.id);
+      if (l && a.accept) dictRules = [...dictRules, { from: l.from, to: l.to, hits: 0 }];
+      emit("alerts-changed", null);
+      return;
+    }
+    case "dictation_correct": {
+      const h = dictation.history.find((x) => x.at === a.at);
+      if (!h) return [];
+      const oldW = h.text.split(/\s+/);
+      const newW = String(a.text).split(/\s+/);
+      const clean = (w: string) => w.replace(/[.,!?]+$/, "");
+      return oldW.flatMap((w, i) => (newW[i] && clean(newW[i]) !== clean(w) ? [[clean(w), clean(newW[i])]] : [])).slice(0, 3);
     }
     case "dictation_status":
     case "dictation_apply":

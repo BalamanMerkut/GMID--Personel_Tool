@@ -68,3 +68,38 @@ pub async fn dictation_warm_up(app: AppHandle) -> CmdResult<Status> {
     })
     .await
 }
+
+/// Öğrenen sözlük.
+#[tauri::command]
+pub fn dictation_rules(db: tauri::State<'_, crate::db::Db>) -> Vec<dictation::vocab::Rule> {
+    dictation::vocab::rules(&db)
+}
+
+#[tauri::command]
+pub fn dictation_rule_add(
+    db: tauri::State<'_, crate::db::Db>,
+    from: String,
+    to: String,
+) -> CmdResult<Vec<dictation::vocab::Rule>> {
+    dictation::vocab::add(&db, &from, &to)
+}
+
+#[tauri::command]
+pub fn dictation_rule_remove(
+    db: tauri::State<'_, crate::db::Db>,
+    from: String,
+) -> CmdResult<Vec<dictation::vocab::Rule>> {
+    dictation::vocab::remove(&db, &from)
+}
+
+/// "Bunu böyle mi yazayım?" kartına yanıt.
+#[tauri::command]
+pub fn dictation_learn(app: AppHandle, id: u64, accept: bool) -> CmdResult<()> {
+    app.state::<Dictation>().answer(&app, id, accept)
+}
+
+/// Son diktelerden birinin düzeltilmiş hali: öğrenilecek "şu → bu" önerileri.
+#[tauri::command]
+pub fn dictation_correct(app: AppHandle, at: i64, text: String) -> Vec<(String, String)> {
+    app.state::<Dictation>().correct(&app, at, &text)
+}

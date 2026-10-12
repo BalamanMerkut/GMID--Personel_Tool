@@ -7,12 +7,12 @@
   import { clock, relative, when } from "../time";
   import type { Alerts } from "../types";
 
-  let alerts: Alerts = $state({ reminders: [], timers: [], games: [] });
+  let alerts: Alerts = $state({ reminders: [], timers: [], games: [], words: [] });
   let box: HTMLDivElement;
 
   async function refresh() {
     alerts = await api.overlay.alerts();
-    if (!alerts.reminders.length && !alerts.timers.length && !alerts.games.length) {
+    if (!alerts.reminders.length && !alerts.timers.length && !alerts.games.length && !alerts.words.length) {
       await api.overlay.closeAlerts();
       return;
     }
@@ -33,6 +33,16 @@
 </script>
 
 <div class="stack" bind:this={box}>
+  {#each alerts.words as w (w.id)}
+    <div class="card">
+      <div class="top"><span class="ic"><Icon name="mic" size={18} /></span><b>Bunu böyle mi yazayım?</b></div>
+      <span class="meta">Duyunca <s>{w.from}</s> yerine <b class="to">{w.to}</b> yazayım mı? (Sesle yazma sözlüğü)</span>
+      <div class="acts">
+        <button class="ghost" onclick={() => act(api.dictation.learn(w.id, false))}>Hayır</button>
+        <button class="ok" onclick={() => act(api.dictation.learn(w.id, true))}>Evet, öğren</button>
+      </div>
+    </div>
+  {/each}
   {#each alerts.games as g (g.path)}
     <div class="card game">
       <div class="top"><span class="ic"><Icon name="library" size={18} /></span><b>Yeni oyun: {g.name}</b></div>
@@ -80,6 +90,8 @@
   .top b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ic { color: var(--gold); display: grid; place-items: center; }
   .meta { font-size: 12.5px; color: var(--muted); padding-left: 28px; }
+  .meta s { color: var(--bad); }
+  .meta .to { color: var(--gold-glow); }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
   button { border-radius: 9px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
   .ghost { border: 1px solid var(--line-2); background: transparent; color: var(--text); }

@@ -124,7 +124,7 @@
   function pick(c: FitChoice) {
     selected = c.key;
     if (c.options.limitMb !== null) {
-      void setJson("clips.discord", { key: c.key, limitMb: c.options.limitMb, codec: c.options.codec, smooth: !!c.options.smooth });
+      void setJson("clips.discord", { key: c.key, limitMb: c.options.limitMb, codec: c.options.codec, smooth: !!c.options.smooth, keep: !!c.options.keep });
     }
   }
 
@@ -238,7 +238,7 @@
         <button class="ch" aria-pressed={choice?.key === c.key} onclick={() => pick(c)}>
           <span class="top"><b>{c.title}</b>{#if c.recommended}<em>Önerilen</em>{/if}</span>
           <span class="size tnum">≈ {mb(c.size)}</span>
-          <span class="meta tnum">{res(c)}{c.options.limitMb !== null && c.key !== "orijinal" && !c.key.startsWith("orijinal") ? ` · ${c.options.codec === "av1" ? "AV1" : "H.264"}` : ""}</span>
+          <span class="meta tnum">{res(c)}{c.options.limitMb !== null && !/^orijinal(-\d+)?$/.test(c.key) ? ` · ${c.options.codec === "av1" ? "AV1" : "H.264"}` : ""}</span>
           <span class="q {q[1]}">{q[0]}</span>
           <span class="note">{c.note}</span>
         </button>

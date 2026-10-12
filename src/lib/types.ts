@@ -108,6 +108,15 @@ export interface Alerts {
   timers: Countdown[];
   /** "Kütüphaneye ekleyeyim mi?" kartları. */
   games: GameSuggestion[];
+  /** Sesle yazma: "Bunu böyle mi yazayım?" kartları. */
+  words: { id: number; from: string; to: string }[];
+}
+
+/** Sesle yazma sözlüğü: `from` duyulunca `to` yazılır. */
+export interface DictRule {
+  from: string;
+  to: string;
+  hits: number;
 }
 
 /** Kütüphanede olmayan, açıldığı görülen oyun. */
@@ -690,6 +699,8 @@ export interface FitOptions {
   codec: "av1" | "h264";
   /** Kare hızını koru (60 fps), gerekirse çözünürlük düşsün. */
   smooth?: boolean;
+  /** Çözünürlüğü koru (tek tık varsayılanı). */
+  keep?: boolean;
 }
 
 export interface FitResult {

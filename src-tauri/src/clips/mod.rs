@@ -459,7 +459,10 @@ impl Clips {
                 codec: opts.codec,
                 src: (w.max(16) as u32, h.max(16) as u32),
                 src_fps: pfps.unwrap_or(60.0),
-                smooth: opts.smooth,
+                prefer: media::Prefer {
+                    smooth: opts.smooth,
+                    keep: opts.keep,
+                },
             };
             let base = clip.title.clone().unwrap_or(clip.name.clone());
             let out = match limit {
@@ -468,7 +471,13 @@ impl Clips {
                     "{} {} MB{}{}).mp4",
                     safe_name(&base).trim_end_matches(')'),
                     l / 1_000_000,
-                    if opts.smooth { ", akıcı" } else { "" },
+                    if opts.smooth {
+                        ", akıcı"
+                    } else if opts.keep {
+                        ", orijinal çözünürlük"
+                    } else {
+                        ""
+                    },
                     if opts.codec == media::Codec::H264 {
                         ", uyumlu"
                     } else {
@@ -556,7 +565,10 @@ impl Clips {
                 60.0,
                 opts.codec,
                 1.0,
-                opts.smooth,
+                media::Prefer {
+                    smooth: opts.smooth,
+                    keep: opts.keep,
+                },
             ),
             None => media::Plan {
                 video: 0,
@@ -596,6 +608,7 @@ struct FitDefaults {
     limit_mb: Option<u32>,
     codec: Option<media::Codec>,
     smooth: Option<bool>,
+    keep: Option<bool>,
 }
 
 pub fn saved_options(db: &Db) -> FitOptions {
@@ -604,6 +617,8 @@ pub fn saved_options(db: &Db) -> FitOptions {
         limit_mb: d.limit_mb.or(default_limit()),
         codec: d.codec.unwrap_or_default(),
         smooth: d.smooth.unwrap_or(false),
+        // Seçenekler penceresinde başka bir şey seçilmediyse çözünürlük korunur.
+        keep: d.keep.unwrap_or(d.smooth != Some(true)),
         ..FitOptions::default()
     }
 }
@@ -624,6 +639,9 @@ pub struct FitOptions {
     /// Kare hızını koru (60 fps), gerekirse çözünürlük düşsün.
     #[serde(default)]
     pub smooth: bool,
+    /// Çözünürlüğü koru (tek tık "Discord'a sığdır"ın varsayılanı).
+    #[serde(default)]
+    pub keep: bool,
 }
 
 /// Hazırlanan kopya.
@@ -678,72 +696,94 @@ pub fn choices(
     use media::Codec::{Av1, H264};
     let fps_src = src_fps.clamp(1.0, 60.0).round() as u32;
     let mut out: Vec<Choice> = Vec::new();
-    let mut add =
-        |key: &str, title: &str, note: &str, mb: u32, codec: media::Codec, smooth: bool| {
-            let limit = mb as u64 * 1_000_000;
-            let opts = FitOptions {
-                start,
-                end,
-                limit_mb: Some(mb),
-                codec,
-                smooth,
-            };
-            if full && src_size <= limit {
-                // Kodlamaya gerek yok: klip olduğu gibi gider.
-                if out.iter().any(|c| c.size == src_size) {
-                    return;
-                }
-                out.push(Choice {
-                    key: format!("orijinal-{mb}"),
-                    title: "Olduğu gibi".into(),
-                    note: format!(
-                        "{} · zaten {mb} MB'tan küçük, orijinal kalite",
-                        match mb {
-                            10 => "Discord ücretsiz",
-                            50 => "Nitro Basic",
-                            _ => "Nitro",
-                        }
-                    ),
-                    options: opts,
-                    height: src.1,
-                    fps: fps_src,
-                    size: src_size,
-                    quality: "great",
-                    recommended: false,
-                });
-                return;
-            }
-            // AV1 hedefi baştan %7 küçük tutulur (bkz. media::encode).
-            let factor = if codec == Av1 { 0.93 } else { 1.0 };
-            let p = media::plan_with(duration, limit, src, src_fps, codec, factor, smooth);
-            let size = (((p.video + p.audio) as f64 * 1000.0 / 8.0 * duration) as u64).min(limit);
-            // Aynı sonucu veren ikinci seçenek gösterilmez (ör. kısa klipte akıcı = net).
-            if out.iter().any(|c| {
-                c.options.limit_mb == Some(mb)
-                    && c.options.codec == codec
-                    && (c.height, c.fps) == (p.height, p.fps)
-            }) {
+    let mut add = |key: &str,
+                   title: &str,
+                   note: &str,
+                   mb: u32,
+                   codec: media::Codec,
+                   prefer: media::Prefer| {
+        let limit = mb as u64 * 1_000_000;
+        let opts = FitOptions {
+            start,
+            end,
+            limit_mb: Some(mb),
+            codec,
+            smooth: prefer.smooth,
+            keep: prefer.keep,
+        };
+        if full && src_size <= limit {
+            // Kodlamaya gerek yok: klip olduğu gibi gider.
+            if out.iter().any(|c| c.size == src_size) {
                 return;
             }
             out.push(Choice {
-                key: key.into(),
-                title: title.into(),
-                note: note.into(),
+                key: format!("orijinal-{mb}"),
+                title: "Olduğu gibi".into(),
+                note: format!(
+                    "{} · zaten {mb} MB'tan küçük, orijinal kalite",
+                    match mb {
+                        10 => "Discord ücretsiz",
+                        50 => "Nitro Basic",
+                        _ => "Nitro",
+                    }
+                ),
                 options: opts,
-                height: p.height,
-                fps: p.fps,
-                size,
-                quality: p.quality,
+                height: src.1,
+                fps: fps_src,
+                size: src_size,
+                quality: "great",
                 recommended: false,
             });
-        };
+            return;
+        }
+        // AV1 hedefi baştan %7 küçük tutulur (bkz. media::encode).
+        let factor = if codec == Av1 { 0.93 } else { 1.0 };
+        let p = media::plan_with(duration, limit, src, src_fps, codec, factor, prefer);
+        // Çözünürlük bu uzunlukta korunamıyorsa bu seçenek gösterilmez (sonuç "Net" ile aynı olurdu).
+        if prefer.keep && p.height < src.1.min(2160) {
+            return;
+        }
+        let size = (((p.video + p.audio) as f64 * 1000.0 / 8.0 * duration) as u64).min(limit);
+        // Aynı sonucu veren ikinci seçenek gösterilmez (ör. kısa klipte akıcı = net).
+        if out.iter().any(|c| {
+            c.options.limit_mb == Some(mb)
+                && c.options.codec == codec
+                && (c.height, c.fps) == (p.height, p.fps)
+        }) {
+            return;
+        }
+        out.push(Choice {
+            key: key.into(),
+            title: title.into(),
+            note: note.into(),
+            options: opts,
+            height: p.height,
+            fps: p.fps,
+            size,
+            quality: p.quality,
+            recommended: false,
+        });
+    };
+    use media::Prefer;
+    let sharp = Prefer::default();
+    add(
+        "orijinal-cozunurluk",
+        "Orijinal çözünürlük",
+        "Tek tık “Discord'a sığdır” böyle yapar · çözünürlük aynı kalır, gerekirse 30 kare",
+        10,
+        Av1,
+        Prefer {
+            smooth: false,
+            keep: true,
+        },
+    );
     add(
         "net-10",
         "Net",
         "Discord ücretsiz · AV1: aynı boyutta en net görüntü",
         10,
         Av1,
-        false,
+        sharp,
     );
     if fps_src > 35 {
         add(
@@ -752,7 +792,10 @@ pub fn choices(
             "Discord ücretsiz · 60 kare korunur, görüntü biraz yumuşar",
             10,
             Av1,
-            true,
+            Prefer {
+                smooth: true,
+                keep: false,
+            },
         );
     }
     add(
@@ -761,7 +804,7 @@ pub fn choices(
         "Discord ücretsiz · H.264: her telefonda oynar, biraz daha bulanık",
         10,
         H264,
-        false,
+        sharp,
     );
     add(
         "nitro-basic",
@@ -769,7 +812,7 @@ pub fn choices(
         "50 MB sınırı olanlar için",
         50,
         Av1,
-        false,
+        sharp,
     );
     add(
         "nitro",
@@ -777,7 +820,7 @@ pub fn choices(
         "500 MB · neredeyse orijinal, her yerde oynar",
         500,
         H264,
-        false,
+        sharp,
     );
     // Önerilen: ücretsiz sınıra sığanlar içinde en net olanı (eşitse ilki).
     if let Some(best) = out
@@ -804,6 +847,7 @@ impl Default for FitOptions {
             limit_mb: default_limit(),
             codec: media::Codec::default(),
             smooth: false,
+            keep: true,
         }
     }
 }

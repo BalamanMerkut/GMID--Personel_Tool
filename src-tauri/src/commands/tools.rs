@@ -234,6 +234,8 @@ pub struct Alerts {
     timers: Vec<Countdown>,
     /// "Kütüphaneye ekleyeyim mi?" kartları.
     games: Vec<crate::games::Suggestion>,
+    /// Sesle yazma: "Bunu böyle mi yazayım?" kartları.
+    words: Vec<crate::dictation::Learn>,
 }
 
 #[tauri::command]
@@ -241,11 +243,13 @@ pub fn alerts_list(
     db: State<'_, Db>,
     timers: State<'_, Timers>,
     games: State<'_, crate::games::Games>,
+    dictation: State<'_, crate::dictation::Dictation>,
 ) -> CmdResult<Alerts> {
     Ok(Alerts {
         reminders: reminders::pending_alerts(&db).map_err(err)?,
         timers: timers.finished(),
         games: games.showing_suggestions(&db),
+        words: dictation.pending(),
     })
 }
 

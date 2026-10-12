@@ -8,7 +8,7 @@
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { DictationEntry, DictationStatus, ToolProgress, WhisperStatus } from "../types";
+  import type { DictationEntry, DictationStatus, DictRule, ToolProgress, WhisperStatus } from "../types";
 
   let status: DictationStatus | null = $state(null);
   let whisper: WhisperStatus | null = $state(null);
@@ -20,6 +20,40 @@
   let words = $state(getJson<string>("dictation.words", ""));
   let sounds = $state(getJson("dictation.sounds", true));
   let showRaw: number | null = $state(null);
+  let rules: DictRule[] = $state([]);
+  let newFrom = $state("");
+  let newTo = $state("");
+  /** Düzeltilen dikte (zamanı) ve taslağı. */
+  let editing: number | null = $state(null);
+  let draft = $state("");
+  let proposals: [string, string][] = $state([]);
+
+  async function addRule(from: string, to: string) {
+    try {
+      rules = await api.dictation.ruleAdd(from, to);
+      proposals = proposals.filter(([f, t]) => !(f === from && t === to));
+      newFrom = newTo = "";
+      notify(`Öğrendim: “${from}” duyunca “${to}” yazacağım`, "check");
+    } catch (e) {
+      notify(String(e), "info");
+    }
+  }
+
+  async function removeRule(from: string) {
+    rules = await api.dictation.ruleRemove(from).catch(() => rules);
+  }
+
+  function startEdit(h: DictationEntry) {
+    editing = h.at;
+    draft = h.text;
+    proposals = [];
+  }
+
+  async function saveEdit(h: DictationEntry) {
+    proposals = await api.dictation.correct(h.at, draft).catch(() => []);
+    if (!proposals.length) notify("Öğrenilecek bir sözcük değişikliği yok", "info");
+    void navigator.clipboard?.writeText(draft).catch(() => {});
+  }
 
   async function refresh() {
     [status, whisper] = await Promise.all([api.dictation.status(), api.transcripts.whisperStatus().catch(() => null)]);
@@ -27,6 +61,7 @@
 
   onMount(() => {
     void refresh();
+    void api.dictation.rules().then((r) => (rules = r)).catch(() => {});
     const stops = [
       on<{ phase: DictationStatus["phase"]; error: string | null }>("dictation-state", (p) => {
         if (status) status = { ...status, phase: p.phase, lastError: p.error };
@@ -34,6 +69,7 @@
       on<DictationEntry>("dictation-entry", (e) => {
         if (status) status = { ...status, history: [e, ...status.history].slice(0, 20) };
       }),
+      on("alerts-changed", () => void api.dictation.rules().then((r) => (rules = r)).catch(() => {})),
       on<ToolProgress>("tools-progress", (p) => {
         if (busy) progress = p;
       }),
@@ -246,6 +282,31 @@
   {/if}
 
   <section class="panel">
+    <div>
+      <h3 class="h2"><Icon name="book" />3 · Sözlük (kullandıkça öğrenir)</h3>
+      <span class="sub small">
+        Whisper bazı sözcükleri hep yanlış yazıyorsa (“GMID” yerine “GMD”, “VDS” yerine “videoyu”) burada düzelt. Dikteden
+        sonra yazıyı yapıştırıldığı yerde düzeltirsen GMID fark eder ve sağ altta <b>“Bunu böyle mi yazayım?”</b> diye sorar;
+        aşağıdaki son diktelerden de düzeltebilirsin. Doğru yazılışlar Whisper'a ipucu olarak da verilir.
+      </span>
+    </div>
+    <div class="rules">
+      {#each rules as r (r.from)}
+        <span class="rule"><s>{r.from}</s><Icon name="arrow" size={12} /><b>{r.to}</b>{#if r.hits}<i class="tnum">{r.hits}×</i>{/if}<button title="Sil" onclick={() => removeRule(r.from)}><Icon name="x" size={12} /></button></span>
+      {:else}
+        <span class="sub small">Henüz kural yok.</span>
+      {/each}
+    </div>
+    <div class="addrule">
+      <input bind:value={newFrom} placeholder="Yanlış yazdığı: videoyu" aria-label="Yanlış yazılan" />
+      <Icon name="arrow" size={14} />
+      <input bind:value={newTo} placeholder="Olması gereken: VDS" aria-label="Doğrusu" onkeydown={(e) => e.key === "Enter" && newFrom.trim() && newTo.trim() && addRule(newFrom.trim(), newTo.trim())} />
+      <button class="btn ghost sm" disabled={!newFrom.trim() || !newTo.trim()} onclick={() => addRule(newFrom.trim(), newTo.trim())}><Icon name="plus" size={14} />Ekle</button>
+    </div>
+    <span class="sub small">Gerçek bir sözcüğü (“videoyu”) değiştiren kural her yerde uygulanır; o sözcüğü başka anlamda da kullanıyorsan yalnız ipucu yeterli olabilir: doğrusunu yukarıdaki “Özel sözcükler”e yaz.</span>
+  </section>
+
+  <section class="panel">
     <h3 class="h2"><Icon name="edit" />Dene</h3>
     <textarea class="try" rows="4" placeholder="Buraya tıkla, Ctrl + Alt basılı tutup konuş, bırak…"></textarea>
     {#if status.history.length}
@@ -253,11 +314,26 @@
       {#each status.history as h, i (h.at)}
         <div class="hist">
           <div class="htext">
-            <p>{showRaw === i ? h.raw : h.text}</p>
+            {#if editing === h.at}
+              <textarea rows="3" bind:value={draft} aria-label="Düzelt"></textarea>
+              <div class="erow">
+                <button class="btn sm" onclick={() => saveEdit(h)}><Icon name="check" size={14} />Kaydet ve öğren</button>
+                <button class="btn ghost sm" onclick={() => ((editing = null), (proposals = []))}>Kapat</button>
+              </div>
+              {#each proposals as [f, t] (f + t)}
+                <div class="prop">
+                  <span>Duyunca <s>{f}</s> yerine <b>{t}</b> yazayım mı?</span>
+                  <button class="btn sm" onclick={() => addRule(f, t)}>Evet, öğren</button>
+                </div>
+              {/each}
+            {:else}
+              <p>{showRaw === i ? h.raw : h.text}</p>
+            {/if}
             <span class="sub small tnum">
               {ago(h.at)} · {(h.ms / 1000).toFixed(1)} sn{#if h.tidied}{" · toparlandı · "}<button class="link" onclick={() => (showRaw = showRaw === i ? null : i)}>{showRaw === i ? "toparlanmışı göster" : "hamını göster"}</button>{/if}
             </span>
           </div>
+          <button class="mini" title="Düzelt (sözlük öğrenir)" onclick={() => startEdit(h)}><Icon name="edit" size={16} /></button>
           <button class="mini" title="Kopyala" onclick={() => copy(showRaw === i ? h.raw : h.text)}><Icon name="copy" size={16} /></button>
         </div>
       {/each}
@@ -294,6 +370,17 @@
   .htext p { margin: 0; white-space: pre-line; }
   .mini { border: 0; background: transparent; color: var(--dim); padding: 6px; border-radius: 7px; display: inline-flex; }
   .mini:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+  .rules { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rule { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; border-radius: 999px; background: var(--coal-2); border: 1px solid var(--line-2); font-size: 13px; }
+  .rule s, .prop s { color: var(--bad); }
+  .rule b, .prop b { color: var(--gold-glow); }
+  .rule i { font-style: normal; font-size: 11px; color: var(--dim); }
+  .rule button { border: 0; background: none; color: var(--dim); padding: 2px; display: grid; border-radius: 50%; }
+  .rule button:hover { color: var(--bad); }
+  .addrule { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--dim); }
+  .addrule input { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; color: var(--text); min-width: 0; flex: 1 1 160px; }
+  .erow { display: flex; gap: 6px; }
+  .prop { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 10px; background: rgba(227, 194, 112, 0.08); font-size: 13px; }
   .link { border: 0; background: none; padding: 0; color: var(--teal); font-weight: 600; font-size: inherit; }
   .link:hover { color: var(--neon); }
 </style>
