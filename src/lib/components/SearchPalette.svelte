@@ -26,6 +26,7 @@
     ["oyunlar", "Oyun ayarları", "algılama klip klasör steam"],
     ["veri", "Veri ve yedekler", "yedek geri yükle klasör günlük"],
     ["hakkinda", "Hakkında ve güncelleme", "sürüm güncelle"],
+    ["hakkinda", "Sorun bildir", "sorun hata rapor bozuk çalışmıyor destek"],
   ];
   const KIND: Record<SearchHit["kind"], [string, IconName]> = {
     note: ["Notlar", "note"],
@@ -120,7 +121,7 @@
       out.push({ key: `s-${s.id}`, group: "Ekranlar", icon: s.icon, title: s.label, sub: "", image: null, go: () => (close(), onnavigate(s.id)) });
     }
     for (const [id, label, keys] of SETTINGS.filter(([, l, k]) => matches(`${l} ${k}`, q)).slice(0, 3)) {
-      out.push({ key: `t-${id}`, group: "Kontrol Odası", icon: "gear", title: label, sub: "", image: null, go: () => (close(), onnavigate(`settings/${id}`)) });
+      out.push({ key: `t-${id}-${label}`, group: "Kontrol Odası", icon: "gear", title: label, sub: "", image: null, go: () => (close(), onnavigate(`settings/${id}`)) });
     }
     for (const h of hits) {
       const [group, icon] = KIND[h.kind];

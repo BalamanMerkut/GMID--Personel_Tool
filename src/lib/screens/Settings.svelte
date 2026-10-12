@@ -13,6 +13,7 @@
   import Dictation from "../settings/Dictation.svelte";
   import Downloader from "../settings/Downloader.svelte";
   import Update from "../settings/Update.svelte";
+  import Report from "../settings/Report.svelte";
   import { community, joinDiscord } from "../community.svelte";
   import ServersList from "../settings/ServersList.svelte";
   import { getJson, save, setJson, settings } from "../settings.svelte";
@@ -50,7 +51,7 @@
     { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü discord" },
     { id: "sunucular", label: "Sunucular", icon: "server", keys: "sunucu topluluk liste adres github" },
     { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun geri yükle format zip" },
-    { id: "hakkinda", label: "Hakkında", icon: "info", keys: "sürüm hakkında merkut gmid güncelle güncelleme yeni sürüm" },
+    { id: "hakkinda", label: "Hakkında", icon: "info", keys: "sürüm hakkında merkut gmid güncelle güncelleme yeni sürüm sorun bildir hata rapor discord" },
   ];
 
   let search = $state("");
@@ -305,6 +306,7 @@
         <img class="merkut" src={merkutLogo} alt="Merkut Studios" />
       </section>
       <Update />
+      <Report />
     {/if}
   </div>
 </div>

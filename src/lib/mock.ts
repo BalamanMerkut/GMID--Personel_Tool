@@ -718,6 +718,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       if (m) m.muted = Boolean(a.muted);
       return;
     }
+    case "report_create":
+      await wait(500);
+      return { path: "C:\\Users\\Sen\\Documents\\GMID Tool\\Raporlar\\GMID-Sorun.zip", summary: `🐞 GMID Tool sorunu: ${String(a.description).split("\n")[0] || "açıklama yok"}` };
     case "community_discord":
       return "https://discord.gg/gmid";
     case "fps_status":

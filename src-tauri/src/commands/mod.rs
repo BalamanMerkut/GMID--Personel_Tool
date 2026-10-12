@@ -224,3 +224,30 @@ pub fn wrapped_save(
 pub fn search_all(db: State<'_, Db>, query: String) -> Vec<crate::search::Hit> {
     crate::search::search(&db, &query)
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportResult {
+    path: String,
+    summary: String,
+}
+
+/// Sorun raporu (zip) oluşturur ve klasörde gösterir; panoya konacak özeti döner.
+#[tauri::command]
+pub fn report_create(
+    app: AppHandle,
+    dir: State<'_, DataDir>,
+    description: String,
+    with_logs: bool,
+) -> CmdResult<ReportResult> {
+    use tauri::Manager;
+    let home = app
+        .path()
+        .home_dir()
+        .map(|h| h.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (path, summary) = crate::report::create(dir.root(), &home, &description, with_logs)?;
+    let _ = app.opener().reveal_item_in_dir(&path);
+    crate::log!("Sorun raporu oluşturuldu");
+    Ok(ReportResult { path, summary })
+}

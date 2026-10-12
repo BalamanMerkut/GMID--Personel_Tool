@@ -309,6 +309,12 @@ export const api = {
     },
   },
 
+  report: {
+    /** Sorun raporu (zip) oluşturur, klasörde gösterir; panoya konacak özeti döner. */
+    create: (description: string, withLogs: boolean) =>
+      call<{ path: string; summary: string }>("report_create", { description, withLogs }),
+  },
+
   community: {
     /** GMID Discord davet bağlantısı (yoksa null). */
     discord: () => call<string | null>("community_discord"),

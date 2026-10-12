@@ -20,6 +20,7 @@ mod paths;
 mod perf;
 mod playlists;
 mod reminders;
+mod report;
 mod restore;
 mod reviews;
 mod scheduler;
@@ -191,6 +192,7 @@ pub fn run() {
             commands::backup_now,
             commands::import_background,
             commands::open_url,
+            commands::report_create,
             commands::search_all,
             commands::wrapped_get,
             commands::wrapped_save,
