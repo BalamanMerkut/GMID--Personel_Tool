@@ -821,3 +821,15 @@ export interface FpsStatus {
   relogin: boolean;
   message: string | null;
 }
+
+/** Ses karıştırıcısındaki bir uygulama. */
+export interface AppVolume {
+  /** 0: sistem sesleri */
+  pid: number;
+  name: string;
+  exe: string;
+  level: number;
+  muted: boolean;
+  /** Şu an ses çıkarıyor mu. */
+  active: boolean;
+}

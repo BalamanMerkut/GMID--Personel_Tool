@@ -174,3 +174,35 @@ pub fn foreground_fullscreen() -> Option<(u32, String)> {
 pub fn foreground_fullscreen() -> Option<(u32, String)> {
     None
 }
+
+/// Sürecin exe adı (küçük harf, "discord.exe"); korumalı süreçlerde `None`.
+#[cfg(windows)]
+pub fn exe_of(pid: u32) -> Option<String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 1024];
+        let mut size = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(
+            h,
+            PROCESS_NAME_WIN32,
+            windows::core::PWSTR(buf.as_mut_ptr()),
+            &mut size,
+        )
+        .is_ok();
+        let _ = CloseHandle(h);
+        ok.then(|| {
+            let path = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
+            path.rsplit('\\').next().unwrap_or(&path).to_string()
+        })
+    }
+}
+
+#[cfg(not(windows))]
+pub fn exe_of(pid: u32) -> Option<String> {
+    list().into_iter().find(|p| p.pid == pid).map(|p| p.name)
+}

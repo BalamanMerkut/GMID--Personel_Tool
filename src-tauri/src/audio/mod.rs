@@ -30,6 +30,59 @@ pub struct AudioState {
     pub lock: Option<f32>,
 }
 
+/// Ses karıştırıcısındaki bir uygulama (varsayılan çıkış cihazında).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppVolume {
+    /// Süreç kimliği (0: sistem sesleri).
+    pub pid: u32,
+    pub name: String,
+    pub exe: String,
+    /// 0.0 – 1.0
+    pub level: f32,
+    pub muted: bool,
+    /// Şu an ses çıkarıyor mu.
+    pub active: bool,
+}
+
+/// "discord.exe" → "Discord"; bilinenlere güzel ad.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn app_label(exe: &str) -> String {
+    let stem = exe.trim_end_matches(".exe");
+    let known = [
+        ("discord", "Discord"),
+        ("discordptb", "Discord PTB"),
+        ("chrome", "Chrome"),
+        ("msedge", "Edge"),
+        ("firefox", "Firefox"),
+        ("opera", "Opera"),
+        ("brave", "Brave"),
+        ("spotify", "Spotify"),
+        ("steam", "Steam"),
+        ("steamwebhelper", "Steam"),
+        ("teamspeak3", "TeamSpeak"),
+        ("ts3client_win64", "TeamSpeak"),
+        ("vlc", "VLC"),
+        ("obs64", "OBS"),
+        ("gmid-tool", "GMID Tool"),
+        ("gmid tool", "GMID Tool"),
+        ("whatsapp", "WhatsApp"),
+        ("telegram", "Telegram"),
+        ("valorant-win64-shipping", "VALORANT"),
+        ("cs2", "Counter-Strike 2"),
+        ("leagueoflegends", "League of Legends"),
+        ("league of legends", "League of Legends"),
+    ];
+    if let Some((_, n)) = known.iter().find(|(k, _)| *k == stem) {
+        return n.to_string();
+    }
+    let mut c = stem.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => exe.to_string(),
+    }
+}
+
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MicStatus {
@@ -65,6 +118,9 @@ pub(crate) enum Cmd {
     SetVolume(String, f32, Reply<()>),
     SetMute(String, bool, Reply<()>),
     Mic(MicOp, Reply<MicStatus>),
+    Apps(Reply<Vec<AppVolume>>),
+    SetAppVolume(u32, f32, Reply<()>),
+    SetAppMute(u32, bool, Reply<()>),
     // Windows'tan gelen olaylar
     MicNotify(f32),
     DevicesChanged,
@@ -124,6 +180,22 @@ impl Audio {
     pub fn mic(&self, op: MicOp) -> Result<MicStatus, String> {
         self.call(|r| Cmd::Mic(op, r))
     }
+
+    /// Ses karıştırıcısı: varsayılan çıkıştaki uygulamalar.
+    pub fn apps(&self) -> Result<Vec<AppVolume>, String> {
+        if self.tx.is_none() {
+            return Ok(Vec::new());
+        }
+        self.call(Cmd::Apps)
+    }
+
+    pub fn set_app_volume(&self, pid: u32, level: f32) -> Result<(), String> {
+        self.call(|r| Cmd::SetAppVolume(pid, level.clamp(0.0, 1.0), r))
+    }
+
+    pub fn set_app_mute(&self, pid: u32, muted: bool) -> Result<(), String> {
+        self.call(|r| Cmd::SetAppMute(pid, muted, r))
+    }
 }
 
 /// Takma ad verilmemiş cihazlar için adından simge tahmini.
@@ -163,5 +235,18 @@ mod tests {
             "monitor"
         );
         assert_eq!(guess_icon("Hoparlör (Realtek(R) Audio)"), "speaker");
+    }
+}
+
+#[cfg(test)]
+mod app_tests {
+    use super::app_label;
+
+    #[test]
+    fn app_names() {
+        assert_eq!(app_label("discord.exe"), "Discord");
+        assert_eq!(app_label("valorant-win64-shipping.exe"), "VALORANT");
+        assert_eq!(app_label("hades2.exe"), "Hades2");
+        assert_eq!(app_label(""), "");
     }
 }

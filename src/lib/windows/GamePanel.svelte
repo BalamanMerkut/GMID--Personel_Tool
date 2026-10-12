@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { api } from "../api";
   import { on } from "../bus";
+  import AppMixer from "../components/AppMixer.svelte";
   import Icon from "../Icon.svelte";
   import { clock, playtime } from "../time";
   import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PerfSample, Reminder } from "../types";
@@ -225,6 +226,10 @@
         {/if}
       </section>
 
+      <section class="card wide">
+        <h3><Icon name="headphones" size={17} />Uygulamalar</h3>
+        <AppMixer compact max={6} />
+      </section>
       <section class="card">
         <h3><Icon name="mic" size={17} />Mikrofon</h3>
         {#if mic}

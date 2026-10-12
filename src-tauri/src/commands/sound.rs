@@ -1,6 +1,6 @@
 //! Ses & Mikrofon ve kısayol komutları.
 
-use crate::audio::{Audio, AudioState, MicOp, MicStatus};
+use crate::audio::{AppVolume, Audio, AudioState, MicOp, MicStatus};
 use crate::hotkeys::{self, HotkeyStatus};
 use tauri::{AppHandle, State};
 
@@ -22,6 +22,22 @@ pub fn audio_set_volume(audio: State<'_, Audio>, id: String, level: f32) -> Resu
 #[tauri::command]
 pub fn audio_set_mute(audio: State<'_, Audio>, id: String, muted: bool) -> Result<(), String> {
     audio.set_mute(id, muted)
+}
+
+/// Ses karıştırıcısı: varsayılan çıkıştaki uygulamalar.
+#[tauri::command]
+pub fn audio_apps(audio: State<'_, Audio>) -> Result<Vec<AppVolume>, String> {
+    audio.apps()
+}
+
+#[tauri::command]
+pub fn audio_set_app_volume(audio: State<'_, Audio>, pid: u32, level: f32) -> Result<(), String> {
+    audio.set_app_volume(pid, level)
+}
+
+#[tauri::command]
+pub fn audio_set_app_mute(audio: State<'_, Audio>, pid: u32, muted: bool) -> Result<(), String> {
+    audio.set_app_mute(pid, muted)
 }
 
 /// `level`: kilitlenecek seviye (0–1); `None` kilidi kapatır.

@@ -225,35 +225,8 @@ fn is_minimized(_h: isize) -> bool {
     false
 }
 
-#[cfg(windows)]
 fn exe_name(pid: u32) -> Option<String> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-        PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-    unsafe {
-        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-        let mut buf = [0u16; 1024];
-        let mut size = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(
-            h,
-            PROCESS_NAME_WIN32,
-            windows::core::PWSTR(buf.as_mut_ptr()),
-            &mut size,
-        )
-        .is_ok();
-        let _ = CloseHandle(h);
-        ok.then(|| {
-            let path = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
-            path.rsplit('\\').next().unwrap_or(&path).to_string()
-        })
-    }
-}
-
-#[cfg(not(windows))]
-fn exe_name(_pid: u32) -> Option<String> {
-    None
+    crate::games::procs::exe_of(pid)
 }
 
 /// Panel açılmadan önceki ön plan penceresinin süreci (FPS'i o oyundan okumak için).

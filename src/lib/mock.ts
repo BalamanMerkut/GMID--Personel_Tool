@@ -348,6 +348,13 @@ let installList: InstallItem[] = ["Google.Chrome", "Valve.Steam", "Discord.Disco
   .filter(Boolean);
 let installRun: InstallRun = { running: false, stopping: false, steps: [], started: null, finished: null };
 let installStop = false;
+const mixApps = [
+  { pid: 4120, name: "VALORANT", exe: "valorant-win64-shipping.exe", level: 0.8, muted: false, active: true },
+  { pid: 2210, name: "Discord", exe: "discord.exe", level: 0.55, muted: false, active: true },
+  { pid: 3300, name: "Spotify", exe: "spotify.exe", level: 0.3, muted: false, active: true },
+  { pid: 5100, name: "Chrome", exe: "chrome.exe", level: 1, muted: true, active: false },
+  { pid: 0, name: "Sistem sesleri", exe: "", level: 0.6, muted: false, active: false },
+];
 const day = 86_400_000;
 const gw = (id: string, title: string, store: string, platforms: string, worth: string | null, ends: number | null, color: string, upcoming = false) => ({
   id, title, store, platforms, worth, ends, upcoming, starts: upcoming ? now() + 4 * day : now() - day,
@@ -699,6 +706,18 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       gameMode = a.on ? { ...gameMode, active: true, reason: "manual", since: now() } : { ...gameMode, active: false, reason: null, since: null };
       emit("gamemode", gameMode);
       return gameMode;
+    case "audio_apps":
+      return mixApps;
+    case "audio_set_app_volume": {
+      const m = mixApps.find((x) => x.pid === a.pid);
+      if (m) m.level = Number(a.level);
+      return;
+    }
+    case "audio_set_app_mute": {
+      const m = mixApps.find((x) => x.pid === a.pid);
+      if (m) m.muted = Boolean(a.muted);
+      return;
+    }
     case "community_discord":
       return "https://discord.gg/gmid";
     case "fps_status":

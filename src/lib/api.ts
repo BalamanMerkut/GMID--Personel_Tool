@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BackupManifest, DealsSnapshot, FpsStatus, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -118,6 +118,10 @@ export const api = {
     setMute: (id: string, muted: boolean) => call<void>("audio_set_mute", { id, muted }),
     /** `null` kilidi kapatır. */
     setLock: (level: number | null) => call<MicStatus>("mic_set_lock", { level }),
+    /** Uygulama başına ses (varsayılan çıkış). */
+    apps: () => call<AppVolume[]>("audio_apps"),
+    setAppVolume: (pid: number, level: number) => call<void>("audio_set_app_volume", { pid, level }),
+    setAppMute: (pid: number, muted: boolean) => call<void>("audio_set_app_mute", { pid, muted }),
   },
 
   hotkeys: {

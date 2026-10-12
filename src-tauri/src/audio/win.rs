@@ -1,12 +1,13 @@
 //! Windows Core Audio uygulaması.
 #![allow(non_snake_case)]
 
-use super::{AudioState, Cmd, Device, MicOp, MicStatus};
+use super::{app_label, AppVolume, AudioState, Cmd, Device, MicOp, MicStatus};
 use crate::db::Db;
 use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+use windows::core::Interface;
 use windows::core::{
     implement, interface, IUnknown, IUnknown_Vtbl, Result as WinResult, GUID, HRESULT, HSTRING,
     PCWSTR,
@@ -20,6 +21,10 @@ use windows::Win32::Media::Audio::{
     eCapture, eCommunications, eConsole, eMultimedia, eRender, EDataFlow, ERole, IMMDevice,
     IMMDeviceEnumerator, IMMNotificationClient, IMMNotificationClient_Impl, MMDeviceEnumerator,
     AUDIO_VOLUME_NOTIFICATION_DATA, DEVICE_STATE, DEVICE_STATE_ACTIVE,
+};
+use windows::Win32::Media::Audio::{
+    AudioSessionStateActive, AudioSessionStateExpired, IAudioSessionControl2,
+    IAudioSessionManager2, ISimpleAudioVolume,
 };
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
@@ -172,6 +177,8 @@ fn reply_error(cmd: Cmd, msg: &str) {
             drop(r.send(Err(msg)))
         }
         Cmd::Mic(_, r) => drop(r.send(Err(msg))),
+        Cmd::Apps(r) => drop(r.send(Err(msg))),
+        Cmd::SetAppVolume(_, _, r) | Cmd::SetAppMute(_, _, r) => drop(r.send(Err(msg))),
         _ => {}
     }
 }
@@ -240,6 +247,19 @@ impl Worker {
                 drop(r.send(res));
             }
             Cmd::Mic(op, r) => drop(r.send(self.mic_op(op).map_err(|e| e.to_string()))),
+            Cmd::Apps(r) => drop(r.send(self.apps().map_err(|e| e.to_string()))),
+            Cmd::SetAppVolume(pid, level, r) => {
+                let res = self
+                    .for_app(pid, |v| unsafe { v.SetMasterVolume(level, &EVENT_CTX) })
+                    .map_err(|e| e.to_string());
+                drop(r.send(res));
+            }
+            Cmd::SetAppMute(pid, muted, r) => {
+                let res = self
+                    .for_app(pid, |v| unsafe { v.SetMute(muted, &EVENT_CTX) })
+                    .map_err(|e| e.to_string());
+                drop(r.send(res));
+            }
             Cmd::MicNotify(level) => self.on_mic_changed(level),
             Cmd::DevicesChanged => self.changed(),
             Cmd::DefaultChanged => {
@@ -295,6 +315,106 @@ impl Worker {
                 });
             }
             Ok(out)
+        }
+    }
+
+    // ---- uygulama başına ses ----
+
+    /// Varsayılan çıkıştaki ses oturumları: (süreç, sistem sesi mi, etkin mi, ses denetimi).
+    fn sessions(&self) -> WinResult<Vec<(u32, bool, bool, ISimpleAudioVolume)>> {
+        unsafe {
+            let dev = self.enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
+            let mgr: IAudioSessionManager2 = dev.Activate(CLSCTX_ALL, None)?;
+            let list = mgr.GetSessionEnumerator()?;
+            let mut out = Vec::new();
+            for i in 0..list.GetCount()? {
+                let Ok(ctl) = list.GetSession(i) else {
+                    continue;
+                };
+                let Ok(state) = ctl.GetState() else { continue };
+                if state == AudioSessionStateExpired {
+                    continue;
+                }
+                let Ok(ctl2) = ctl.cast::<IAudioSessionControl2>() else {
+                    continue;
+                };
+                let pid = ctl2.GetProcessId().unwrap_or(0);
+                // S_OK (0) ise sistem sesleri oturumu.
+                let system = ctl2.IsSystemSoundsSession() == HRESULT(0);
+                let Ok(vol) = ctl.cast::<ISimpleAudioVolume>() else {
+                    continue;
+                };
+                out.push((pid, system, state == AudioSessionStateActive, vol));
+            }
+            Ok(out)
+        }
+    }
+
+    fn apps(&self) -> WinResult<Vec<AppVolume>> {
+        let own = std::process::id();
+        let mut out: Vec<AppVolume> = Vec::new();
+        for (pid, system, active, vol) in self.sessions()? {
+            let key = if system { 0 } else { pid };
+            if let Some(a) = out.iter_mut().find(|a| a.pid == key) {
+                a.active |= active;
+                continue;
+            }
+            let (exe, name) = if system {
+                (String::new(), "Sistem sesleri".to_string())
+            } else {
+                let exe = crate::games::procs::exe_of(pid).unwrap_or_default();
+                if exe.is_empty() && pid != own {
+                    (exe, format!("Uygulama {pid}"))
+                } else {
+                    let n = if pid == own {
+                        "GMID Tool".to_string()
+                    } else {
+                        app_label(&exe)
+                    };
+                    (exe, n)
+                }
+            };
+            let (level, muted) = unsafe {
+                (
+                    vol.GetMasterVolume().unwrap_or(1.0),
+                    vol.GetMute().map(|m| m.as_bool()).unwrap_or(false),
+                )
+            };
+            out.push(AppVolume {
+                pid: key,
+                name,
+                exe,
+                level,
+                muted,
+                active,
+            });
+        }
+        // Ses çıkaranlar önce, sonra ada göre; sistem sesleri en sonda.
+        out.sort_by(|a, b| {
+            (a.pid == 0)
+                .cmp(&(b.pid == 0))
+                .then(b.active.cmp(&a.active))
+                .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
+        Ok(out)
+    }
+
+    /// Bir uygulamanın bütün oturumlarına uygular (Discord gibi birden çok oturum açanlar için).
+    fn for_app(&self, pid: u32, f: impl Fn(&ISimpleAudioVolume) -> WinResult<()>) -> WinResult<()> {
+        let mut any = false;
+        for (p, system, _, vol) in self.sessions()? {
+            if (pid == 0 && system) || (pid != 0 && p == pid && !system) {
+                f(&vol)?;
+                any = true;
+            }
+        }
+        if any {
+            Ok(())
+        } else {
+            Err(windows::core::Error::new(
+                windows::Win32::Foundation::E_INVALIDARG,
+                "Uygulama artık ses çıkarmıyor",
+            ))
         }
     }
 

@@ -3,6 +3,7 @@
   import { api } from "../api";
   import { debounce, on } from "../bus";
   import Switch from "../components/Switch.svelte";
+  import AppMixer from "../components/AppMixer.svelte";
   import Icon from "../Icon.svelte";
   import type { IconName } from "../icons";
   import { getJson, setJson } from "../settings.svelte";
@@ -155,6 +156,14 @@
       <span class="sub small">Kısayol: <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>A</kbd></span>
     </div>
     {#if audio}{@render deviceList(audio.outputs, "out")}{/if}
+  </section>
+
+  <section class="panel">
+    <div class="spread">
+      <h3 class="h2"><Icon name="headphones" />Uygulama sesleri</h3>
+      <span class="sub small">Oyunda Ctrl+Shift+G panelinde de var</span>
+    </div>
+    <AppMixer max={14} />
   </section>
 
   <section class="panel">
