@@ -3,18 +3,25 @@
 //!
 //! - PresentMon (MIT lisanslı, ~1 MB) ilk kurulumda `Araclar\PresentMon` klasörüne indirilir; dosya SHA-256 ile
 //!   doğrulanır.
-//! - Windows bu kayıtları yönetici olmayanlara yalnız "Performance Log Users" (S-1-5-32-559) grubundaysa açar.
-//!   "FPS ölçümünü aç" bir kez yönetici izni ister, kullanıcıyı bu gruba ekler; Windows oturumu bir kez kapatılıp
-//!   açılınca (ya da yeniden başlatınca) geçerli olur.
-//! - Panel açıkken oyunun süreci için çalışır, panel kapanınca durdurulur.
+//! - Windows bu kayıtları yalnız yöneticiye ya da "Performance Log Users" (S-1-5-32-559) grubuna açar.
+//!   "FPS ölçümünü aç" bir kez yönetici izni (UAC) ister ve iki şey yapar:
+//!   1. **Görev:** "GMID FPS" adlı, en yüksek yetkiyle ve görünmeden (pencere açmadan) çalışan bir zamanlanmış
+//!      görev kaydeder. Görevi kullanıcı kendisi her an başlatabildiği için oturumu kapatıp açmaya gerek kalmaz;
+//!      çıktı geçici klasördeki bir CSV dosyasından okunur.
+//!   2. **Grup:** kullanıcıyı gruba ekler; Windows oturumu bir kez yenilendikten sonra PresentMon doğrudan
+//!      (görevsiz) çalışır. Görev kaydı herhangi bir nedenle olmazsa bu yol kalır.
+//! - Tüm programların kareleri izlenir (dwm hariç); panel açılmadan önce öndeki pencerenin süreci seçilir, o kare
+//!   göndermiyorsa (başlatıcı süreci gibi) en çok kare gönderen program alınır.
+//! - Panel açıkken çalışır, panel kapanınca durdurulur.
 
 use crate::util::hide_console;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Read};
+use std::collections::{HashMap, VecDeque};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -25,6 +32,23 @@ const SHA256: &str = "d74183e7ae630f72cd3690be0373ecbfdc6cbb86578148aab8fa2a7166
 /// Performance Log Users grubunun herkesçe bilinen kimliği (Windows dili fark etmez).
 pub const GROUP_SID: &str = "S-1-5-32-559";
 const SESSION: &str = "GMIDPanel";
+/// Yönetici izni olmadan başlatılabilen zamanlanmış görev.
+const TASK: &str = "GMID FPS";
+/// Görev en çok 20 dakika çalışır (Windows durdurur); panel daha uzun açıksa 19. dakikada yeniden başlatılır.
+const TASK_RESTART: Duration = Duration::from_secs(19 * 60);
+/// Kare göndermesine rağmen oyun sayılmayan programlar (panelin kendisi WebView2'dir).
+const IGNORED: &[&str] = &[
+    "msedgewebview2.exe",
+    "explorer.exe",
+    "searchhost.exe",
+    "searchapp.exe",
+    "textinputhost.exe",
+    "shellexperiencehost.exe",
+    "startmenuexperiencehost.exe",
+    "applicationframehost.exe",
+    "gmid tool.exe",
+    "gmid-tool.exe",
+];
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -32,7 +56,7 @@ pub enum State {
     /// PresentMon indirilmemiş.
     #[default]
     Missing,
-    /// İzin yok (gruba eklenmemiş ya da oturum yenilenmemiş).
+    /// İzin yok (görev kaydedilmemiş, gruba eklenmemiş ya da oturum yenilenmemiş).
     Permission,
     Ready,
     Running,
@@ -43,52 +67,98 @@ pub enum State {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub state: State,
-    /// Gruba eklenme istendi ama oturum henüz yenilenmedi.
+    /// Gruba eklenme istendi ama oturum henüz yenilenmedi (görev de yok).
     pub relogin: bool,
     pub message: Option<String>,
 }
 
-/// CSV başlığından kare süresi sütunu; satırlardan milisaniye.
+/// CSV başlığından süreç, program adı ve kare süresi sütunları; satırlardan (süreç, ad, milisaniye).
 #[derive(Default)]
 pub struct Parser {
-    col: Option<usize>,
+    cols: Option<(usize, usize, usize)>,
 }
 
 impl Parser {
-    pub fn feed(&mut self, line: &str) -> Option<f64> {
-        let cells: Vec<&str> = line.trim().split(',').collect();
+    pub fn feed<'a>(&mut self, line: &'a str) -> Option<(u32, &'a str, f64)> {
+        let cells: Vec<&str> = line.trim().split(',').map(str::trim).collect();
         if cells
             .first()
             .is_some_and(|c| c.eq_ignore_ascii_case("Application"))
         {
-            self.col = ["MsBetweenPresents", "msBetweenPresents", "FrameTime"]
-                .iter()
-                .find_map(|name| cells.iter().position(|c| c.trim() == *name));
+            let find = |names: &[&str]| {
+                names
+                    .iter()
+                    .find_map(|n| cells.iter().position(|c| c.eq_ignore_ascii_case(n)))
+            };
+            self.cols = find(&["MsBetweenPresents", "FrameTime"])
+                .zip(find(&["ProcessID"]))
+                .map(|(ms, pid)| (0, pid, ms));
             return None;
         }
-        let v: f64 = cells.get(self.col?)?.trim().parse().ok()?;
-        (v > 0.0 && v < 5000.0).then_some(v)
+        let (app, pid, ms) = self.cols?;
+        let v: f64 = cells.get(ms)?.parse().ok()?;
+        let pid: u32 = cells.get(pid)?.parse().ok()?;
+        (v > 0.0 && v < 5000.0).then_some((pid, *cells.get(app)?, v))
     }
 }
 
-/// Son bir saniyedeki karelerden FPS.
-pub fn fps_of(frames: &VecDeque<(Instant, f64)>, now: Instant) -> Option<f32> {
-    let recent: Vec<f64> = frames
+#[derive(Clone, Copy, Debug)]
+pub struct Frame {
+    pub at: Instant,
+    pub pid: u32,
+    pub ms: f64,
+}
+
+/// Son bir saniyedeki karelerden FPS: istenen süreç kare gönderiyorsa o. İstenen süreç birkaç saniye içinde
+/// hiç kare göndermediyse (başlatıcı gibi, çizimi başka süreç yapıyor) en çok kare gönderen (yok sayılanlar
+/// hariç); kısa süre önce gönderip durduysa (oyun küçüldü, duraklatıldı) başka bir programınki gösterilmez.
+/// (fps, süreç)
+pub fn pick(
+    frames: &VecDeque<Frame>,
+    now: Instant,
+    want: Option<u32>,
+    ignored: &dyn Fn(u32) -> bool,
+) -> Option<(f32, u32)> {
+    let mut per: HashMap<u32, (usize, f64)> = HashMap::new();
+    for f in frames
         .iter()
-        .filter(|(t, _)| now.duration_since(*t) <= Duration::from_millis(1200))
-        .map(|(_, ms)| *ms)
-        .collect();
-    if recent.len() < 2 {
-        return None;
+        .filter(|f| now.duration_since(f.at) <= Duration::from_millis(1200))
+    {
+        let e = per.entry(f.pid).or_default();
+        e.0 += 1;
+        e.1 += f.ms;
     }
-    let avg = recent.iter().sum::<f64>() / recent.len() as f64;
-    Some((1000.0 / avg) as f32)
+    if let Some(w) = want {
+        let recent = per.get(&w).is_some_and(|(n, _)| *n >= 2);
+        if !recent && frames.iter().any(|f| f.pid == w) {
+            return None;
+        }
+    }
+    let chosen = want
+        .filter(|p| per.get(p).is_some_and(|(n, _)| *n >= 2))
+        .or_else(|| {
+            per.iter()
+                .filter(|(pid, (n, _))| *n >= 10 && !ignored(**pid))
+                .max_by_key(|(_, (n, _))| *n)
+                .map(|(pid, _)| *pid)
+        })?;
+    let (n, sum) = per[&chosen];
+    Some(((1000.0 / (sum / n as f64)) as f32, chosen))
+}
+
+enum Run {
+    /// Gruptaki kullanıcı: PresentMon doğrudan, çıktısı borudan.
+    Direct(Child),
+    /// Zamanlanmış görev: çıktısı CSV dosyasından.
+    Task(Arc<AtomicBool>),
 }
 
 #[derive(Default)]
 pub struct PresentMon {
-    run: Mutex<Option<(u32, Child)>>,
-    frames: Arc<Mutex<VecDeque<(Instant, f64)>>>,
+    run: Mutex<Option<Run>>,
+    started: Mutex<Option<Instant>>,
+    frames: Arc<Mutex<VecDeque<Frame>>>,
+    names: Arc<Mutex<HashMap<u32, String>>>,
     status: Arc<Mutex<Status>>,
 }
 
@@ -96,6 +166,11 @@ pub fn exe(root: &Path) -> PathBuf {
     root.join("Araclar")
         .join("PresentMon")
         .join("PresentMon.exe")
+}
+
+/// Görevin yazdığı CSV (OneDrive'a eşitlenen klasörlerde olmasın diye geçici klasörde).
+fn task_csv() -> PathBuf {
+    std::env::temp_dir().join("gmid-fps.csv")
 }
 
 fn installed(root: &Path) -> bool {
@@ -112,6 +187,20 @@ fn in_group() -> bool {
         .unwrap_or(false)
 }
 
+fn schtasks(args: &[&str]) -> bool {
+    let mut cmd = Command::new("schtasks");
+    cmd.args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    hide_console(&mut cmd);
+    cmd.status().is_ok_and(|s| s.success())
+}
+
+fn task_exists() -> bool {
+    cfg!(windows) && schtasks(&["/query", "/tn", TASK])
+}
+
 /// Bu kullanıcının kimliği (`whoami /user`): "S-1-5-21-…".
 fn user_sid() -> Option<String> {
     let mut cmd = Command::new("whoami");
@@ -121,6 +210,64 @@ fn user_sid() -> Option<String> {
     out.split(',')
         .map(|c| c.trim().trim_matches('"').to_string())
         .find(|c| c.starts_with("S-1-5-"))
+}
+
+/// PresentMon'un ortak seçenekleri: tüm programlar (dwm hariç), yalnız kare süreleri.
+fn common_args() -> Vec<String> {
+    [
+        "--no_console_stats",
+        "--session_name",
+        SESSION,
+        "--stop_existing_session",
+        "--no_track_display",
+        "--no_track_gpu",
+        "--no_track_input",
+        "--exclude",
+        "dwm.exe",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// Görevin komut satırı (PowerShell tek tırnaklı dizesi içinde).
+fn task_arguments() -> String {
+    let mut a = format!("--output_file \"{}\"", task_csv().display());
+    for s in common_args() {
+        a.push(' ');
+        a.push_str(&s);
+    }
+    a
+}
+
+/// Yönetici olarak çalışacak PowerShell betiği: kullanıcıyı gruba ekler, görevi kaydeder. Çıkış kodu 3: ikisi de
+/// olmadı.
+fn setup_script(sid: &str, exe: &Path) -> String {
+    let q = |s: &str| s.replace('\'', "''");
+    format!(
+        r#"$ErrorActionPreference = 'SilentlyContinue'
+$sid = '{sid}'
+$user = (New-Object Security.Principal.SecurityIdentifier $sid).Translate([Security.Principal.NTAccount]).Value
+$group = (New-Object Security.Principal.SecurityIdentifier '{GROUP_SID}').Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]
+Add-LocalGroupMember -SID '{GROUP_SID}' -Member $sid
+if ($user) {{ net localgroup "$group" "$user" /add *> $null }}
+$ok = $false
+if ($user) {{
+  $a = New-ScheduledTaskAction -Execute '{exe}' -Argument '{args}'
+  $p = New-ScheduledTaskPrincipal -UserId $user -LogonType S4U -RunLevel Highest
+  $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew
+  $t = Register-ScheduledTask -TaskName '{TASK}' -Action $a -Principal $p -Settings $s -Force
+  if ($t) {{ $ok = $true }}
+}}
+if (-not $ok) {{
+  $members = (net localgroup "$group") -join ' '
+  if (-not $user -or $members -notmatch [regex]::Escape($user.Split('\')[-1])) {{ exit 3 }}
+}}
+exit 0
+"#,
+        exe = q(&exe.to_string_lossy()),
+        args = q(&task_arguments()),
+    )
 }
 
 impl PresentMon {
@@ -133,7 +280,7 @@ impl PresentMon {
         if !installed(root) {
             s.state = State::Missing;
         } else if s.state == State::Missing {
-            s.state = if in_group() {
+            s.state = if in_group() || task_exists() {
                 State::Ready
             } else {
                 State::Permission
@@ -163,37 +310,55 @@ impl PresentMon {
             std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
             crate::log!("PresentMon {VERSION} kuruldu");
         }
-        let mut st = self.status.lock().unwrap_or_else(|e| e.into_inner());
-        if in_group() {
-            *st = Status {
-                state: State::Ready,
-                ..Default::default()
-            };
-            return Ok(st.clone());
+        if in_group() || task_exists() {
+            return Ok(self.set(State::Ready, None));
         }
         let sid = user_sid().ok_or("Kullanıcı kimliği okunamadı")?;
-        elevate_add_to_group(&sid)?;
-        *st = Status {
-            state: State::Permission,
-            relogin: true,
-            message: Some("Windows oturumunu bir kez kapatıp aç (ya da bilgisayarı yeniden başlat), sonra FPS görünür.".into()),
-        };
-        Ok(st.clone())
+        elevate(&setup_script(&sid, &path))?;
+        if task_exists() {
+            crate::log!("FPS ölçümü: '{TASK}' görevi kaydedildi");
+            return Ok(self.set(State::Ready, None));
+        }
+        crate::log!(
+            "FPS ölçümü: görev kaydedilemedi, kullanıcı Performance Log Users grubuna eklendi"
+        );
+        let mut s = self.set(
+            State::Permission,
+            Some("Windows oturumunu bir kez kapatıp aç (ya da bilgisayarı yeniden başlat), sonra FPS görünür.".into()),
+        );
+        s.relogin = true;
+        Ok(s)
     }
 
-    /// Panel açıkken: oyunun süreci için ölçüm (zaten o süreç için çalışıyorsa dokunmaz). FPS'i döner.
-    pub fn sample(&self, root: &Path, pid: Option<u32>) -> Option<f32> {
-        let pid = pid?;
+    fn set(&self, state: State, message: Option<String>) -> Status {
+        let mut st = self.status.lock().unwrap_or_else(|e| e.into_inner());
+        st.state = state;
+        st.message = message;
+        st.clone()
+    }
+
+    /// Panel açıkken çağrılır: ölçüm çalışmıyorsa başlatır; (fps, programın adı) döner.
+    pub fn sample(&self, root: &Path, pid: Option<u32>) -> Option<(f32, String)> {
         if !installed(root) {
             return None;
         }
         let mut run = self.run.lock().unwrap_or_else(|e| e.into_inner());
+        let started = *self.started.lock().unwrap_or_else(|e| e.into_inner());
         let alive = match run.as_mut() {
-            Some((p, child)) if *p == pid => child.try_wait().ok().flatten().is_none(),
-            _ => false,
+            Some(Run::Direct(child)) => child.try_wait().ok().flatten().is_none(),
+            // Görevin süre sınırı var (unutulursa dosya büyümesin): dolmadan yeniden başlatılır.
+            Some(Run::Task(stop)) => {
+                let fresh = started.is_some_and(|t| t.elapsed() < TASK_RESTART);
+                if !fresh {
+                    stop.store(true, Ordering::Relaxed);
+                    schtasks(&["/end", "/tn", TASK]);
+                }
+                fresh && !stop.load(Ordering::Relaxed)
+            }
+            None => false,
         };
         if !alive {
-            if let Some((_, mut child)) = run.take() {
+            if let Some(Run::Direct(mut child)) = run.take() {
                 let _ = child.kill();
             }
             let st = self
@@ -202,76 +367,115 @@ impl PresentMon {
                 .unwrap_or_else(|e| e.into_inner())
                 .state
                 .clone();
-            // İzin yoksa her saniye yeniden denenmez (panel yeniden açılınca denenir).
-            if st == State::Permission || st == State::Error {
+            // İzin yoksa ya da hata verdiyse her saniye yeniden denenmez (panel yeniden açılınca denenir).
+            if matches!(st, State::Permission | State::Error) {
                 return None;
             }
             self.frames
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .clear();
-            match self.spawn(root, pid) {
-                Ok(child) => *run = Some((pid, child)),
-                Err(e) => {
-                    let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
-                    s.state = State::Error;
-                    s.message = Some(e);
+            match self.start(root) {
+                Ok(r) => {
+                    *run = Some(r);
+                    *self.started.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                }
+                Err((state, msg)) => {
+                    crate::log!("FPS ölçümü başlamadı: {msg}");
+                    self.set(state, Some(msg));
                     return None;
                 }
             }
         }
         drop(run);
-        fps_of(
+        let own = std::process::id();
+        let names = self.names.lock().unwrap_or_else(|e| e.into_inner());
+        let ignored = |p: u32| {
+            p == own
+                || names
+                    .get(&p)
+                    .is_some_and(|n| IGNORED.contains(&n.to_lowercase().as_str()))
+        };
+        let (fps, chosen) = pick(
             &self.frames.lock().unwrap_or_else(|e| e.into_inner()),
             Instant::now(),
-        )
+            pid,
+            &ignored,
+        )?;
+        Some((fps, names.get(&chosen).cloned().unwrap_or_default()))
     }
 
-    fn spawn(&self, root: &Path, pid: u32) -> Result<Child, String> {
+    /// Ölçüm ne zamandır çalışıyor (çalışmıyorsa `None`).
+    pub fn running_for(&self) -> Option<Duration> {
+        if self.run.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+            return None;
+        }
+        self.started
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .map(|t| t.elapsed())
+    }
+
+    fn start(&self, root: &Path) -> Result<Run, (State, String)> {
+        if in_group() {
+            return self.spawn_direct(root).map(Run::Direct);
+        }
+        if task_exists() {
+            return self.start_task().map(Run::Task);
+        }
+        Err((
+            State::Permission,
+            "FPS için izin gerekiyor: Oyun Modu → FPS ölçümünü aç".into(),
+        ))
+    }
+
+    fn record(&self) -> impl FnMut(&str) + Send + 'static {
+        let frames = self.frames.clone();
+        let names = self.names.clone();
+        let mut parser = Parser::default();
+        move |line: &str| {
+            if let Some((pid, app, ms)) = parser.feed(line) {
+                names
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .entry(pid)
+                    .or_insert_with(|| app.to_string());
+                let mut f = frames.lock().unwrap_or_else(|e| e.into_inner());
+                let now = Instant::now();
+                f.push_back(Frame { at: now, pid, ms });
+                while f
+                    .front()
+                    .is_some_and(|x| now.duration_since(x.at) > Duration::from_secs(3))
+                {
+                    f.pop_front();
+                }
+            }
+        }
+    }
+
+    fn spawn_direct(&self, root: &Path) -> Result<Child, (State, String)> {
         let mut cmd = Command::new(exe(root));
-        cmd.args(["--process_id", &pid.to_string()])
-            .args(["--output_stdout", "--no_console_stats"])
-            .args(["--session_name", SESSION, "--stop_existing_session"])
-            .args([
-                "--terminate_on_proc_exit",
-                "--no_track_display",
-                "--no_track_gpu",
-                "--no_track_input",
-            ])
+        cmd.arg("--output_stdout")
+            .args(common_args())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         hide_console(&mut cmd);
         let mut child = cmd
             .spawn()
-            .map_err(|e| format!("PresentMon açılamadı: {e}"))?;
-        let frames = self.frames.clone();
-        let status = self.status.clone();
+            .map_err(|e| (State::Error, format!("PresentMon açılamadı: {e}")))?;
         let out = child.stdout.take();
         let err = child.stderr.take();
-        {
-            let mut s = status.lock().unwrap_or_else(|e| e.into_inner());
-            s.state = State::Running;
-            s.message = None;
-        }
+        self.set(State::Running, None);
+        let status = self.status.clone();
+        let mut record = self.record();
         std::thread::spawn(move || {
-            let mut parser = Parser::default();
             if let Some(out) = out {
                 for line in BufReader::new(out).lines().map_while(Result::ok) {
-                    if let Some(ms) = parser.feed(&line) {
-                        let mut f = frames.lock().unwrap_or_else(|e| e.into_inner());
-                        let now = Instant::now();
-                        f.push_back((now, ms));
-                        while f
-                            .front()
-                            .is_some_and(|(t, _)| now.duration_since(*t) > Duration::from_secs(3))
-                        {
-                            f.pop_front();
-                        }
-                    }
+                    record(&line);
                 }
             }
-            // Çıktı bitti: izin hatası mı?
+            // Çıktı bitti: neden?
             let mut text = String::new();
             if let Some(mut e) = err {
                 let _ = e.read_to_string(&mut text);
@@ -281,9 +485,13 @@ impl PresentMon {
             if lower.contains("denied") || lower.contains("performance log users") {
                 s.state = State::Permission;
                 s.message = Some("FPS için izin gerekiyor: Oyun Modu → FPS ölçümünü aç".into());
+                crate::log!("PresentMon: izin yok");
             } else if s.state == State::Running {
-                // Hata verdiyse panel yeniden açılana dek tekrar denenmez (her saniye başlatılmasın).
-                match text.lines().rev().find(|l| l.contains("error")) {
+                match text
+                    .lines()
+                    .rev()
+                    .find(|l| l.to_lowercase().contains("error"))
+                {
                     Some(l) => {
                         s.state = State::Error;
                         s.message = Some(l.trim().to_string());
@@ -296,24 +504,78 @@ impl PresentMon {
         Ok(child)
     }
 
-    /// Panel kapanınca. Süreç kapatılsa da Windows'taki izleme oturumu açık kalır; o da kapatılır.
+    fn start_task(&self) -> Result<Arc<AtomicBool>, (State, String)> {
+        let csv = task_csv();
+        let _ = std::fs::remove_file(&csv);
+        if !schtasks(&["/run", "/tn", TASK]) {
+            return Err((
+                State::Permission,
+                "FPS görevi başlatılamadı: Oyun Modu → FPS ölçümünü aç ile yeniden kur".into(),
+            ));
+        }
+        self.set(State::Running, None);
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let status = self.status.clone();
+        let mut record = self.record();
+        std::thread::spawn(move || {
+            // Dosya birkaç yüz milisaniye içinde oluşur.
+            let begun = Instant::now();
+            let file = loop {
+                if stop2.load(Ordering::Relaxed) {
+                    return;
+                }
+                if let Ok(f) = std::fs::File::open(&csv) {
+                    break f;
+                }
+                if begun.elapsed() > Duration::from_secs(8) {
+                    let mut s = status.lock().unwrap_or_else(|e| e.into_inner());
+                    s.state = State::Error;
+                    s.message = Some(
+                        "FPS görevi çalışmadı; Windows oturumunu bir kez kapatıp açarsan doğrudan ölçülür"
+                            .into(),
+                    );
+                    crate::log!("PresentMon görevi 8 saniyede çıktı dosyası yazmadı");
+                    stop2.store(true, Ordering::Relaxed);
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            };
+            tail(file, &stop2, &mut record);
+        });
+        Ok(stop)
+    }
+
+    /// Panel kapanınca. Doğrudan çalışan süreçte Windows'taki izleme oturumu da kapatılır; görevde bir sonraki
+    /// başlatma eskisini kapatır.
     pub fn stop(&self, root: &Path) {
-        if let Some((_, mut child)) = self.run.lock().unwrap_or_else(|e| e.into_inner()).take() {
-            let _ = child.kill();
-            let _ = child.wait();
-            let mut cmd = Command::new(exe(root));
-            cmd.args(["--terminate_existing_session", "--session_name", SESSION])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-            hide_console(&mut cmd);
-            if let Ok(mut c) = cmd.spawn() {
-                std::thread::spawn(move || {
-                    let _ = c.wait();
+        match self.run.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            Some(Run::Direct(mut child)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let mut cmd = Command::new(exe(root));
+                cmd.args(["--terminate_existing_session", "--session_name", SESSION])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+                hide_console(&mut cmd);
+                if let Ok(mut c) = cmd.spawn() {
+                    std::thread::spawn(move || {
+                        let _ = c.wait();
+                    });
+                }
+            }
+            Some(Run::Task(stop)) => {
+                stop.store(true, Ordering::Relaxed);
+                std::thread::spawn(|| {
+                    schtasks(&["/end", "/tn", TASK]);
+                    let _ = std::fs::remove_file(task_csv());
                 });
             }
+            None => {}
         }
-        // Yeniden açılışta izin bir kez daha denensin (oturum yenilenmiş olabilir).
+        *self.started.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        // Yeniden açılışta izin bir kez daha denensin (oturum yenilenmiş, görev kurulmuş olabilir).
         let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
         if s.state != State::Missing {
             s.state = State::Missing;
@@ -321,19 +583,42 @@ impl PresentMon {
     }
 }
 
-/// Yönetici izniyle (UAC) kullanıcıyı Performance Log Users grubuna ekler.
+/// Büyüyen bir dosyanın yeni satırlarını okur (yarım satırlar tamamlanınca).
+fn tail(mut file: std::fs::File, stop: &AtomicBool, record: &mut dyn FnMut(&str)) {
+    let mut pos = 0u64;
+    let mut pending = String::new();
+    let mut buf = Vec::new();
+    while !stop.load(Ordering::Relaxed) {
+        buf.clear();
+        if file.seek(SeekFrom::Start(pos)).is_ok() {
+            let _ = (&mut file).take(1 << 20).read_to_end(&mut buf);
+        }
+        if buf.is_empty() {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+        pos += buf.len() as u64;
+        pending.push_str(&String::from_utf8_lossy(&buf));
+        while let Some(i) = pending.find('\n') {
+            let line: String = pending.drain(..=i).collect();
+            record(&line);
+        }
+    }
+}
+
+/// Yönetici izniyle (UAC) PowerShell betiği çalıştırır (pencere açmadan), bitmesini bekler.
 #[cfg(windows)]
-fn elevate_add_to_group(sid: &str) -> Result<(), String> {
+fn elevate(script: &str) -> Result<(), String> {
+    use base64::Engine;
     use windows::core::{w, HSTRING};
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject, INFINITE};
     use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
     use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
-    if !sid.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return Err("Geçersiz kullanıcı kimliği".into());
-    }
+    let utf16: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
     let params = HSTRING::from(format!(
-        "-NoProfile -WindowStyle Hidden -Command \"Add-LocalGroupMember -SID '{GROUP_SID}' -Member '{sid}' -ErrorAction SilentlyContinue; exit 0\""
+        "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {encoded}"
     ));
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
@@ -352,16 +637,16 @@ fn elevate_add_to_group(sid: &str) -> Result<(), String> {
             let _ = GetExitCodeProcess(info.hProcess, &mut code);
             let _ = CloseHandle(info.hProcess);
             if code != 0 {
+                crate::log!("FPS izni betiği {code} koduyla bitti");
                 return Err(format!("İzin ayarlanamadı (kod {code})"));
             }
         }
     }
-    crate::log!("FPS ölçümü için kullanıcı Performance Log Users grubuna eklendi");
     Ok(())
 }
 
 #[cfg(not(windows))]
-fn elevate_add_to_group(_sid: &str) -> Result<(), String> {
+fn elevate(_script: &str) -> Result<(), String> {
     Err("Yalnızca Windows'ta".into())
 }
 
@@ -379,15 +664,22 @@ mod tests {
         );
         assert_eq!(
             p.feed(
-                "VALORANT.exe,1234,0x1,DXGI,0,512,1,Hardware: Independent Flip,1.5,6.944,5.1,1.8"
+                "VALORANT.exe,1234,0x1,DXGI,0,512,1,Hardware: Independent Flip,1.5,6.944,5.1,1.8\r\n"
             ),
-            Some(6.944)
+            Some((1234, "VALORANT.exe", 6.944))
+        );
+        // 2.x: MsBetweenPresents varsa o.
+        let mut p2 = Parser::default();
+        p2.feed("Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,PresentFlags,AllowsTearing,PresentMode,MsBetweenSimulationStart,MsBetweenPresents,FrameTime");
+        assert_eq!(
+            p2.feed("cod2.exe,77,0x1,D3D9,0,0,0,Composed: Flip,NA,16.6,16.7"),
+            Some((77, "cod2.exe", 16.6))
         );
         let mut v1 = Parser::default();
         v1.feed("Application,ProcessID,SwapChainAddress,Runtime,SyncInterval,PresentFlags,AllowsTearing,PresentMode,TimeInSeconds,msInPresentAPI,msBetweenPresents");
         assert_eq!(
             v1.feed("cs2.exe,99,0x2,DXGI,0,0,1,Composed: Flip,0.5,0.1,4.0"),
-            Some(4.0)
+            Some((99, "cs2.exe", 4.0))
         );
         assert_eq!(
             v1.feed("cs2.exe,99,0x2,DXGI,0,0,1,Composed: Flip,0.5,0.1,NA"),
@@ -396,15 +688,74 @@ mod tests {
     }
 
     #[test]
-    fn fps_from_recent_frames() {
+    fn picks_wanted_process_or_busiest() {
         let now = Instant::now();
         let mut f = VecDeque::new();
-        f.push_back((now - Duration::from_secs(5), 100.0)); // eski, sayılmaz
-        for _ in 0..120 {
-            f.push_back((now, 1000.0 / 144.0));
-        }
-        let fps = fps_of(&f, now).unwrap();
+        let push = |f: &mut VecDeque<Frame>, pid, ms, n, ago: u64| {
+            for _ in 0..n {
+                f.push_back(Frame {
+                    at: now - Duration::from_millis(ago),
+                    pid,
+                    ms,
+                });
+            }
+        };
+        push(&mut f, 1, 100.0, 5, 5000); // eski, sayılmaz
+        push(&mut f, 10, 1000.0 / 144.0, 140, 100); // oyun
+        push(&mut f, 20, 1000.0 / 60.0, 60, 100); // panel (WebView2)
+        push(&mut f, 30, 1000.0 / 30.0, 3, 100); // az kare
+        let none = |_| false;
+        let (fps, pid) = pick(&f, now, Some(10), &none).unwrap();
+        assert_eq!(pid, 10);
         assert!((143.0..145.0).contains(&fps), "{fps}");
-        assert_eq!(fps_of(&VecDeque::new(), now), None);
+        // İstenen (başlatıcı) kare göndermiyor: en çok kare gönderen.
+        assert_eq!(pick(&f, now, Some(999), &none).unwrap().1, 10);
+        // Oyun küçüldü (2 sn önce kare gönderiyordu): başka programınki gösterilmez.
+        let mut paused = VecDeque::new();
+        push(&mut paused, 10, 7.0, 100, 2500);
+        push(&mut paused, 40, 16.6, 60, 100);
+        assert_eq!(pick(&paused, now, Some(10), &none), None);
+        // Oyun yokken panel sayılmaz.
+        let mut only_panel = VecDeque::new();
+        push(&mut only_panel, 20, 16.6, 60, 100);
+        assert_eq!(pick(&only_panel, now, None, &|p| p == 20), None);
+        assert_eq!(pick(&VecDeque::new(), now, None, &none), None);
+    }
+
+    #[test]
+    fn setup_script_quotes_paths() {
+        let s = setup_script(
+            "S-1-5-21-1-2-3-1001",
+            Path::new(r"C:\Users\O'Neil\Documents\GMID Tool\Araclar\PresentMon\PresentMon.exe"),
+        );
+        assert!(s.contains(r"-Execute 'C:\Users\O''Neil\Documents"));
+        assert!(s.contains("-LogonType S4U -RunLevel Highest"));
+        assert!(s.contains("--exclude dwm.exe"));
+        assert!(s.contains("Register-ScheduledTask -TaskName 'GMID FPS'"));
+    }
+
+    #[test]
+    fn tail_reads_complete_lines() {
+        let path = std::env::temp_dir().join(format!("gmid-tail-{}.csv", std::process::id()));
+        std::fs::write(
+            &path,
+            "Application,ProcessID,MsBetweenPresents\na.exe,1,10\nb.exe,2,2",
+        )
+        .unwrap();
+        let stop = AtomicBool::new(false);
+        let mut lines = Vec::new();
+        let file = std::fs::File::open(&path).unwrap();
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(Duration::from_millis(350));
+                stop.store(true, Ordering::Relaxed);
+            });
+            tail(file, &stop, &mut |l| lines.push(l.trim().to_string()));
+        });
+        assert_eq!(
+            lines,
+            ["Application,ProcessID,MsBetweenPresents", "a.exe,1,10"]
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }

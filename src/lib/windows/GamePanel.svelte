@@ -7,7 +7,7 @@
   import AppMixer from "../components/AppMixer.svelte";
   import Icon from "../Icon.svelte";
   import { clock, playtime } from "../time";
-  import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PerfSample, Reminder } from "../types";
+  import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
 
   let audio = $state<AudioState | null>(null);
   let game = $state<Game | null>(null);
@@ -22,7 +22,15 @@
   let msg = $state("");
   let perf = $state<PerfSample | null>(null);
   /** interactive: panel odakta (Shift+Tab gibi) · glance: oyun önde, panel yalnız gösteriyor. */
-  let openInfo = $state<{ mode: "interactive" | "glance"; exclusive: boolean; minimizes: boolean }>({ mode: "interactive", exclusive: false, minimizes: false });
+  const params = new URLSearchParams(location.search);
+  let openInfo = $state<PanelOpen>({
+    mode: params.has("glance") ? "glance" : "interactive",
+    exclusive: params.has("exclusive"),
+    minimizes: false,
+    exe: params.has("exclusive") ? "hl.exe" : null,
+    borderless: false,
+  });
+  let fpsBusy = $state(false);
   let perfTimer: ReturnType<typeof setInterval> | undefined;
 
   // Ölçüm yalnız panel açıkken (saniyede bir).
@@ -114,6 +122,47 @@
     flash(`${min} dakikalık sayaç başladı`);
   }
 
+  /** FPS yoksa nedeni (panelde görünür). */
+  const fpsWhy = $derived.by(() => {
+    if (!perf || perf.fps != null) return null;
+    if (perf.fpsNote) return perf.fpsNote;
+    switch (perf.fpsState) {
+      case "missing":
+        return "FPS ölçümü kapalı.";
+      case "permission":
+        return "FPS için bir kez Windows izni gerekiyor.";
+      case "error":
+        return "FPS ölçümü başlatılamadı.";
+      default:
+        return null;
+    }
+  });
+  const fpsCanSetup = $derived(!!perf && perf.fps == null && ["missing", "permission", "error"].includes(perf.fpsState));
+
+  async function setupFps() {
+    fpsBusy = true;
+    flash("FPS ölçümü kuruluyor · Windows izin isterse Evet de");
+    try {
+      const st = await api.fps.setup();
+      flash(st.relogin ? "İzin verildi · Windows oturumunu bir kez kapatıp aç" : "FPS ölçümü açıldı");
+    } catch (e) {
+      flash(String(e));
+    } finally {
+      fpsBusy = false;
+    }
+  }
+
+  async function makeBorderless() {
+    if (!openInfo.exe) return;
+    try {
+      await api.borderless.set(openInfo.exe, true);
+      openInfo = { ...openInfo, borderless: true };
+      flash("Tamam · oyunu Pencereli moda al, GMID kenarlıksız tam ekran yapar");
+    } catch (e) {
+      flash(String(e));
+    }
+  }
+
   async function fit() {
     if (!clip) return;
     flash("Discord'a hazırlanıyor…");
@@ -129,7 +178,7 @@
     void refresh();
     startPerf();
     const stops = [
-      on<{ mode: "interactive" | "glance"; exclusive: boolean; minimizes: boolean } | null>("panel-open", (info) => {
+      on<PanelOpen | null>("panel-open", (info) => {
         if (info) openInfo = info;
         void refresh();
         startPerf();
@@ -172,7 +221,7 @@
       {/if}
       {#if perf}
         <div class="perf tnum" title={perf.gpuName ?? ""}>
-          <span class:dim={perf.fps == null} title={perf.fps != null ? (perf.fpsSource === "rtss" ? `RivaTuner · ${perf.fpsApp ?? ""}` : "PresentMon") : perf.fpsState === "missing" ? "FPS ölçümü kapalı: GMID → Oyun Modu → FPS ölçümünü aç" : perf.fpsState === "permission" ? "FPS için izin gerekiyor: Oyun Modu → FPS ölçümünü aç (sonra Windows oturumunu yenile)" : "Ölçülüyor…"}>
+          <span class:dim={perf.fps == null} title={perf.fps != null ? `${perf.fpsSource === "rtss" ? "RivaTuner" : "PresentMon"} · ${perf.fpsApp ?? ""}` : (fpsWhy ?? "Ölçülüyor…")}>
             <b>{perf.fps != null ? Math.round(perf.fps) : "—"}</b><i>FPS</i>
           </span>
           <span><b>{perf.cpu != null ? `%${Math.round(perf.cpu)}` : "—"}</b><i>CPU</i></span>
@@ -186,19 +235,35 @@
       <button class="x" onclick={close} title="Kapat (Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
     </header>
 
+    {#if fpsWhy}
+      <div class="hint fpsbar">
+        <Icon name="bolt" size={16} />
+        <span>{fpsWhy}</span>
+        {#if fpsCanSetup}
+          <button class="btn sm" disabled={fpsBusy} onclick={setupFps}>{fpsBusy ? "Kuruluyor…" : "FPS ölçümünü aç"}</button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if openInfo.exclusive || openInfo.minimizes}
+      <div class="hint warn">
+        <Icon name="info" size={16} />
+        <span>
+          Oyun <b>tam ekran (özel)</b> modda: Windows bu modda hiçbir pencereyi oyunun üstünde göstermez, odak gidince oyun
+          küçülür. Oyunun görüntü ayarından <b>Pencereli (Windowed)</b> seç: GMID onu kendiliğinden <b>kenarlıksız tam
+          ekrana</b> çevirir, panel Steam'deki Shift+Tab gibi açılır.
+        </span>
+        {#if openInfo.exe && !openInfo.borderless}
+          <button class="btn sm" onclick={makeBorderless}>Kenarlıksız yap</button>
+        {:else if openInfo.borderless}
+          <span class="ok"><Icon name="check" size={14} />Kenarlıksız listesinde</span>
+        {/if}
+      </div>
+    {/if}
     {#if openInfo.mode === "glance"}
       <div class="hint">
         <Icon name="info" size={16} />
-        <span>
-          {#if openInfo.exclusive}
-            Oyun <b>özel tam ekranda</b>: Windows bu kipte paneli oyunun üstünde göstermeyebilir. Oyunun görüntü ayarında
-            <b>Kenarlıksız / Windowed Fullscreen</b> seçersen Steam'deki Shift+Tab gibi çalışır.
-          {:else if openInfo.minimizes}
-            Bu oyun odak gidince kendini küçülttüğü için panel oyunu bozmadan açıldı; fare oyunda kalır.
-          {:else}
-            Oyun önde, fare oyunda.
-          {/if}
-        </span>
+        <span>Oyun önde, fare oyunda. Panelde bir şeye tıklamak için:</span>
         <button class="btn sm" onclick={() => (api.panel.interact(), (openInfo = { ...openInfo, mode: "interactive" }))}>
           <Icon name="arrow" size={14} />Fareyi serbest bırak
         </button>
@@ -323,6 +388,10 @@
   .x:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }
   .hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); color: var(--muted); font-size: 13px; }
   .hint span { flex: 1; }
+  div.hint { text-align: left; }
+  .hint.warn { border-color: rgba(227, 194, 112, 0.45); }
+  .hint.warn > :global(svg), .fpsbar > :global(svg) { color: var(--gold); flex: none; }
+  .hint .ok { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--good); font-weight: 600; }
   .hint b { color: var(--text); }
   .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
   .card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); min-width: 0; }

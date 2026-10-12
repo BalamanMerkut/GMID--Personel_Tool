@@ -78,7 +78,7 @@ pub async fn clips_fit_discord(
     app: AppHandle,
     id: String,
     options: Option<clips::FitOptions>,
-) -> CmdResult<String> {
+) -> CmdResult<clips::FitResult> {
     tauri::async_runtime::spawn_blocking(move || {
         let opts = options.unwrap_or_else(|| clips::saved_options(&app.state::<Db>()));
         app.state::<Clips>().fit_discord(&app, &id, opts)
@@ -95,4 +95,32 @@ pub fn clips_plan(
     options: clips::FitOptions,
 ) -> CmdResult<crate::clips::media::Plan> {
     Clips::plan(&db, &id, &options)
+}
+
+/// "Discord'a hazırla" seçenekleri (seçime göre: boyut, çözünürlük, kare hızı, beklenen netlik).
+#[tauri::command]
+pub async fn clips_choices(
+    app: AppHandle,
+    id: String,
+    start: Option<f64>,
+    end: Option<f64>,
+) -> CmdResult<Vec<clips::Choice>> {
+    tauri::async_runtime::spawn_blocking(move || Clips::choices(&app, &id, start, end))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Hazırlanan kopyayı yeniden panoya koyar (yalnız "Discord'a Hazır" klasöründekiler).
+#[tauri::command]
+pub fn clips_ready_copy(app: AppHandle, path: String) -> CmdResult<()> {
+    clips::copy_ready(&app, &path)
+}
+
+/// Hazırlanan kopyayı klasöründe gösterir.
+#[tauri::command]
+pub fn clips_ready_reveal(app: AppHandle, path: String) -> CmdResult<()> {
+    let p = clips::ready_path(&app, &path)?;
+    app.opener()
+        .reveal_item_in_dir(p)
+        .map_err(|e| format!("Klasör açılamadı: {e}"))
 }

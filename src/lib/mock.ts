@@ -20,6 +20,8 @@ const inputs: Device[] = [
   { id: "in-2", name: "Mikrofon Dizisi (Realtek(R) Audio)", isDefault: false, level: 0.8, muted: false },
 ];
 let lock: number | null = 1;
+let fpsReady = false;
+let borderlessList = ["cod2mp_s.exe"];
 
 const hotkeys: HotkeyStatus[] = [
   ["audio.cycleOutput", "Ses", "Ses çıkışını değiştir (kulaklık ↔ hoparlör)", "Ctrl+Alt+A"],
@@ -733,14 +735,25 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "community_discord":
       return "https://discord.gg/upu9VQwFrV";
     case "fps_status":
-      return { state: "missing", relogin: false, message: null };
+      return { state: fpsReady ? "ready" : "missing", relogin: false, message: null };
     case "fps_setup":
       await wait(1200);
-      return { state: "permission", relogin: true, message: "Windows oturumunu bir kez kapatıp aç (ya da bilgisayarı yeniden başlat), sonra FPS görünür." };
+      fpsReady = true;
+      return { state: "ready", relogin: false, message: null };
+    case "borderless_list":
+      return [...borderlessList];
+    case "borderless_set": {
+      const exe = String(a.exe).toLowerCase();
+      borderlessList = borderlessList.filter((x) => x !== exe);
+      if (a.on) borderlessList = [...borderlessList, exe].sort();
+      return [...borderlessList];
+    }
     case "panel_perf":
       return {
         cpu: 30 + Math.random() * 25, ramUsed: 14.2e9, ramTotal: 32e9, gpu: 85 + Math.random() * 12, gpuTemp: 66 + Math.random() * 4,
-        vramUsed: 7.1e9, vramTotal: 12e9, gpuName: "NVIDIA GeForce RTX 4070", fps: 140 + Math.random() * 20, fpsApp: "VALORANT-Win64-Shipping.exe", rtss: false, fpsSource: "presentmon", fpsState: "running",
+        vramUsed: 7.1e9, vramTotal: 12e9, gpuName: "NVIDIA GeForce RTX 4070", fps: fpsReady ? 140 + Math.random() * 20 : null,
+        fpsApp: fpsReady ? "VALORANT-Win64-Shipping.exe" : null, rtss: false, fpsSource: fpsReady ? "presentmon" : null,
+        fpsState: fpsReady ? "running" : "missing", fpsNote: null,
       };
     case "panel_hide":
     case "panel_focus":
@@ -786,8 +799,40 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         await new Promise((r) => setTimeout(r, 150));
         emit("clip-fit", { id: a.id, progress: k / 10 });
       }
-      return "C:\\Users\\Merkut\\Documents\\GMID Tool\\Discord'a Hazır\\klip (Discord).mp4";
+      const o = (a.options ?? { limitMb: 10, codec: "av1" }) as { limitMb: number | null; codec: string; smooth?: boolean };
+      const c = clipList.find((x) => x.id === a.id);
+      return { path: c?.path ?? "", size: (o.limitMb ?? 80) * 1e6 * 0.91, height: o.smooth ? 720 : 1080, fps: o.smooth ? 60 : 30, original: false };
     }
+    case "clips_choices": {
+      const c = clipList.find((x) => x.id === a.id);
+      const full = a.start == null;
+      const d = Math.max(0.5, ((a.end as number | null) ?? c?.duration ?? 30) - ((a.start as number | null) ?? 0));
+      const out: Record<string, unknown>[] = [];
+      const add = (key: string, title: string, note: string, mb: number, codec: string, smooth: boolean) => {
+        if (full && (c?.size ?? 0) <= mb * 1e6) {
+          if (!out.some((x) => x.key === "orijinal")) out.push({ key: "orijinal", title: "Olduğu gibi", note: `zaten ${mb} MB'tan küçük, orijinal kalite`, options: { limitMb: mb, codec, smooth }, height: c?.height ?? 1080, fps: 60, size: c?.size ?? 0, quality: "great", recommended: false });
+          return;
+        }
+        const kbps = (mb * 1e6 * 0.94 * 8 * (codec === "av1" ? 0.93 : 1)) / 1000 / d;
+        const bpp = codec === "av1" ? 0.022 : 0.065;
+        const fpsList = smooth ? [60] : [60, 30];
+        let pick: [number, number] | null = null;
+        for (const h of [1440, 1080, 900, 720, 540, 480, 360].filter((x) => x <= (c?.height ?? 1080))) {
+          for (const f of fpsList) if (!pick && (kbps * 1000) / (h * h * 1.777 * f) >= bpp) pick = [h, f];
+        }
+        const [h, f] = pick ?? [360, smooth ? 60 : 30];
+        out.push({ key, title, note, options: { limitMb: mb, codec, smooth, start: a.start, end: a.end }, height: h, fps: f, size: Math.min(mb * 1e6, (kbps * 1000 * d) / 8), quality: !pick ? "poor" : h >= 1080 ? "great" : h >= 720 ? "good" : h >= 480 ? "ok" : "poor", recommended: key === "net-10" });
+      };
+      add("net-10", "Net", "Discord ücretsiz · AV1: aynı boyutta en net görüntü", 10, "av1", false);
+      add("akici-10", "Akıcı", "Discord ücretsiz · 60 kare korunur, görüntü biraz yumuşar", 10, "av1", true);
+      add("uyumlu-10", "Uyumlu", "Discord ücretsiz · H.264: her telefonda oynar, biraz daha bulanık", 10, "h264", false);
+      add("nitro-basic", "Nitro Basic", "50 MB sınırı olanlar için", 50, "av1", false);
+      add("nitro", "Nitro", "500 MB · neredeyse orijinal, her yerde oynar", 500, "h264", false);
+      return out;
+    }
+    case "clips_ready_copy":
+    case "clips_ready_reveal":
+      return;
     case "reviews_list":
       return a.kind === "title" ? titleReviews : reviews;
     case "review_save": {

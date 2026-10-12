@@ -393,13 +393,13 @@ impl Clips {
         }
     }
 
-    /// Discord'a sığan kopya üretir ve panoya koyar; kopyanın yolu.
+    /// Discord'a sığan kopya üretir ve panoya koyar; kopyanın yolu ve boyutu.
     pub fn fit_discord(
         &self,
         app: &AppHandle,
         id: &str,
         opts: FitOptions,
-    ) -> Result<String, String> {
+    ) -> Result<FitResult, String> {
         let db = app.state::<Db>();
         let clip = get(&db, id)?;
         let src = PathBuf::from(&clip.path);
@@ -413,7 +413,13 @@ impl Clips {
             if let Some(l) = limit {
                 if clip.size as u64 <= l {
                     win::copy_file(&src)?;
-                    return Ok(clip.path);
+                    return Ok(FitResult {
+                        path: clip.path.clone(),
+                        size: clip.size as u64,
+                        height: clip.height.unwrap_or(0) as u32,
+                        fps: 0,
+                        original: true,
+                    });
                 }
             }
         }
@@ -453,12 +459,22 @@ impl Clips {
                 codec: opts.codec,
                 src: (w.max(16) as u32, h.max(16) as u32),
                 src_fps: pfps.unwrap_or(60.0),
+                smooth: opts.smooth,
             };
             let base = clip.title.clone().unwrap_or(clip.name.clone());
             let out = match limit {
-                Some(_) => dir
-                    .folder(Some(READY_DIR))
-                    .join(format!("{}.mp4", safe_name(&base))),
+                // Farklı seçenekler yan yana denenebilsin: ad seçeneği söyler ("… (10 MB, akıcı).mp4").
+                Some(l) => dir.folder(Some(READY_DIR)).join(format!(
+                    "{} {} MB{}{}).mp4",
+                    safe_name(&base).trim_end_matches(')'),
+                    l / 1_000_000,
+                    if opts.smooth { ", akıcı" } else { "" },
+                    if opts.codec == media::Codec::H264 {
+                        ", uyumlu"
+                    } else {
+                        ""
+                    },
+                )),
                 // Kırpılmış kopya: klibin yanına; bir sonraki taramada listeye girer.
                 None => {
                     unique(&src.with_file_name(format!("{} (kırpılmış).mp4", clean(&clip.name))))
@@ -466,13 +482,19 @@ impl Clips {
             };
             let app2 = app.clone();
             let id2 = id.to_string();
-            media::encode(&ff, &src, &out, &job, &move |p| {
+            let plan = media::encode(&ff, &src, &out, &job, &move |p| {
                 let _ = app2.emit("clip-fit", serde_json::json!({ "id": id2, "progress": p }));
             })?;
             if limit.is_some() {
                 win::copy_file(&out)?;
             }
-            Ok(out.to_string_lossy().into_owned())
+            Ok(FitResult {
+                size: std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
+                path: out.to_string_lossy().into_owned(),
+                height: plan.height,
+                fps: plan.fps,
+                original: false,
+            })
         })();
         self.fitting
             .lock()
@@ -482,6 +504,38 @@ impl Clips {
     }
 
     /// Seçime göre beklenen sonuç (çözünürlük, kare hızı, netlik); kodlamadan önce göstermek için.
+    /// Seçime göre hazır seçenekler (kare hızı ffmpeg ile okunur; yoksa 60 sayılır).
+    pub fn choices(
+        app: &AppHandle,
+        id: &str,
+        start: Option<f64>,
+        end: Option<f64>,
+    ) -> Result<Vec<Choice>, String> {
+        let clip = get(&app.state::<Db>(), id)?;
+        let duration = clip.duration.filter(|d| *d > 0.0).unwrap_or(30.0);
+        let s = start.unwrap_or(0.0).clamp(0.0, duration);
+        let e = end
+            .unwrap_or(duration)
+            .clamp(s + 0.5, duration.max(s + 0.5));
+        let full = s <= 0.05 && e >= duration - 0.05;
+        let fps = ffmpeg(app.state::<DataDir>().root())
+            .and_then(|ff| media::probe(&ff, Path::new(&clip.path)).2)
+            .unwrap_or(60.0);
+        let src = (
+            clip.width.unwrap_or(1920).max(16) as u32,
+            clip.height.unwrap_or(1080).max(16) as u32,
+        );
+        Ok(choices(
+            e - s,
+            full,
+            clip.size.max(0) as u64,
+            src,
+            fps,
+            (!full).then_some(s),
+            (!full).then_some(e),
+        ))
+    }
+
     pub fn plan(db: &Db, id: &str, opts: &FitOptions) -> Result<media::Plan, String> {
         let clip = get(db, id)?;
         let duration = clip.duration.filter(|d| *d > 0.0).unwrap_or(30.0);
@@ -495,13 +549,14 @@ impl Clips {
             clip.height.unwrap_or(1080).max(16) as u32,
         );
         Ok(match opts.limit_mb {
-            Some(mb) => media::plan(
+            Some(mb) => media::plan_with(
                 end - start,
                 mb as u64 * 1_000_000,
                 src,
                 60.0,
                 opts.codec,
                 1.0,
+                opts.smooth,
             ),
             None => media::Plan {
                 video: 0,
@@ -514,6 +569,24 @@ impl Clips {
     }
 }
 
+/// "Discord'a Hazır" klasöründeki bir dosya (başka bir yol verilirse hata).
+pub fn ready_path(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+    let dir = app.state::<DataDir>().folder(Some(READY_DIR));
+    let p = PathBuf::from(path);
+    let ok = p.parent().is_some_and(|d| d == dir)
+        && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp4"))
+        && p.is_file();
+    if ok {
+        Ok(p)
+    } else {
+        Err("Dosya bulunamadı".into())
+    }
+}
+
+pub fn copy_ready(app: &AppHandle, path: &str) -> Result<(), String> {
+    win::copy_file(&ready_path(app, path)?)
+}
+
 /// Kaydedilmiş varsayılanlar (hedef boyut ve kodek); hızlı "Discord'a sığdır" bunları kullanır.
 pub const FIT_KEY: &str = "clips.discord";
 
@@ -522,6 +595,7 @@ pub const FIT_KEY: &str = "clips.discord";
 struct FitDefaults {
     limit_mb: Option<u32>,
     codec: Option<media::Codec>,
+    smooth: Option<bool>,
 }
 
 pub fn saved_options(db: &Db) -> FitOptions {
@@ -529,12 +603,13 @@ pub fn saved_options(db: &Db) -> FitOptions {
     FitOptions {
         limit_mb: d.limit_mb.or(default_limit()),
         codec: d.codec.unwrap_or_default(),
+        smooth: d.smooth.unwrap_or(false),
         ..FitOptions::default()
     }
 }
 
 /// "Discord'a sığdır" / "Kırp" seçenekleri.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FitOptions {
     #[serde(default)]
@@ -546,6 +621,175 @@ pub struct FitOptions {
     pub limit_mb: Option<u32>,
     #[serde(default)]
     pub codec: media::Codec,
+    /// Kare hızını koru (60 fps), gerekirse çözünürlük düşsün.
+    #[serde(default)]
+    pub smooth: bool,
+}
+
+/// Hazırlanan kopya.
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FitResult {
+    pub path: String,
+    pub size: u64,
+    pub height: u32,
+    pub fps: u32,
+    /// Zaten sığıyordu: klibin kendisi kopyalandı.
+    pub original: bool,
+}
+
+/// "Discord'a hazırla" penceresindeki hazır seçenekler.
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Choice {
+    pub key: String,
+    pub title: String,
+    pub note: String,
+    pub options: FitOptions,
+    pub height: u32,
+    pub fps: u32,
+    /// Beklenen boyut (bayt).
+    pub size: u64,
+    /// great | good | ok | poor
+    pub quality: &'static str,
+    pub recommended: bool,
+}
+
+fn rank(q: &str) -> u8 {
+    match q {
+        "great" => 3,
+        "good" => 2,
+        "ok" => 1,
+        _ => 0,
+    }
+}
+
+/// Seçime (süre) göre seçenekler: 10 MB'ta net / akıcı / uyumlu, Nitro Basic (50 MB), Nitro (500 MB). Klip zaten
+/// sığıyorsa "olduğu gibi". `src_size`: klibin tamamının boyutu, `full`: kırpılmadı.
+pub fn choices(
+    duration: f64,
+    full: bool,
+    src_size: u64,
+    src: (u32, u32),
+    src_fps: f64,
+    start: Option<f64>,
+    end: Option<f64>,
+) -> Vec<Choice> {
+    use media::Codec::{Av1, H264};
+    let fps_src = src_fps.clamp(1.0, 60.0).round() as u32;
+    let mut out: Vec<Choice> = Vec::new();
+    let mut add =
+        |key: &str, title: &str, note: &str, mb: u32, codec: media::Codec, smooth: bool| {
+            let limit = mb as u64 * 1_000_000;
+            let opts = FitOptions {
+                start,
+                end,
+                limit_mb: Some(mb),
+                codec,
+                smooth,
+            };
+            if full && src_size <= limit {
+                // Kodlamaya gerek yok: klip olduğu gibi gider.
+                if out.iter().any(|c| c.size == src_size) {
+                    return;
+                }
+                out.push(Choice {
+                    key: format!("orijinal-{mb}"),
+                    title: "Olduğu gibi".into(),
+                    note: format!(
+                        "{} · zaten {mb} MB'tan küçük, orijinal kalite",
+                        match mb {
+                            10 => "Discord ücretsiz",
+                            50 => "Nitro Basic",
+                            _ => "Nitro",
+                        }
+                    ),
+                    options: opts,
+                    height: src.1,
+                    fps: fps_src,
+                    size: src_size,
+                    quality: "great",
+                    recommended: false,
+                });
+                return;
+            }
+            // AV1 hedefi baştan %7 küçük tutulur (bkz. media::encode).
+            let factor = if codec == Av1 { 0.93 } else { 1.0 };
+            let p = media::plan_with(duration, limit, src, src_fps, codec, factor, smooth);
+            let size = (((p.video + p.audio) as f64 * 1000.0 / 8.0 * duration) as u64).min(limit);
+            // Aynı sonucu veren ikinci seçenek gösterilmez (ör. kısa klipte akıcı = net).
+            if out.iter().any(|c| {
+                c.options.limit_mb == Some(mb)
+                    && c.options.codec == codec
+                    && (c.height, c.fps) == (p.height, p.fps)
+            }) {
+                return;
+            }
+            out.push(Choice {
+                key: key.into(),
+                title: title.into(),
+                note: note.into(),
+                options: opts,
+                height: p.height,
+                fps: p.fps,
+                size,
+                quality: p.quality,
+                recommended: false,
+            });
+        };
+    add(
+        "net-10",
+        "Net",
+        "Discord ücretsiz · AV1: aynı boyutta en net görüntü",
+        10,
+        Av1,
+        false,
+    );
+    if fps_src > 35 {
+        add(
+            "akici-10",
+            "Akıcı",
+            "Discord ücretsiz · 60 kare korunur, görüntü biraz yumuşar",
+            10,
+            Av1,
+            true,
+        );
+    }
+    add(
+        "uyumlu-10",
+        "Uyumlu",
+        "Discord ücretsiz · H.264: her telefonda oynar, biraz daha bulanık",
+        10,
+        H264,
+        false,
+    );
+    add(
+        "nitro-basic",
+        "Nitro Basic",
+        "50 MB sınırı olanlar için",
+        50,
+        Av1,
+        false,
+    );
+    add(
+        "nitro",
+        "Nitro",
+        "500 MB · neredeyse orijinal, her yerde oynar",
+        500,
+        H264,
+        false,
+    );
+    // Önerilen: ücretsiz sınıra sığanlar içinde en net olanı (eşitse ilki).
+    if let Some(best) = out
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.options.limit_mb == Some(10))
+        .max_by_key(|(i, c)| (rank(c.quality), std::cmp::Reverse(*i)))
+        .map(|(i, _)| i)
+    {
+        out[best].recommended = true;
+    }
+    out
 }
 
 fn default_limit() -> Option<u32> {
@@ -559,6 +803,7 @@ impl Default for FitOptions {
             end: None,
             limit_mb: default_limit(),
             codec: media::Codec::default(),
+            smooth: false,
         }
     }
 }
@@ -704,7 +949,7 @@ fn cleanup(db: &Db) {
     }
 }
 
-/// "Discord'a Hazır" kopyaları 3 gün sonra silinir. Yalnızca GMID'in ürettiği kopyalar ("… (Discord).mp4")
+/// "Discord'a Hazır" kopyaları 3 gün sonra silinir. Yalnızca GMID'in ürettiği kopyalar ("… (Discord 10 MB).mp4")
 /// ve yalnızca bu klasör: başka bir klasör verilirse hiçbir şeye dokunmaz.
 fn purge_ready(dir: &Path) {
     if dir
@@ -720,7 +965,7 @@ fn purge_ready(dir: &Path) {
     let limit = std::time::SystemTime::now() - Duration::from_secs(3 * 86_400);
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
-        if !name.ends_with("(Discord).mp4") {
+        if !(name.contains("(Discord") && name.ends_with(").mp4")) {
             continue;
         }
         if e.metadata()
@@ -814,15 +1059,61 @@ mod tests {
         };
         let db = root.join("gmid.db");
         let copy = ready.join("Ace (Discord).mp4");
+        let copy2 = ready.join("Ace (Discord 10 MB, akıcı).mp4");
         let other = ready.join("benim.txt");
         mk(&db);
         mk(&copy);
+        mk(&copy2);
         mk(&other);
         purge_ready(&root); // yanlış klasör: dokunmaz
         assert!(db.exists());
         purge_ready(&ready);
-        assert!(!copy.exists());
+        assert!(!copy.exists() && !copy2.exists());
         assert!(other.exists() && db.exists());
+    }
+
+    #[test]
+    fn choices_cover_sizes_and_skip_duplicates() {
+        // 90 sn, 1440p60, 400 MB: ücretsiz için net/akıcı/uyumlu, Nitro Basic; Nitro'da olduğu gibi.
+        let c = choices(90.0, true, 400_000_000, (2560, 1440), 60.0, None, None);
+        let keys: Vec<&str> = c.iter().map(|c| c.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "net-10",
+                "akici-10",
+                "uyumlu-10",
+                "nitro-basic",
+                "orijinal-500"
+            ]
+        );
+        assert!(c
+            .iter()
+            .all(|x| x.size <= x.options.limit_mb.unwrap() as u64 * 1_000_000));
+        assert_eq!(c.iter().filter(|x| x.recommended).count(), 1);
+        assert!(c[0].recommended, "{c:?}");
+        let akici = &c[1];
+        assert_eq!(akici.fps, 60);
+        assert!(akici.height < c[0].height);
+        // Küçük klip: olduğu gibi gider, tekrar eden "olduğu gibi" yok.
+        let small = choices(20.0, true, 8_000_000, (1920, 1080), 60.0, None, None);
+        assert_eq!(small.len(), 1, "{small:?}");
+        assert_eq!(small[0].size, 8_000_000);
+        // Kırpılmışsa (full = false) hep kodlanır.
+        let cut = choices(
+            20.0,
+            false,
+            8_000_000,
+            (1920, 1080),
+            30.0,
+            Some(1.0),
+            Some(21.0),
+        );
+        assert!(cut.iter().all(|x| x.title != "Olduğu gibi"));
+        assert!(
+            cut.iter().all(|x| x.key != "akici-10"),
+            "30 fps kaynakta akıcı yok"
+        );
     }
 
     #[test]

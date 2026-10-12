@@ -688,6 +688,32 @@ export interface FitOptions {
   limitMb: number | null;
   /** av1: aynı boyutta daha net · h264: her yerde oynar */
   codec: "av1" | "h264";
+  /** Kare hızını koru (60 fps), gerekirse çözünürlük düşsün. */
+  smooth?: boolean;
+}
+
+export interface FitResult {
+  path: string;
+  /** Bayt. */
+  size: number;
+  height: number;
+  fps: number;
+  /** Zaten sığıyordu, klibin kendisi kopyalandı. */
+  original: boolean;
+}
+
+/** "Discord'a hazırla" hazır seçeneği. */
+export interface FitChoice {
+  key: string;
+  title: string;
+  note: string;
+  options: FitOptions;
+  height: number;
+  fps: number;
+  /** Beklenen boyut (bayt). */
+  size: number;
+  quality: "great" | "good" | "ok" | "poor";
+  recommended: boolean;
 }
 
 export interface FitPlan {
@@ -813,6 +839,20 @@ export interface PerfSample {
   fpsSource: "rtss" | "presentmon" | null;
   /** PresentMon: missing (kurulmamış) · permission (izin yok) · ready · running · error */
   fpsState: "missing" | "permission" | "ready" | "running" | "error";
+  /** FPS neden yok (görünür açıklama). */
+  fpsNote: string | null;
+}
+
+/** Oyun İçi Panel hangi kipte açıldı. */
+export interface PanelOpen {
+  mode: "interactive" | "glance";
+  /** Oyun özel tam ekranda. */
+  exclusive: boolean;
+  /** Oyun odak gidince küçüldü. */
+  minimizes: boolean;
+  exe: string | null;
+  /** Oyun kenarlıksız tam ekran listesinde. */
+  borderless: boolean;
 }
 
 export interface FpsStatus {

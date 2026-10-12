@@ -21,12 +21,23 @@
   let now = $state(Date.now());
   let fps = $state<FpsStatus | null>(null);
   let fpsBusy = $state(false);
+  let borderless = $state<string[]>([]);
+
+  async function setBorderless(exe: string, on: boolean) {
+    if (!exe) return;
+    try {
+      borderless = await api.borderless.set(exe, on);
+      if (on) notify(`${exe}: oyunu Pencereli modda aç, GMID kenarlıksız tam ekran yapar`, "check");
+    } catch (e) {
+      notify(String(e), "info");
+    }
+  }
 
   async function setupFps() {
     fpsBusy = true;
     try {
       fps = await api.fps.setup();
-      notify(fps.relogin ? "İzin verildi · Windows oturumunu bir kez kapatıp aç" : "FPS ölçümü hazır", "check");
+      notify(fps.relogin ? "İzin verildi · Windows oturumunu bir kez kapatıp aç" : "FPS ölçümü hazır: panelde FPS görünür", "check");
     } catch (e) {
       notify(String(e), "info");
     } finally {
@@ -39,6 +50,7 @@
     void api.audio.state().then((s) => (outputs = s.outputs)).catch(() => {});
     void api.games.runningApps().then((a) => (apps = a)).catch(() => {});
     void api.fps.status().then((s) => (fps = s)).catch(() => {});
+    void api.borderless.list().then((b) => (borderless = b)).catch(() => {});
     const stop = on<GameModeStatus>("gamemode", (s) => (status = s));
     const timer = setInterval(() => (now = Date.now()), 30_000);
     return () => {
@@ -146,26 +158,50 @@
   <section class="panel">
     <h3 class="h2"><Icon name="stage" />Oyun İçi Panel</h3>
     <p class="sub">
-      Oyundayken <b>Ctrl+Shift+G</b>: oyunun üstünde yarı saydam bir panel açılır. Ses, mikrofon, Oyun Modu, sayaç, oyuna not ve
-      son klibin elinin altında. Panel oyundan odağı almaz, yani oyun küçülmez; fare imleci görünmüyorsa oyunun menüsünü
-      (Esc) açıp tıklayabilirsin. Aynı tuşla kapanır. Oyuna hiçbir şey eklenmez (anti-cheat güvenli). Panelin görünmesi
-      için oyunun görüntü ayarında <b>Kenarlıksız / Borderless</b> ya da <b>Pencereli</b> seçili olmalı; “Tam ekran
-      (özel)” modunda Windows hiçbir pencereyi oyunun üstünde göstermez.
+      Oyundayken <b>Ctrl+Shift+G</b>: Steam'deki Shift+Tab gibi oyunun üstünde yarı saydam bir panel açılır. FPS, ses,
+      uygulama sesleri, mikrofon, Oyun Modu, sayaç, oyuna not ve son klibin elinin altında. Oyuna hiçbir şey eklenmez
+      (anti-cheat güvenli). Panelin oyunun üstünde görünmesi için oyun <b>kenarlıksız</b> ya da <b>pencereli</b>
+      olmalı: “Tam ekran (özel)” modunda Windows hiçbir pencereyi oyunun üstünde göstermez ve oyun odak gidince küçülür.
     </p>
+    <div class="line col">
+      <div>
+        <b>Kenarlıksız tam ekran</b>
+        <span class="sub small">
+          Kendi kenarlıksız ayarı olmayan oyunlar (ör. Call of Duty 2, CS 1.6) için: oyunu <b>Pencereli</b> modda aç, GMID
+          çerçevesini kaldırıp ekranı kaplatır. Görüntü tam ekran gibi olur, panel Steam'deki gibi açılır. Panel bir oyunda
+          açılamazsa o oyun buraya kendiliğinden eklenir.
+        </span>
+      </div>
+      <div class="chips">
+        {#each borderless as x (x)}
+          <span class="chip">{x}<button title="Çıkar" onclick={() => setBorderless(x, false)}><Icon name="x" size={12} /></button></span>
+        {:else}
+          <span class="sub small">Henüz oyun yok</span>
+        {/each}
+      </div>
+      <div class="row">
+        <select onchange={(e) => (setBorderless(e.currentTarget.value, true), (e.currentTarget.value = ""))} aria-label="Açık oyunlardan ekle">
+          <option value="">Açık oyunlardan seç…</option>
+          {#each apps as a (a.path)}<option value={a.name}>{a.title} ({a.name})</option>{/each}
+        </select>
+      </div>
+    </div>
     <div class="line">
       <div>
         <b>FPS ölçümü</b>
         <span class="sub small">
           {#if !fps}…
-          {:else if fps.state === "ready" || fps.state === "running"}Hazır: panelde FPS görünür (PresentMon, oyuna dokunmaz).
+          {:else if fps.state === "ready" || fps.state === "running"}Hazır: panelde FPS görünür (Intel PresentMon, oyuna dokunmaz).
           {:else if fps.relogin}İzin verildi. Windows oturumunu bir kez <b>kapatıp aç</b> (ya da yeniden başlat), sonra FPS görünür.
           {:else if fps.state === "permission"}PresentMon kurulu ama Windows izni yok: bir kez yönetici izni gerekiyor.
-          {:else}Panelde FPS için küçük bir ölçüm aracı (Intel PresentMon, ~1 MB) kurulur ve bir kez yönetici izni istenir.
+          {:else if fps.state === "error"}{fps.message ?? "Ölçüm başlatılamadı"}. Yeniden kurmayı dene.
+          {:else}Panelde FPS için küçük bir ölçüm aracı (Intel PresentMon, ~1 MB) kurulur ve bir kez yönetici izni istenir;
+            oturumu kapatıp açmak gerekmez.
             RivaTuner (RTSS) açıksa ona gerek kalmaz.{/if}
         </span>
       </div>
-      {#if fps && fps.state !== "ready" && fps.state !== "running" && !fps.relogin}
-        <button class="btn sm" disabled={fpsBusy} onclick={setupFps}><Icon name="bolt" size={14} />{fpsBusy ? "Kuruluyor…" : "FPS ölçümünü aç"}</button>
+      {#if fps && fps.state !== "ready" && fps.state !== "running"}
+        <button class="btn sm" disabled={fpsBusy} onclick={setupFps}><Icon name="bolt" size={14} />{fpsBusy ? "Kuruluyor…" : fps.relogin ? "Yeniden dene" : "FPS ölçümünü aç"}</button>
       {/if}
     </div>
   </section>
@@ -187,6 +223,7 @@
   .line { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   .line > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
   .line.col { flex-direction: column; align-items: stretch; }
+  .line.col > div:first-child { flex: none; }
   select, input { background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; color: var(--text); max-width: 320px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; }

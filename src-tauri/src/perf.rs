@@ -32,6 +32,8 @@ pub struct Sample {
     pub fps_source: Option<&'static str>,
     /// PresentMon'un durumu (FPS yoksa arayüz ne yapılacağını söyler).
     pub fps_state: crate::fps::State,
+    /// FPS neden yok (arayüzde görünür).
+    pub fps_note: Option<String>,
 }
 
 #[derive(Default)]
@@ -166,11 +168,25 @@ impl Perf {
             }
         }
         if s.fps.is_none() {
-            s.fps = self.presentmon.sample(root, game_pid);
-            if s.fps.is_some() {
+            if let Some((fps, app)) = self.presentmon.sample(root, game_pid) {
+                s.fps = Some(fps);
+                s.fps_app = Some(app);
                 s.fps_source = Some("presentmon");
             }
-            s.fps_state = self.presentmon.status(root, false).state;
+            let st = self.presentmon.status(root, false);
+            s.fps_state = st.state;
+            s.fps_note = st.message;
+            if s.fps.is_none()
+                && s.fps_note.is_none()
+                && self
+                    .presentmon
+                    .running_for()
+                    .is_some_and(|d| d > std::time::Duration::from_secs(4))
+            {
+                s.fps_note = Some(
+                    "Oyundan kare gelmiyor: oyun küçülmüş ya da duraklatılmış olabilir".into(),
+                );
+            }
         }
         let _ = game_pid;
         use std::sync::atomic::Ordering;

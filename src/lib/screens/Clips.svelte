@@ -59,7 +59,12 @@
     const stops = [
       on("clips-changed", () => void load()),
       on("games-changed", () => void load()),
-      on<{ id: string; progress: number }>("clip-fit", (e) => (fitting = { ...fitting, [e.id]: e.progress })),
+      on<{ id: string; progress: number }>("clip-fit", (e) => {
+        if (e.progress >= 1) {
+          const { [e.id]: _, ...rest } = fitting;
+          fitting = rest;
+        } else fitting = { ...fitting, [e.id]: e.progress };
+      }),
     ];
     const timer = setInterval(() => (now = Date.now()), 60_000);
     return () => {
@@ -130,20 +135,6 @@
     } catch (e) {
       notify(String(e), "info");
       return false;
-    }
-  }
-
-  async function fit(c: Clip) {
-    if (c.id in fitting) return;
-    fitting = { ...fitting, [c.id]: 0 };
-    try {
-      await api.clips.fitDiscord(c.id);
-      notify("Discord'a hazır · panoya kopyalandı, Discord'da Ctrl+V", "check");
-    } catch (e) {
-      notify(String(e), "info");
-    } finally {
-      const { [c.id]: _, ...rest } = fitting;
-      fitting = rest;
     }
   }
 
@@ -271,7 +262,7 @@
                   {#if c.kind === "clip" && c.duration}<span class="dur tnum">{dur(c.duration)}</span>{/if}
                   <button class="fav" class:on={c.favorite} onclick={(e) => (e.stopPropagation(), act(api.clips.setFavorite(c.id, !c.favorite)))} title={c.favorite ? "Favoriden çıkar" : "Favori"}>{c.favorite ? "★" : "☆"}</button>
                   {#if c.kind === "clip"}
-                    <button class="dc" onclick={(e) => (e.stopPropagation(), fit(c))} title="Son seçtiğin boyuta sığdır ve panoya kopyala (kırpmak için klibi aç)">Discord'a sığdır</button>
+                    <button class="dc" onclick={(e) => (e.stopPropagation(), (trim = c))} title="Boyut ve netlik seçenekleri, kırpma, önizleme">Discord'a sığdır</button>
                   {/if}
                   {#if c.id in fitting}
                     <div class="fit"><span>Hazırlanıyor %{Math.round(fitting[c.id] * 100)}</span><span class="pb"><span style={`width:${fitting[c.id] * 100}%`}></span></span></div>
@@ -354,7 +345,14 @@
 {/if}
 
 {#if trim}
-  <ClipTrim clip={trim} onclose={() => (trim = null)} />
+  <ClipTrim
+    clip={trim}
+    onclose={() => {
+      const { [trim!.id]: _, ...rest } = fitting;
+      fitting = rest;
+      trim = null;
+    }}
+  />
 {/if}
 
 <style>

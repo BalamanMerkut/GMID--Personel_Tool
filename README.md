@@ -84,9 +84,12 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   arka plan durur, seçtiğin uygulamalar (ör. tarayıcı) kapanır. İstersen kütüphanendeki bir oyun açılınca kendiliğinden
   açılır, son oyun kapanınca kapanır. Kapanınca (uygulama kapanırken de) her şey eski haline döner.
 - **Oyun İçi Panel** (**Ctrl+Shift+G**): oyunun bulunduğu ekranın üstünde yarı saydam panel — üstte FPS, işlemci,
-  ekran kartı (yük ve sıcaklık) ve RAM (FPS için bir kez Oyun Modu → **FPS ölçümünü aç**; RivaTuner/RTSS açıksa ona
-  gerek yok). Kenarlıksız/pencereli oyunlarda Steam'deki Shift+Tab gibi fare serbest kalır, oyun arkada görünür;
-  özel tam ekran oyunlarda oyunu küçültmeden bakış kipinde açılır. Ses çıkışı ve seviyesi, **uygulama başına ses**
+  ekran kartı (yük ve sıcaklık) ve RAM (FPS için bir kez **FPS ölçümünü aç** — panelde ya da Oyun Modu'nda; bir kez
+  Windows izni ister, oturumu kapatıp açmak gerekmez; RivaTuner/RTSS açıksa ona da gerek yok). FPS yoksa nedeni
+  panelde yazar. Kenarlıksız/pencereli oyunlarda Steam'deki Shift+Tab gibi fare serbest kalır, oyun arkada görünür.
+  **Özel tam ekranda** Windows hiçbir pencereyi oyunun üstünde göstermez: oyunu **Pencereli** moda al, GMID onu
+  **kenarlıksız tam ekrana** çevirir (Oyun Modu → Kenarlıksız tam ekran; panel bir oyunda açılamazsa o oyun listeye
+  kendiliğinden eklenir ve Windows bildirimiyle anlatılır). Ses çıkışı ve seviyesi, **uygulama başına ses**
   (oyun, Discord, Spotify, tarayıcı ayrı ayrı; Ses & Mikrofon ekranında da var),
   mikrofon (seviye, sessize alma, kilit), Oyun Modu, sayaç (5/15/30 dk mola), o oyuna not (Notlar'da da görünür), son
   klip (Discord'a sığdır), yaklaşan hatırlatıcılar. Esc ya da aynı tuşla kapanır, oyuna geri dönersin. Oyuna hiçbir şey
@@ -100,7 +103,11 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   yanlışsa büyük görünümden değiştir. Yeni klipte köşede "Klip kaydedildi — Valorant (0:30)".
 - Üzerine gelince sessiz önizleme, tıklayınca büyük görünüm (← → ile gezin), çift tıklayınca varsayılan oynatıcı.
   Favori, yeniden adlandır, klasörde göster, sil (Geri Dönüşüm Kutusu'na; geri alınabilir).
-- **Discord'a sığdır:** klibin 10 MB'a sığan bir kopyası hazırlanır ve panoya konur; Discord'da **Ctrl+V** yeter.
+- **Discord'a sığdır:** seçenekler yan yana çıkar — 10 MB'ta **Net** (AV1, en yüksek çözünürlük), **Akıcı** (60 fps),
+  **Uyumlu** (H.264, her telefonda), **Nitro Basic** (50 MB), **Nitro** (500 MB) ya da sığıyorsa **Olduğu gibi**;
+  her birinin yanında çözünürlük, kare hızı, **beklenen MB** ve netlik yazar. Uzun klipte "Son 30 sn" önerilir (kısa =
+  çok daha net). Hazırlanan kopya pencerede oynar; beğenmezsen başka seçenekle dene, hepsi listede kalır. Seçilen kopya
+  panoya konur; Discord'da **Ctrl+V** yeter.
   (Kopyalar `Belgeler\GMID Tool\Discord'a Hazır` içinde, 3 gün sonra silinir. ffmpeg gerekir: Video İndirici'nin araçları.)
 
 ### Faz 3b — Oyun (2. bölüm: Oyun Arşivi)

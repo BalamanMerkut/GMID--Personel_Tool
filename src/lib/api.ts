@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -297,7 +297,12 @@ export const api = {
     open: (id: string) => call<void>("clips_open", { id }),
     reveal: (id: string) => call<void>("clips_reveal", { id }),
     /** Seçilen boyuta sığan (istersen kırpılmış) kopya panoya; kopyanın yolu. Seçenek yoksa kayıtlı varsayılanlar. */
-    fitDiscord: (id: string, options?: FitOptions) => call<string>("clips_fit_discord", { id, options: options ?? null }),
+    fitDiscord: (id: string, options?: FitOptions) => call<FitResult>("clips_fit_discord", { id, options: options ?? null }),
+    /** "Discord'a hazırla" seçenekleri (seçime göre). */
+    choices: (id: string, start: number | null, end: number | null) => call<FitChoice[]>("clips_choices", { id, start, end }),
+    /** Hazırlanan kopyayı yeniden panoya koyar. */
+    readyCopy: (path: string) => call<void>("clips_ready_copy", { path }),
+    readyReveal: (path: string) => call<void>("clips_ready_reveal", { path }),
     /** Seçime göre beklenen çözünürlük ve netlik. */
     plan: (id: string, options: FitOptions) => call<FitPlan>("clips_plan", { id, options }),
     /** İzlenecek klasör seçtirir. */
@@ -324,6 +329,12 @@ export const api = {
   community: {
     /** GMID Discord davet bağlantısı (yoksa null). */
     discord: () => call<string | null>("community_discord"),
+  },
+
+  borderless: {
+    /** Kenarlıksız tam ekrana çevrilen oyunlar (exe adları). */
+    list: () => call<string[]>("borderless_list"),
+    set: (exe: string, on: boolean) => call<string[]>("borderless_set", { exe, on }),
   },
 
   fps: {

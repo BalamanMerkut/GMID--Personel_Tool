@@ -46,6 +46,10 @@ pub struct OpenInfo {
     pub exclusive: bool,
     /// Bu oyun odak alınca küçüldüğü için bakış kipine geçildi.
     pub minimizes: bool,
+    /// Öndeki oyunun exe adı (kenarlıksız listesine eklemek için).
+    pub exe: Option<String>,
+    /// Bu oyun kenarlıksız tam ekran listesinde.
+    pub borderless: bool,
 }
 
 fn window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
@@ -111,11 +115,20 @@ pub fn show(app: &AppHandle) {
         "glance" => false,
         _ => !exclusive && !remembered,
     };
+    let borderless = exe.as_ref().is_some_and(|e| {
+        crate::borderless::list(&app.state::<crate::db::Db>()).contains(&e.to_lowercase())
+    });
     let info = OpenInfo {
         mode: if interactive { "interactive" } else { "glance" },
         exclusive,
         minimizes: remembered,
+        exe: exe.clone(),
+        borderless,
     };
+    if exclusive {
+        // Özel tam ekranda panel görünmez: kullanıcıya bir kez nedenini ve çaresini söyle.
+        explain_fullscreen(app, exe.as_deref());
+    }
 
     let app2 = app.clone();
     crate::window::on_ui_thread(app, "Oyun paneli", move |app| {
@@ -129,8 +142,12 @@ pub fn show(app: &AppHandle) {
             // Oyun odak gidince kendini küçülttüyse: geri getir, bakış kipine geç, hatırla.
             let app = app2.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(450));
-                if prev.is_some_and(is_minimized) {
+                // Oyunlar odak gidince birkaç yüz milisaniye içinde küçülür; bir saniye boyunca bak.
+                let minimized = (0..24).any(|_| {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    prev.is_some_and(is_minimized)
+                });
+                if minimized {
                     crate::log!("Oyun paneli: oyun odak gidince küçüldü, bakış kipine geçiliyor");
                     if let Some(e) = exe.clone() {
                         let mut list = glance_list(&app);
@@ -146,6 +163,7 @@ pub fn show(app: &AppHandle) {
                     }
                     app.state::<Panel>().focused.store(false, Ordering::Relaxed);
                     restore_focus(prev);
+                    explain_fullscreen(&app, exe.as_deref());
                     let _ = tauri::Emitter::emit_to(
                         &app,
                         PANEL,
@@ -154,6 +172,8 @@ pub fn show(app: &AppHandle) {
                             mode: "glance",
                             exclusive,
                             minimizes: true,
+                            exe: exe.clone(),
+                            borderless: true,
                         },
                     );
                 }
@@ -161,6 +181,30 @@ pub fn show(app: &AppHandle) {
         }
         Ok(())
     });
+}
+
+/// Oyun özel tam ekranda (Windows onun üstünde pencere göstermez, odak gidince küçülür): oyunu kenarlıksız
+/// listesine ekler (pencereli moda alınınca kendiliğinden kenarlıksız tam ekran olur) ve bir kez Windows
+/// bildirimiyle ne yapılacağını söyler. Oyun Modu'nun sessiz kipi bu bildirimi engellemez.
+fn explain_fullscreen(app: &AppHandle, exe: Option<&str>) {
+    use tauri_plugin_notification::NotificationExt;
+    let Some(exe) = exe else {
+        return;
+    };
+    let db = app.state::<crate::db::Db>();
+    if crate::borderless::list(&db).contains(&exe.to_lowercase()) {
+        return;
+    }
+    if crate::borderless::set(&db, exe, true).is_err() {
+        return;
+    }
+    crate::log!("Oyun İçi Panel: {exe} özel tam ekranda, kenarlıksız listesine eklendi");
+    let _ = app
+        .notification()
+        .builder()
+        .title("Oyun İçi Panel bu oyunda görünmüyor")
+        .body("Oyun tam ekran (özel) modda; Windows onun üstünde pencere göstermiyor. Oyunun görüntü ayarından Pencereli (Windowed) moda al: GMID onu kenarlıksız tam ekrana çevirir ve panel Steam'deki gibi açılır.")
+        .show();
 }
 
 /// Pencereyi oyunun ekranına, odak almadan yerleştirir.

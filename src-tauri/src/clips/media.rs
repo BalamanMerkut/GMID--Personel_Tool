@@ -145,6 +145,7 @@ pub struct Plan {
 const HEIGHTS: &[u32] = &[1440, 1080, 900, 720, 540, 480, 360];
 
 /// Hedef boyuta göre bit hızı, çözünürlük ve kare hızı. Önce netlik: 720p60 yerine 1080p30 seçilir.
+#[cfg(test)]
 pub fn plan(
     duration: f64,
     limit: u64,
@@ -152,6 +153,19 @@ pub fn plan(
     src_fps: f64,
     codec: Codec,
     factor: f64,
+) -> Plan {
+    plan_with(duration, limit, src, src_fps, codec, factor, false)
+}
+
+/// `smooth`: kaynağın kare hızı (ör. 60) korunur, gerekirse çözünürlük düşer ("akıcı").
+pub fn plan_with(
+    duration: f64,
+    limit: u64,
+    src: (u32, u32),
+    src_fps: f64,
+    codec: Codec,
+    factor: f64,
+    smooth: bool,
 ) -> Plan {
     let total_kbps = (limit as f64 * 0.94 * 8.0 / 1000.0 / duration.max(1.0) * factor) as u32;
     let audio = match total_kbps {
@@ -167,14 +181,20 @@ pub fn plan(
         |h: u32, fps: u32| video as f64 * 1000.0 / (h as f64 * aspect * h as f64 * fps as f64);
     let mut pick = None;
     'outer: for &h in HEIGHTS.iter().filter(|&&h| h <= sh) {
-        for fps in [src_fps, src_fps.min(30)] {
+        let rates = if smooth {
+            vec![src_fps]
+        } else {
+            vec![src_fps, src_fps.min(30)]
+        };
+        for fps in rates {
             if bpp(h, fps) >= codec.min_bpp() {
                 pick = Some((h, fps));
                 break 'outer;
             }
         }
     }
-    let (height, fps) = pick.unwrap_or((sh.min(360), src_fps.min(30)));
+    let (height, fps) =
+        pick.unwrap_or((sh.min(360), if smooth { src_fps } else { src_fps.min(30) }));
     let quality = match (pick.is_some(), height) {
         (false, _) => "poor",
         (true, h) if h >= 1080 || h >= sh => "great",
@@ -199,6 +219,8 @@ pub struct Job {
     pub codec: Codec,
     pub src: (u32, u32),
     pub src_fps: f64,
+    /// Kare hızını koru (akıcı).
+    pub smooth: bool,
 }
 
 fn null_sink() -> &'static str {
@@ -294,7 +316,15 @@ pub fn encode(
     let mut factor = if job.codec == Codec::Av1 { 0.93 } else { 1.0 };
     let mut last = None;
     for attempt in 0..3 {
-        let p = plan(duration, limit, job.src, job.src_fps, job.codec, factor);
+        let p = plan_with(
+            duration,
+            limit,
+            job.src,
+            job.src_fps,
+            job.codec,
+            factor,
+            job.smooth,
+        );
         last = Some(p);
         let vf = format!("scale=-2:{},fps={}", p.height, p.fps);
         let rate = |cmd: &mut Command| {
@@ -374,6 +404,31 @@ mod tests {
         let err = "Input #0, mov,mp4, from 'a.mp4':\n  Duration: 00:01:02.50, start: 0.000000, bitrate: 50000 kb/s\n  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709), 2560x1440 [SAR 1:1 DAR 16:9], 49000 kb/s, 60 fps";
         assert_eq!(parse_duration(err), Some(62.5));
         assert_eq!(parse_size(err), Some((2560, 1440)));
+    }
+
+    #[test]
+    fn smooth_keeps_frame_rate() {
+        let sharp = plan_with(
+            60.0,
+            DISCORD_LIMIT,
+            (1920, 1080),
+            60.0,
+            Codec::Av1,
+            1.0,
+            false,
+        );
+        let smooth = plan_with(
+            60.0,
+            DISCORD_LIMIT,
+            (1920, 1080),
+            60.0,
+            Codec::Av1,
+            1.0,
+            true,
+        );
+        assert_eq!(sharp.fps, 30, "{sharp:?}");
+        assert_eq!(smooth.fps, 60, "{smooth:?}");
+        assert!(smooth.height < sharp.height, "{smooth:?} {sharp:?}");
     }
 
     #[test]
@@ -469,6 +524,7 @@ mod real_ffmpeg {
                 codec,
                 src: (1920, 1080),
                 src_fps: 60.0,
+                smooth: false,
             };
             let p = encode(ff, &src, &out, &job, &|x| *last.lock().unwrap() = x).unwrap();
             let size = std::fs::metadata(&out).unwrap().len();

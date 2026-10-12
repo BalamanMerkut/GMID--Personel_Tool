@@ -1,5 +1,6 @@
 mod audio;
 mod backup;
+mod borderless;
 mod clips;
 mod commands;
 mod db;
@@ -102,6 +103,9 @@ pub fn run() {
                 .allow_directory(dir.folder(Some("Videolar")), true)?;
             app.asset_protocol_scope()
                 .allow_directory(dir.folder(Some("Kapaklar")), true)?;
+            // Discord'a hazırlanan kopyalar önizlenebilsin.
+            app.asset_protocol_scope()
+                .allow_directory(dir.folder(Some("Discord'a Hazır")), false)?;
 
             // Mikrofon kilidi açılışta da etkin olsun.
             let mic_lock: Option<f32> = db.setting_json("audio.micLock");
@@ -118,6 +122,7 @@ pub fn run() {
             app.manage(hotkeys::Hotkeys::default());
             app.manage(servers::Servers::default());
             app.manage(servers::watch::Watcher::default());
+            app.manage(borderless::Borderless::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -148,6 +153,7 @@ pub fn run() {
             updater::start(handle);
             deals::start(handle);
             servers::watch::start(handle);
+            borderless::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -317,6 +323,8 @@ pub fn run() {
             commands::games::panel_hide,
             commands::games::panel_focus,
             commands::games::panel_interact,
+            commands::games::borderless_list,
+            commands::games::borderless_set,
             commands::games::panel_perf,
             commands::games::fps_status,
             commands::games::fps_setup,
@@ -341,6 +349,9 @@ pub fn run() {
             commands::clips::clips_open,
             commands::clips::clips_reveal,
             commands::clips::clips_fit_discord,
+            commands::clips::clips_choices,
+            commands::clips::clips_ready_copy,
+            commands::clips::clips_ready_reveal,
             commands::clips::clips_plan,
             commands::dictation::dictation_apply,
             commands::dictation::dictation_install,

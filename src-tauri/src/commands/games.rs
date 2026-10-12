@@ -342,7 +342,7 @@ pub fn fps_status(app: AppHandle) -> crate::fps::Status {
     let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
     let requested = app
         .state::<Db>()
-        .setting_json::<bool>("fps.requested")
+        .setting_json::<bool>("fps.requested2")
         .unwrap_or(false);
     app.state::<crate::perf::Perf>()
         .presentmon
@@ -356,12 +356,23 @@ pub async fn fps_setup(app: AppHandle) -> CmdResult<crate::fps::Status> {
         let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
         let st = app.state::<crate::perf::Perf>().presentmon.setup(&root)?;
         if st.relogin {
-            let _ = app.state::<Db>().set_setting("fps.requested", "true");
+            let _ = app.state::<Db>().set_setting("fps.requested2", "true");
         }
         Ok(st)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Kenarlıksız tam ekrana çevrilen oyunlar (exe adları).
+#[tauri::command]
+pub fn borderless_list(db: State<'_, Db>) -> Vec<String> {
+    crate::borderless::list(&db)
+}
+
+#[tauri::command]
+pub fn borderless_set(db: State<'_, Db>, exe: String, on: bool) -> CmdResult<Vec<String>> {
+    crate::borderless::set(&db, &exe, on)
 }
 
 /// Bakış kipinden etkileşime: panel odak alır, oyun fareyi bırakır.
