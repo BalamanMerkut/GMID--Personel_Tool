@@ -324,6 +324,17 @@ pub fn panel_hide(app: AppHandle) {
     crate::panel::hide(&app);
 }
 
+/// Panel açıkken saniyede bir: FPS, işlemci, RAM, ekran kartı.
+#[tauri::command]
+pub async fn panel_perf(app: AppHandle) -> CmdResult<crate::perf::Sample> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let pid = crate::panel::game_pid(&app);
+        app.state::<crate::perf::Perf>().sample(pid)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Not yazmak için panel klavye odağını alır.
 #[tauri::command]
 pub fn panel_focus(app: AppHandle) {

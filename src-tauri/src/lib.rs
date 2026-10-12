@@ -16,6 +16,7 @@ mod notes;
 mod overlay;
 mod panel;
 mod paths;
+mod perf;
 mod playlists;
 mod reminders;
 mod restore;
@@ -126,6 +127,7 @@ pub fn run() {
             app.manage(install::Installer::default());
             app.manage(updater::Updater::default());
             app.manage(deals::Deals::default());
+            app.manage(perf::Perf::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -301,6 +303,7 @@ pub fn run() {
             commands::games::gamemode_set,
             commands::games::panel_hide,
             commands::games::panel_focus,
+            commands::games::panel_perf,
             commands::games::games_store_search,
             commands::games::games_add_archive,
             commands::games::reviews_list,

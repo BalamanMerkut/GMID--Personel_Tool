@@ -996,8 +996,16 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
 | **4 — Oyun içi deneyim** ✅ *kodlandı* | Oyun İçi Panel, Oyun Modu | Oyundan çıkmadan kontrol |
 | **5 — Video İndirici** ✅ *kodlandı* | İndirme yöneticisi, Videolarım, Chrome/Opera eklentisi, araçların kendiliğinden kurulup güncellenmesi | IDM benzeri indirici |
 | **6 — Film & Dizi + Kurulum** ✅ *kodlandı* | Film & Dizi Arşivi, format sonrası kurulum + dışa aktarılan .bat | Tüm istenen modüller tamam (**v1.0**) |
-| **7 — Öneriler** | Onaylanan ek özellikler (ücretsiz oyunlar, Wrapped, Rich Presence…) | v1.x |
-| **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet | v2.0 |
+| **7 — Öneriler** 🔨 *büyük kısmı kodlandı* | ✅ Uygulama içinden güncelleme · ✅ Fırsatlar (ücretsiz oyunlar + istek listesi indirimleri) · ✅ GMID Wrapped · ✅ Her şeyde tek arama (Ctrl+K) · ✅ Klip kırpma + daha net Discord'a sığdırma · ✅ Panelde FPS/CPU/GPU · ⏸ Otomatik haftalık tam yedek *(şimdilik bekliyor)* | v1.x |
+| **8 — Çevrim içi** *(tarih belirsiz)* | Sunucu (VDS), ortak arşiv, arkadaşlar, sohbet, **GMID'e paylaş** (puan kartı, klip, Wrapped ve "bu hafta ne oynadım" özetinin tek tıkla GMID Discord sunucusuna gitmesi; kullanıcı kararı: VDS ile birlikte) | v2.0 |
+
+**Yapılacaklar listesi (2026-10-12, kullanıcıyla konuşulan):**
+- ⏸ **Otomatik haftalık tam yedek:** Format Kiti'ndeki `GMID-Yedek.zip`, her hafta seçilen bir klasöre (OneDrive/Drive)
+  kendiliğinden; son N tanesi saklanır. Altyapı hazır (`restore::archive`); yalnız zamanlayıcı ve ayar gerekiyor.
+- ⏸ **GMID'e paylaş (VDS gerekince):** Discord sunucusuna gönderim bir bot/sunucu üzerinden. Not: yalnız bir kanala
+  göndermek için Discord webhook'u VDS'siz de çalışır; istenirse ara adım olarak yapılabilir.
+- 💡 PlayStation Store ve Microsoft Store **indirimleri** için anahtarsız resmî kaynak yok; şimdilik yalnız ücretsizleri
+  geliyor. Güvenilir bir kaynak bulunursa Fırsatlar'a eklenir.
 
 **Sıra değişikliği (2026-10-11):** Önce uygulamanın tek kullanıcı için yerelde sağlam çalışması ve Video İndirici
 istendi; Faz 3b (oyun algılama, kütüphane, arşiv, klipler), Faz 4 ve sohbet (3c) sonraya kaldı.
@@ -1066,6 +1074,7 @@ Her faz sonunda: çalışan bir sürüm (`.exe` kurulum dosyası), kısa değiş
 | Sürüm | Tarih | Değişiklik |
 |-------|-------|------------|
 | v0.1 | 2026-10-10 | İlk taslak: istekler + araştırma sonuçları + öneriler |
+| v0.32 | 2026-10-12 | **Oyun İçi Panel'de performans şeridi:** FPS (RivaTuner/RTSS açıksa paylaşılan belleğinden, oyuna enjeksiyon yok), işlemci yükü, ekran kartı yükü ve sıcaklığı (NVIDIA: `nvidia-smi`; diğerleri: Windows GPU sayacı, sıcaklıksız), RAM; yalnız panel açıkken saniyede bir. Yol haritası §9: Faz 7 durumu ve yapılacaklar listesi (haftalık otomatik yedek bekliyor, GMID'e paylaş VDS ile) |
 | v0.31 | 2026-10-12 | **Her şeyde tek arama** (her yerden Ctrl+K ya da üst çubuktaki "Ara"): ekranlar, Kontrol Odası sekmeleri, notlar (başlık ve içerik, eşleşen yerin çevresi gösterilir), oyunlar (kütüphane ve arşiv), film/diziler (yönetmen dahil), videolar/müzikler (açınca çalar), klipler, hatırlatıcılar. Türkçe harfler katlanır ("isik" ~ "ışık"); başta eşleşen önce. Sonuca tıklayınca o kayıt kendi ekranında açılır |
 | v0.30 | 2026-10-12 | **GMID Wrapped** (Oyun Salonu): ay ya da yıl özeti tek görselde (1080×1350 PNG) — toplam saat, oturum/gün/oyun sayısı, en çok oynanan 5 oyun (kapaklı, süre çubukları), rozetler (Sadık, Gece Kuşu, Maratoncu, Hafta Sonu Savaşçısı, Kâşif, Sinefil, Eleştirmen, Klip Avcısı; en fazla 3), en uzun oturum, en sevilen gün ve saat, puanlanan oyunlar, bitirilen film/diziler, klip ve video sayısı. "PNG olarak kaydet" (`Ozetler\`) ve "Panoya kopyala" (Discord'da Ctrl+V) |
 | v0.29 | 2026-10-12 | **Fırsatlar** (Oyun Salonu): her platformda şu an ücretsiz oyunlar (GamerPower: Steam, Epic, GOG, PlayStation, Xbox, Ubisoft, EA, Prime Gaming, itch, Battle.net; Epic'in kendi listesi kesin tarihli, sıradaki ücretsiz dahil), istek listesindeki ("İstiyorum") oyunların indirimleri (Steam Türkiye fiyatı + CheapShark: GOG, Humble, EA, Ubisoft, Epic, Fanatical…). 3 saatte bir bakılır; yeni ücretsiz oyun ve yeni/daha büyük indirim Windows bildirimiyle (mağaza seçimi, en az indirim %). PlayStation Store ve Microsoft Store indirimleri için anahtarsız resmî kaynak yok: yalnız ücretsizleri (GamerPower) gelir |

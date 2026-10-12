@@ -77,7 +77,8 @@ sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar,
   çıkışına (ör. kulaklık) geçilir, mikrofon seviyesi kilitlenir, GMID'in sesleri ve Windows bildirimleri susar, hareketli
   arka plan durur, seçtiğin uygulamalar (ör. tarayıcı) kapanır. İstersen kütüphanendeki bir oyun açılınca kendiliğinden
   açılır, son oyun kapanınca kapanır. Kapanınca (uygulama kapanırken de) her şey eski haline döner.
-- **Oyun İçi Panel** (**Ctrl+Shift+G**): oyunun bulunduğu ekranın üstünde yarı saydam panel — ses çıkışı ve seviyesi,
+- **Oyun İçi Panel** (**Ctrl+Shift+G**): oyunun bulunduğu ekranın üstünde yarı saydam panel — üstte FPS, işlemci,
+  ekran kartı (yük ve sıcaklık) ve RAM (FPS için RivaTuner/RTSS açık olmalı; Format Sonrası Kurulum'da var), ses çıkışı ve seviyesi,
   mikrofon (seviye, sessize alma, kilit), Oyun Modu, sayaç (5/15/30 dk mola), o oyuna not (Notlar'da da görünür), son
   klip (Discord'a sığdır), yaklaşan hatırlatıcılar. Esc ya da aynı tuşla kapanır, oyuna geri dönersin. Oyuna hiçbir şey
   eklenmez; çerçevesiz ya da pencereli oyunlarda görünür.

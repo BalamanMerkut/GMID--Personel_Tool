@@ -795,3 +795,19 @@ export interface SearchHit {
   sub: string;
   image: string | null;
 }
+
+/** Oyun İçi Panel performans ölçümü. */
+export interface PerfSample {
+  cpu: number | null;
+  ramUsed: number | null;
+  ramTotal: number | null;
+  gpu: number | null;
+  gpuTemp: number | null;
+  vramUsed: number | null;
+  vramTotal: number | null;
+  gpuName: string | null;
+  fps: number | null;
+  fpsApp: string | null;
+  /** RivaTuner (RTSS) çalışıyor mu. */
+  rtss: boolean;
+}

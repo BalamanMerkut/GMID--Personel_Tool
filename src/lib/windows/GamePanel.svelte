@@ -6,7 +6,7 @@
   import { on } from "../bus";
   import Icon from "../Icon.svelte";
   import { clock, playtime } from "../time";
-  import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, Reminder } from "../types";
+  import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PerfSample, Reminder } from "../types";
 
   let audio = $state<AudioState | null>(null);
   let game = $state<Game | null>(null);
@@ -19,6 +19,20 @@
   let noteSaved = $state(true);
   let now = $state(Date.now());
   let msg = $state("");
+  let perf = $state<PerfSample | null>(null);
+  let perfTimer: ReturnType<typeof setInterval> | undefined;
+
+  // Ölçüm yalnız panel açıkken (saniyede bir).
+  function startPerf() {
+    stopPerf();
+    const tick = () => void api.panel.perf().then((p) => (perf = p)).catch(() => {});
+    tick();
+    perfTimer = setInterval(tick, 1000);
+  }
+  function stopPerf() {
+    clearInterval(perfTimer);
+    perfTimer = undefined;
+  }
 
   const out = $derived(audio?.outputs.find((d) => d.isDefault) ?? null);
   const mic = $derived(audio?.inputs.find((d) => d.isDefault) ?? null);
@@ -110,8 +124,10 @@
 
   onMount(() => {
     void refresh();
+    startPerf();
     const stops = [
-      on("panel-open", () => void refresh()),
+      on("panel-open", () => (void refresh(), startPerf())),
+      on("panel-close", () => stopPerf()),
       on<GameModeStatus>("gamemode", (s) => (gm = s)),
       on("audio-changed", async () => (audio = await api.audio.state().catch(() => audio))),
     ];
@@ -120,6 +136,7 @@
     window.addEventListener("keydown", key);
     return () => {
       clearInterval(timer);
+      stopPerf();
       window.removeEventListener("keydown", key);
       for (const s of stops) void s.then((f) => f());
     };
@@ -145,6 +162,18 @@
         </div>
       {:else}
         <span class="sub">Şu an algılanan bir oyun yok</span>
+      {/if}
+      {#if perf}
+        <div class="perf tnum" title={perf.gpuName ?? ""}>
+          <span class:dim={perf.fps == null} title={perf.fps == null ? (perf.rtss ? "RTSS bu oyunu görmüyor" : "FPS için RivaTuner (RTSS) açık olmalı · Format Sonrası Kurulum'da var") : perf.fpsApp ?? ""}>
+            <b>{perf.fps != null ? Math.round(perf.fps) : "—"}</b><i>FPS</i>
+          </span>
+          <span><b>{perf.cpu != null ? `%${Math.round(perf.cpu)}` : "—"}</b><i>CPU</i></span>
+          <span>
+            <b>{perf.gpu != null ? `%${Math.round(perf.gpu)}` : "—"}</b><i>GPU{perf.gpuTemp != null ? ` · ${Math.round(perf.gpuTemp)}°C` : ""}</i>
+          </span>
+          {#if perf.ramUsed && perf.ramTotal}<span><b>{(perf.ramUsed / 1e9).toFixed(1).replace(".", ",")}</b><i>/ {Math.round(perf.ramTotal / 1e9)} GB RAM</i></span>{/if}
+        </div>
       {/if}
       <span class="clock tnum">{timeStr}</span>
       <button class="x" onclick={close} title="Kapat (Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
@@ -254,6 +283,11 @@
   .game div { display: flex; flex-direction: column; min-width: 0; }
   .game b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .top > .sub { flex: 1; }
+  .perf { display: flex; gap: 16px; padding: 4px 14px; border-left: 1px solid var(--line-2); border-right: 1px solid var(--line-2); }
+  .perf span { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+  .perf b { font-family: var(--f-display); font-size: 18px; color: var(--text); }
+  .perf i { font-style: normal; font-size: 10.5px; color: var(--muted); letter-spacing: 0.04em; }
+  .perf .dim b { color: var(--dim); }
   .clock { font-family: var(--f-display); font-size: 22px; font-weight: 700; color: var(--gold-glow); }
   .x { border: 0; background: rgba(255, 255, 255, 0.06); color: var(--muted); padding: 8px; border-radius: 10px; display: grid; }
   .x:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }

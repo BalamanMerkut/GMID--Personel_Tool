@@ -79,6 +79,30 @@ pub fn show(app: &AppHandle) {
     });
 }
 
+/// Panel açılmadan önceki ön plan penceresinin süreci (FPS'i o oyundan okumak için).
+pub fn game_pid(app: &AppHandle) -> Option<u32> {
+    let prev = *app
+        .state::<Panel>()
+        .previous
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    prev.and_then(pid_of)
+}
+
+#[cfg(windows)]
+fn pid_of(h: isize) -> Option<u32> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(HWND(h as *mut _), Some(&mut pid)) };
+    (pid != 0).then_some(pid)
+}
+
+#[cfg(not(windows))]
+fn pid_of(_h: isize) -> Option<u32> {
+    None
+}
+
 /// Not yazmak için klavye odağı (yalnız kullanıcı metin kutusuna tıklayınca).
 pub fn take_focus(app: &AppHandle) {
     let Some(w) = app.get_webview_window(PANEL) else {
@@ -92,6 +116,8 @@ pub fn take_focus(app: &AppHandle) {
 }
 
 pub fn hide(app: &AppHandle) {
+    // Arayüz ölçümü (FPS, işlemci…) durdursun.
+    let _ = tauri::Emitter::emit_to(app, PANEL, "panel-close", ());
     if let Some(w) = app.get_webview_window(PANEL) {
         crate::overlay::hide_window(&w);
         set_activatable(&w, false);
