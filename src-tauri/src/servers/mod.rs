@@ -220,6 +220,37 @@ fn extension(path: &str) -> Option<&'static str> {
 struct RemoteList {
     #[serde(default)]
     servers: Vec<RemoteServer>,
+    /// GMID Discord davet bağlantısı (uygulamada "Discord'a katıl"). Boş: gösterilmez.
+    #[serde(default)]
+    discord: Option<String>,
+}
+
+/// Topluluk listesinde bağlantı yoksa (ya da liste hiç indirilemediyse) kullanılan davet.
+pub const DEFAULT_DISCORD: &str = "";
+const DISCORD_KEY: &str = "community.discord";
+
+/// Yalnız Discord davet bağlantıları kabul edilir.
+pub fn valid_invite(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://discord.gg/")
+        .or_else(|| url.strip_prefix("https://discord.com/invite/"));
+    rest.is_some_and(|code| {
+        !code.is_empty()
+            && code.len() <= 64
+            && code
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    })
+}
+
+/// Uygulamada gösterilecek davet bağlantısı.
+pub fn discord_link(db: &Db) -> Option<String> {
+    match db.setting(DISCORD_KEY).ok().flatten() {
+        Some(v) if valid_invite(&v) => Some(v),
+        // Liste bilerek boş bıraktıysa gösterilmez.
+        Some(v) if v.is_empty() => None,
+        _ => valid_invite(DEFAULT_DISCORD).then(|| DEFAULT_DISCORD.to_string()),
+    }
 }
 
 #[derive(Deserialize)]
@@ -327,6 +358,11 @@ fn download_list(db: &Db, logos: &Path, url: &str) -> Result<(), String> {
         .map_err(|_| "Liste indirilemedi".to_string())?;
     let parsed: RemoteList =
         serde_json::from_str(&body).map_err(|e| format!("Liste okunamadı: {e}"))?;
+    if let Some(link) = parsed.discord.as_deref().map(str::trim) {
+        if link.is_empty() || valid_invite(link) {
+            let _ = db.set_setting(DISCORD_KEY, link);
+        }
+    }
     apply_list(db, logos, url, parsed.servers)?;
     let cache = ListCache {
         url: url.to_string(),
@@ -704,6 +740,17 @@ fn url_encode(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn only_discord_invites_are_accepted() {
+        assert!(valid_invite("https://discord.gg/gmid"));
+        assert!(valid_invite("https://discord.com/invite/AbC-12_x"));
+        assert!(!valid_invite("http://discord.gg/gmid"));
+        assert!(!valid_invite("https://discord.gg/"));
+        assert!(!valid_invite("https://evil.com/discord.gg/x"));
+        assert!(!valid_invite("https://discord.gg/a b"));
+    }
+
     use super::*;
 
     fn temp_db(name: &str) -> (Db, PathBuf) {

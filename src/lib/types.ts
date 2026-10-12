@@ -810,4 +810,14 @@ export interface PerfSample {
   fpsApp: string | null;
   /** RivaTuner (RTSS) çalışıyor mu. */
   rtss: boolean;
+  fpsSource: "rtss" | "presentmon" | null;
+  /** PresentMon: missing (kurulmamış) · permission (izin yok) · ready · running · error */
+  fpsState: "missing" | "permission" | "ready" | "running" | "error";
+}
+
+export interface FpsStatus {
+  state: "missing" | "permission" | "ready" | "running" | "error";
+  /** İzin istendi ama Windows oturumu henüz yenilenmedi. */
+  relogin: boolean;
+  message: string | null;
 }

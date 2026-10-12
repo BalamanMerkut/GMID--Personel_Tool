@@ -8,11 +8,13 @@
   import { api } from "../api";
   import { on } from "../bus";
   import type { UpdateStatus } from "../types";
+  import { community, joinDiscord, startCommunity } from "../community.svelte";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
   const downloading = $derived(activeSummary().count);
   let update = $state<UpdateStatus | null>(null);
   onMount(() => {
+    startCommunity();
     void api.update.status().then((s) => (update = s)).catch(() => {});
     const stop = on<UpdateStatus>("update", (s) => (update = s));
     return () => void stop.then((f) => f());
@@ -46,6 +48,11 @@
       {/each}
     {/each}
   </nav>
+  {#if community.discord}
+    <button class="dc" onclick={joinDiscord} title="GMID Discord sunucusuna katıl ({community.discord.replace('https://', '')})">
+      <Icon name="discord" size={16} /><span>GMID Discord'a katıl</span>
+    </button>
+  {/if}
   {#if update?.available}
     <button class="upd" onclick={() => onnavigate("settings/hakkinda")} title={update.latest?.title ?? ""}>
       <Icon name="download" size={15} /><span>Güncelleme var</span>
@@ -94,6 +101,8 @@
   .eq.paused i { animation: none; height: 4px; background: var(--dim); }
   .eq i:nth-child(3) { animation-delay: 0.4s; }
   @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+  .dc { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(88, 101, 242, 0.55); background: rgba(88, 101, 242, 0.14); color: #c9cdfb; font-weight: 600; font-size: 13px; }
+  .dc:hover { background: rgba(88, 101, 242, 0.26); color: #fff; }
   .upd { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.1); color: var(--gold-glow); font-weight: 600; font-size: 13px; }
   .upd:hover { background: rgba(227, 194, 112, 0.18); }
   .foot {
@@ -104,7 +113,7 @@
   /* Dar pencerede sadece ikonlar */
   @media (max-width: 1100px) {
     .brand { justify-content: center; padding: 16px 8px; }
-    .name, .room, .label, .soon, .foot, .upd span { display: none; }
+    .name, .room, .label, .soon, .foot, .upd span, .dc span { display: none; }
     nav { padding: 6px 10px; gap: 4px; }
     .sep { display: block; height: 1px; background: var(--line); margin: 8px 6px; }
     button { justify-content: center; padding: 11px; position: relative; }

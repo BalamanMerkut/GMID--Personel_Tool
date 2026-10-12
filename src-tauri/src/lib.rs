@@ -6,6 +6,7 @@ mod db;
 mod deals;
 mod dictation;
 mod downloader;
+mod fps;
 mod gamemode;
 mod games;
 mod hotkeys;
@@ -175,6 +176,8 @@ pub fn run() {
             if !minimized {
                 window::show_main(handle);
             }
+            // Oyun İçi Panel'i şimdiden gizli hazırla (oyunda ilk açılışta odak kapmasın).
+            panel::prepare(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -250,6 +253,7 @@ pub fn run() {
             commands::servers::server_delete,
             commands::servers::server_import_logo,
             commands::servers::servers_sync,
+            commands::servers::community_discord,
             commands::servers::servers_cached,
             commands::servers::servers_query,
             commands::servers::server_join,
@@ -303,7 +307,10 @@ pub fn run() {
             commands::games::gamemode_set,
             commands::games::panel_hide,
             commands::games::panel_focus,
+            commands::games::panel_interact,
             commands::games::panel_perf,
+            commands::games::fps_status,
+            commands::games::fps_setup,
             commands::games::games_store_search,
             commands::games::games_add_archive,
             commands::games::reviews_list,
@@ -351,6 +358,13 @@ pub fn run() {
                         (app.try_state::<games::Games>(), app.try_state::<db::Db>())
                     {
                         g.shutdown(&db);
+                    }
+                    // Panel açıkken kapanırsa FPS ölçümü (PresentMon) de kapansın.
+                    if let (Some(p), Some(dir)) = (
+                        app.try_state::<perf::Perf>(),
+                        app.try_state::<paths::DataDir>(),
+                    ) {
+                        p.presentmon.stop(dir.root());
                     }
                     // Oyun Modu açıksa güç planı, ses çıkışı ve kilit geri alınsın.
                     if let Some(gm) = app.try_state::<gamemode::GameMode>() {

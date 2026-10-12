@@ -56,9 +56,18 @@ pub async fn servers_sync(app: AppHandle, force: bool) -> CmdResult<SyncResult> 
             app.state::<DataDir>(),
             app.state::<Servers>(),
         );
-        servers::sync(&db, &dir.servers(), &state, force)
+        let r = servers::sync(&db, &dir.servers(), &state, force);
+        // Davet bağlantısı listeyle gelir: yan menü güncellensin.
+        let _ = tauri::Emitter::emit(app, "community", servers::discord_link(&db));
+        r
     })
     .await
+}
+
+/// GMID Discord davet bağlantısı (yoksa `None`).
+#[tauri::command]
+pub fn community_discord(db: State<'_, Db>) -> Option<String> {
+    servers::discord_link(&db)
 }
 
 /// Son bilinen durumlar (ekran açılır açılmaz göstermek için).

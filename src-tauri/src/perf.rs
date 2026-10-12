@@ -28,10 +28,16 @@ pub struct Sample {
     pub fps_app: Option<String>,
     /// RTSS çalışmıyorsa `false` (arayüz ipucu gösterir).
     pub rtss: bool,
+    /// FPS nereden: rtss | presentmon
+    pub fps_source: Option<&'static str>,
+    /// PresentMon'un durumu (FPS yoksa arayüz ne yapılacağını söyler).
+    pub fps_state: crate::fps::State,
 }
 
 #[derive(Default)]
 pub struct Perf {
+    /// RTSS yokken FPS.
+    pub presentmon: crate::fps::PresentMon,
     /// Önceki (boşta, çekirdek, kullanıcı) süreleri.
     cpu_prev: Mutex<Option<(u64, u64, u64)>>,
     /// nvidia-smi bulunamadıysa bir daha denenmez.
@@ -130,7 +136,7 @@ pub fn pick_rtss(apps: &[RtssApp], pid: Option<u32>) -> Option<&RtssApp> {
 
 impl Perf {
     /// `game_pid`: panel açılmadan önceki ön plan penceresinin süreci.
-    pub fn sample(&self, game_pid: Option<u32>) -> Sample {
+    pub fn sample(&self, game_pid: Option<u32>, root: &std::path::Path) -> Sample {
         let mut s = Sample::default();
         #[cfg(windows)]
         {
@@ -156,7 +162,15 @@ impl Perf {
             if let Some(app) = apps.as_deref().and_then(|a| pick_rtss(a, game_pid)) {
                 s.fps = app.fps();
                 s.fps_app = Some(app.name.clone());
+                s.fps_source = Some("rtss");
             }
+        }
+        if s.fps.is_none() {
+            s.fps = self.presentmon.sample(root, game_pid);
+            if s.fps.is_some() {
+                s.fps_source = Some("presentmon");
+            }
+            s.fps_state = self.presentmon.status(root, false).state;
         }
         let _ = game_pid;
         use std::sync::atomic::Ordering;

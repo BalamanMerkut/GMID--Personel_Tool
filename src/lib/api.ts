@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BackupManifest, DealsSnapshot, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BackupManifest, DealsSnapshot, FpsStatus, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -305,6 +305,17 @@ export const api = {
     },
   },
 
+  community: {
+    /** GMID Discord davet bağlantısı (yoksa null). */
+    discord: () => call<string | null>("community_discord"),
+  },
+
+  fps: {
+    status: () => call<FpsStatus>("fps_status"),
+    /** PresentMon'u indirir, bir kez yönetici izniyle FPS ölçümüne izin verir. */
+    setup: () => call<FpsStatus>("fps_setup"),
+  },
+
   gamemode: {
     status: () => call<GameModeStatus>("gamemode_status"),
     /** Açar/kapatır; kapatınca değiştirilenler geri alınır. */
@@ -316,6 +327,8 @@ export const api = {
     hide: () => call<void>("panel_hide"),
     /** Nota yazmak için klavye odağı (panel normalde odak almaz, oyun önde kalır). */
     focus: () => call<void>("panel_focus"),
+    /** Bakış kipinden etkileşime: panel odak alır, oyun fareyi bırakır. */
+    interact: () => call<void>("panel_interact"),
     /** FPS (RTSS açıksa), işlemci, RAM, ekran kartı. */
     perf: () => call<PerfSample>("panel_perf"),
   },

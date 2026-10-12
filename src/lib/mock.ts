@@ -699,13 +699,21 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       gameMode = a.on ? { ...gameMode, active: true, reason: "manual", since: now() } : { ...gameMode, active: false, reason: null, since: null };
       emit("gamemode", gameMode);
       return gameMode;
+    case "community_discord":
+      return "https://discord.gg/gmid";
+    case "fps_status":
+      return { state: "missing", relogin: false, message: null };
+    case "fps_setup":
+      await wait(1200);
+      return { state: "permission", relogin: true, message: "Windows oturumunu bir kez kapatıp aç (ya da bilgisayarı yeniden başlat), sonra FPS görünür." };
     case "panel_perf":
       return {
         cpu: 30 + Math.random() * 25, ramUsed: 14.2e9, ramTotal: 32e9, gpu: 85 + Math.random() * 12, gpuTemp: 66 + Math.random() * 4,
-        vramUsed: 7.1e9, vramTotal: 12e9, gpuName: "NVIDIA GeForce RTX 4070", fps: 140 + Math.random() * 20, fpsApp: "VALORANT-Win64-Shipping.exe", rtss: true,
+        vramUsed: 7.1e9, vramTotal: 12e9, gpuName: "NVIDIA GeForce RTX 4070", fps: 140 + Math.random() * 20, fpsApp: "VALORANT-Win64-Shipping.exe", rtss: false, fpsSource: "presentmon", fpsState: "running",
       };
     case "panel_hide":
     case "panel_focus":
+    case "panel_interact":
       return;
     case "clips_list":
       return clipList;

@@ -329,10 +329,45 @@ pub fn panel_hide(app: AppHandle) {
 pub async fn panel_perf(app: AppHandle) -> CmdResult<crate::perf::Sample> {
     tauri::async_runtime::spawn_blocking(move || {
         let pid = crate::panel::game_pid(&app);
-        app.state::<crate::perf::Perf>().sample(pid)
+        let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
+        app.state::<crate::perf::Perf>().sample(pid, &root)
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// FPS ölçümünün (PresentMon) durumu.
+#[tauri::command]
+pub fn fps_status(app: AppHandle) -> crate::fps::Status {
+    let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
+    let requested = app
+        .state::<Db>()
+        .setting_json::<bool>("fps.requested")
+        .unwrap_or(false);
+    app.state::<crate::perf::Perf>()
+        .presentmon
+        .status(&root, requested)
+}
+
+/// FPS ölçümünü aç: PresentMon'u indir, bir kez yönetici izniyle izin ver.
+#[tauri::command]
+pub async fn fps_setup(app: AppHandle) -> CmdResult<crate::fps::Status> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
+        let st = app.state::<crate::perf::Perf>().presentmon.setup(&root)?;
+        if st.relogin {
+            let _ = app.state::<Db>().set_setting("fps.requested", "true");
+        }
+        Ok(st)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Bakış kipinden etkileşime: panel odak alır, oyun fareyi bırakır.
+#[tauri::command]
+pub fn panel_interact(app: AppHandle) {
+    crate::panel::interact(&app);
 }
 
 /// Not yazmak için panel klavye odağını alır.

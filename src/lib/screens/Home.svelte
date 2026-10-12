@@ -3,6 +3,7 @@
   import { api, formatSize, type AppInfo } from "../api";
   import { on } from "../bus";
   import Icon from "../Icon.svelte";
+  import { community, joinDiscord } from "../community.svelte";
   import { findScreen, SCREENS } from "../nav";
   import { ago, relative, when } from "../time";
   import type { NoteSummary, Reminder, Server, ServerStatus } from "../types";
@@ -75,6 +76,7 @@
       <h2>{greeting}, <em>malikâne sakini</em>.</h2>
     </div>
     <div class="row">
+      {#if community.discord}<button class="btn ghost" onclick={joinDiscord}><Icon name="discord" />GMID Discord</button>{/if}
       <button class="btn ghost" onclick={() => api.notes.openQuick()}><Icon name="note" />Hızlı not</button>
       <button class="btn" onclick={() => onnavigate("reminders")}><Icon name="bell" />Hatırlatıcı kur</button>
     </div>

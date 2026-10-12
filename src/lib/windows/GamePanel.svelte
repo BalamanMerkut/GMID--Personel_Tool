@@ -20,6 +20,8 @@
   let now = $state(Date.now());
   let msg = $state("");
   let perf = $state<PerfSample | null>(null);
+  /** interactive: panel odakta (Shift+Tab gibi) · glance: oyun önde, panel yalnız gösteriyor. */
+  let openInfo = $state<{ mode: "interactive" | "glance"; exclusive: boolean; minimizes: boolean }>({ mode: "interactive", exclusive: false, minimizes: false });
   let perfTimer: ReturnType<typeof setInterval> | undefined;
 
   // Ölçüm yalnız panel açıkken (saniyede bir).
@@ -126,7 +128,11 @@
     void refresh();
     startPerf();
     const stops = [
-      on("panel-open", () => (void refresh(), startPerf())),
+      on<{ mode: "interactive" | "glance"; exclusive: boolean; minimizes: boolean } | null>("panel-open", (info) => {
+        if (info) openInfo = info;
+        void refresh();
+        startPerf();
+      }),
       on("panel-close", () => stopPerf()),
       on<GameModeStatus>("gamemode", (s) => (gm = s)),
       on("audio-changed", async () => (audio = await api.audio.state().catch(() => audio))),
@@ -165,7 +171,7 @@
       {/if}
       {#if perf}
         <div class="perf tnum" title={perf.gpuName ?? ""}>
-          <span class:dim={perf.fps == null} title={perf.fps == null ? (perf.rtss ? "RTSS bu oyunu görmüyor" : "FPS için RivaTuner (RTSS) açık olmalı · Format Sonrası Kurulum'da var") : perf.fpsApp ?? ""}>
+          <span class:dim={perf.fps == null} title={perf.fps != null ? (perf.fpsSource === "rtss" ? `RivaTuner · ${perf.fpsApp ?? ""}` : "PresentMon") : perf.fpsState === "missing" ? "FPS ölçümü kapalı: GMID → Oyun Modu → FPS ölçümünü aç" : perf.fpsState === "permission" ? "FPS için izin gerekiyor: Oyun Modu → FPS ölçümünü aç (sonra Windows oturumunu yenile)" : "Ölçülüyor…"}>
             <b>{perf.fps != null ? Math.round(perf.fps) : "—"}</b><i>FPS</i>
           </span>
           <span><b>{perf.cpu != null ? `%${Math.round(perf.cpu)}` : "—"}</b><i>CPU</i></span>
@@ -178,6 +184,25 @@
       <span class="clock tnum">{timeStr}</span>
       <button class="x" onclick={close} title="Kapat (Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
     </header>
+
+    {#if openInfo.mode === "glance"}
+      <div class="hint">
+        <Icon name="info" size={16} />
+        <span>
+          {#if openInfo.exclusive}
+            Oyun <b>özel tam ekranda</b>: Windows bu kipte paneli oyunun üstünde göstermeyebilir. Oyunun görüntü ayarında
+            <b>Kenarlıksız / Windowed Fullscreen</b> seçersen Steam'deki Shift+Tab gibi çalışır.
+          {:else if openInfo.minimizes}
+            Bu oyun odak gidince kendini küçülttüğü için panel oyunu bozmadan açıldı; fare oyunda kalır.
+          {:else}
+            Oyun önde, fare oyunda.
+          {/if}
+        </span>
+        <button class="btn sm" onclick={() => (api.panel.interact(), (openInfo = { ...openInfo, mode: "interactive" }))}>
+          <Icon name="arrow" size={14} />Fareyi serbest bırak
+        </button>
+      </div>
+    {/if}
 
     <div class="grid">
       <section class="card">
@@ -291,6 +316,9 @@
   .clock { font-family: var(--f-display); font-size: 22px; font-weight: 700; color: var(--gold-glow); }
   .x { border: 0; background: rgba(255, 255, 255, 0.06); color: var(--muted); padding: 8px; border-radius: 10px; display: grid; }
   .x:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }
+  .hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); color: var(--muted); font-size: 13px; }
+  .hint span { flex: 1; }
+  .hint b { color: var(--text); }
   .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
   .card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); min-width: 0; }
   .card.wide { grid-column: span 2; }

@@ -8,7 +8,7 @@
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { Device, GameModeProfile, GameModeStatus, RunningApp } from "../types";
+  import type { Device, FpsStatus, GameModeProfile, GameModeStatus, RunningApp } from "../types";
 
   const DEFAULT: GameModeProfile = { auto: false, power: true, output: null, micLock: true, quiet: true, stopBackground: true, closeApps: [] };
 
@@ -19,11 +19,26 @@
   let newApp = $state("");
   let busy = $state(false);
   let now = $state(Date.now());
+  let fps = $state<FpsStatus | null>(null);
+  let fpsBusy = $state(false);
+
+  async function setupFps() {
+    fpsBusy = true;
+    try {
+      fps = await api.fps.setup();
+      notify(fps.relogin ? "İzin verildi · Windows oturumunu bir kez kapatıp aç" : "FPS ölçümü hazır", "check");
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      fpsBusy = false;
+    }
+  }
 
   onMount(() => {
     void api.gamemode.status().then((s) => (status = s)).catch(() => {});
     void api.audio.state().then((s) => (outputs = s.outputs)).catch(() => {});
     void api.games.runningApps().then((a) => (apps = a)).catch(() => {});
+    void api.fps.status().then((s) => (fps = s)).catch(() => {});
     const stop = on<GameModeStatus>("gamemode", (s) => (status = s));
     const timer = setInterval(() => (now = Date.now()), 30_000);
     return () => {
@@ -137,6 +152,22 @@
       için oyunun görüntü ayarında <b>Kenarlıksız / Borderless</b> ya da <b>Pencereli</b> seçili olmalı; “Tam ekran
       (özel)” modunda Windows hiçbir pencereyi oyunun üstünde göstermez.
     </p>
+    <div class="line">
+      <div>
+        <b>FPS ölçümü</b>
+        <span class="sub small">
+          {#if !fps}…
+          {:else if fps.state === "ready" || fps.state === "running"}Hazır: panelde FPS görünür (PresentMon, oyuna dokunmaz).
+          {:else if fps.relogin}İzin verildi. Windows oturumunu bir kez <b>kapatıp aç</b> (ya da yeniden başlat), sonra FPS görünür.
+          {:else if fps.state === "permission"}PresentMon kurulu ama Windows izni yok: bir kez yönetici izni gerekiyor.
+          {:else}Panelde FPS için küçük bir ölçüm aracı (Intel PresentMon, ~1 MB) kurulur ve bir kez yönetici izni istenir.
+            RivaTuner (RTSS) açıksa ona gerek kalmaz.{/if}
+        </span>
+      </div>
+      {#if fps && fps.state !== "ready" && fps.state !== "running" && !fps.relogin}
+        <button class="btn sm" disabled={fpsBusy} onclick={setupFps}><Icon name="bolt" size={14} />{fpsBusy ? "Kuruluyor…" : "FPS ölçümünü aç"}</button>
+      {/if}
+    </div>
   </section>
 </div>
 
