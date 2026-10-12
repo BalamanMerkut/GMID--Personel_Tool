@@ -122,3 +122,20 @@ pub fn server_join(app: AppHandle, db: State<'_, Db>, id: String) -> CmdResult<J
 pub fn server_set_exe(db: State<'_, Db>, game: String, path: String) -> CmdResult<()> {
     servers::set_exe(&db, &game, &path)
 }
+
+/// Sunucu bildirim kuralları (sunucu kimliği → kural).
+#[tauri::command]
+pub fn servers_watch_rules(
+    db: State<'_, Db>,
+) -> std::collections::HashMap<String, servers::watch::Rule> {
+    servers::watch::rules(&db)
+}
+
+#[tauri::command]
+pub fn servers_watch_set(
+    db: State<'_, Db>,
+    id: String,
+    rule: servers::watch::Rule,
+) -> CmdResult<()> {
+    servers::watch::set_rule(&db, &id, rule)
+}

@@ -6,6 +6,7 @@
 
 pub mod games;
 pub mod query;
+pub mod watch;
 
 use crate::db::Db;
 use crate::util::{new_id, now_ms};

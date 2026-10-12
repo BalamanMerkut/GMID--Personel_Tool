@@ -833,3 +833,9 @@ export interface AppVolume {
   /** Şu an ses çıkarıyor mu. */
   active: boolean;
 }
+
+/** Sunucu bildirimi: açılınca ve/veya en az N kişi olunca. */
+export interface ServerWatch {
+  online: boolean;
+  minPlayers: number | null;
+}

@@ -117,6 +117,7 @@ pub fn run() {
             app.manage(scheduler::Scheduler::default());
             app.manage(hotkeys::Hotkeys::default());
             app.manage(servers::Servers::default());
+            app.manage(servers::watch::Watcher::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -146,6 +147,7 @@ pub fn run() {
             titles::fetch_meta(handle);
             updater::start(handle);
             deals::start(handle);
+            servers::watch::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -259,6 +261,8 @@ pub fn run() {
             commands::servers::server_import_logo,
             commands::servers::servers_sync,
             commands::servers::community_discord,
+            commands::servers::servers_watch_rules,
+            commands::servers::servers_watch_set,
             commands::servers::servers_cached,
             commands::servers::servers_query,
             commands::servers::server_join,

@@ -4,7 +4,8 @@
   import Icon from "../Icon.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { GameInfo, Server, ServerInput, ServerStatus } from "../types";
+  import Switch from "../components/Switch.svelte";
+  import type { GameInfo, Server, ServerInput, ServerStatus, ServerWatch } from "../types";
 
   /** Ekran açıkken sunucular bu aralıkla yeniden sorulur. */
   const POLL_MS = 30_000;
@@ -32,7 +33,17 @@
   let syncError: string | null = $state(null);
   let listUrl = $state("");
   let defaultUrl = $state("");
-  let open: Record<string, "how" | "players" | null> = $state({});
+  let open: Record<string, "how" | "players" | "notify" | null> = $state({});
+  let watch: Record<string, ServerWatch> = $state({});
+
+  function setWatch(id: string, rule: ServerWatch) {
+    if (rule.online || rule.minPlayers) watch = { ...watch, [id]: rule };
+    else {
+      const { [id]: _, ...rest } = watch;
+      watch = rest;
+    }
+    void api.serverWatch.set(id, rule).catch((e) => notify(String(e), "info"));
+  }
   let now = $state(Date.now());
 
   // ekle / düzenle
@@ -108,6 +119,7 @@
     let alive = true;
     (async () => {
       [games, servers] = await Promise.all([api.servers.games(), api.servers.list()]);
+      watch = await api.serverWatch.rules().catch(() => ({}));
       mergeStatuses(await api.servers.cached());
       busy = true;
       await sync(false);
@@ -151,7 +163,7 @@
     return ms < 60 ? "good" : ms < 120 ? "ok" : "slow";
   }
 
-  function toggle(id: string, what: "how" | "players") {
+  function toggle(id: string, what: "how" | "players" | "notify") {
     open = { ...open, [id]: open[id] === what ? null : what };
   }
 
@@ -374,6 +386,11 @@
             <Icon name={g?.join === "copy" ? "copy" : "play"} size={17} />{g?.join === "copy" ? "Adresi kopyala" : "Bağlan"}
           </button>
           <button class="btn ghost sm" aria-expanded={open[s.id] === "how"} onclick={() => toggle(s.id, "how")}>Nasıl bağlanırım?</button>
+          {#if state !== "unknown"}
+            <button class="btn ghost sm bell" class:on={!!watch[s.id]} title="Bildirim: açılınca ya da dolunca haber ver" aria-expanded={open[s.id] === "notify"} onclick={() => toggle(s.id, "notify")}>
+              <Icon name="bell" size={16} />
+            </button>
+          {/if}
           {#if info?.playerList.length}
             <button class="btn ghost sm" title="Oyuncular" aria-expanded={open[s.id] === "players"} onclick={() => toggle(s.id, "players")}>
               <Icon name="users" size={16} /><span class="tnum">{info.playerList.length}</span>
@@ -381,7 +398,23 @@
           {/if}
         </div>
 
-        {#if open[s.id] === "how"}
+        {#if open[s.id] === "notify"}
+          {@const w = watch[s.id] ?? { online: false, minPlayers: null }}
+          <div class="drawer notify">
+            <div class="nl">
+              <span>Sunucu açılınca haber ver</span>
+              <Switch label="Açılınca haber ver" checked={w.online} onchange={(v) => setWatch(s.id, { ...w, online: v })} />
+            </div>
+            <div class="nl">
+              <span>Şu kadar kişi olunca haber ver</span>
+              <select value={w.minPlayers ?? 0} onchange={(e) => setWatch(s.id, { ...w, minPlayers: Number(e.currentTarget.value) || null })} aria-label="Kişi sayısı">
+                <option value={0}>Kapalı</option>
+                {#each [2, 3, 4, 5, 6, 8, 10, 12, 16, 20] as n (n)}<option value={n}>en az {n} kişi</option>{/each}
+              </select>
+            </div>
+            <p class="sub small">2 dakikada bir bakılır; aynı şey için tekrar tekrar bildirim gelmez. Oyun Modu sessizken gelmez.</p>
+          </div>
+        {:else if open[s.id] === "how"}
           <div class="drawer">
             <p>{fill(g?.howTo ?? "Adres: {host}:{port}", s)}</p>
             {#if g?.join === "exe"}
@@ -572,6 +605,9 @@
   .mini.armed { display: inline-flex; gap: 4px; align-items: center; color: var(--bad); background: rgba(224, 106, 106, 0.12); font-size: 12px; font-weight: 700; }
   .drawer { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
   .drawer p { margin: 0; }
+  .notify .nl { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .notify select { background: var(--coal-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; color: var(--text); }
+  .bell.on { border-color: var(--gold); color: var(--gold-glow); }
   .note { display: flex; gap: 8px; align-items: flex-start; color: var(--gold-glow); }
   .plist { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
   .plist li { display: flex; gap: 12px; padding: 4px 8px; border-radius: 6px; }

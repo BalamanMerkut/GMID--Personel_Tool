@@ -348,6 +348,7 @@ let installList: InstallItem[] = ["Google.Chrome", "Valve.Steam", "Discord.Disco
   .filter(Boolean);
 let installRun: InstallRun = { running: false, stopping: false, steps: [], started: null, finished: null };
 let installStop = false;
+const watchRules: Record<string, { online: boolean; minPlayers: number | null }> = {};
 const mixApps = [
   { pid: 4120, name: "VALORANT", exe: "valorant-win64-shipping.exe", level: 0.8, muted: false, active: true },
   { pid: 2210, name: "Discord", exe: "discord.exe", level: 0.55, muted: false, active: true },
@@ -716,6 +717,14 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "audio_set_app_mute": {
       const m = mixApps.find((x) => x.pid === a.pid);
       if (m) m.muted = Boolean(a.muted);
+      return;
+    }
+    case "servers_watch_rules":
+      return watchRules;
+    case "servers_watch_set": {
+      const r = a.rule as { online: boolean; minPlayers: number | null };
+      if (r.online || r.minPlayers) watchRules[String(a.id)] = r;
+      else delete watchRules[String(a.id)];
       return;
     }
     case "report_create":
