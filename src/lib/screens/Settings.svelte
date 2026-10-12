@@ -15,6 +15,7 @@
   import Update from "../settings/Update.svelte";
   import Report from "../settings/Report.svelte";
   import { community, joinDiscord } from "../community.svelte";
+  import { welcome } from "../welcome.svelte";
   import ServersList from "../settings/ServersList.svelte";
   import { getJson, save, setJson, settings } from "../settings.svelte";
   import { notify } from "../toast.svelte";
@@ -302,6 +303,7 @@
           {#if community.discord}
             <button class="btn ghost sm join" onclick={joinDiscord}><Icon name="discord" size={15} />GMID Discord'a katıl · {community.discord.replace("https://", "")}</button>
           {/if}
+          <button class="btn ghost sm tour" onclick={() => (welcome.open = true)}><Icon name="sparkle" size={15} />Tanıtım turunu yeniden aç</button>
         </div>
         <img class="merkut" src={merkutLogo} alt="Merkut Studios" />
       </section>
@@ -331,7 +333,7 @@
   .line { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   .line > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
   kbd { font-family: var(--f-body); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: var(--coal); border: 1px solid var(--line-2); color: var(--text); }
-  .join { align-self: flex-start; margin-top: 6px; }
+  .join, .tour { align-self: flex-start; margin-top: 6px; }
   .about { flex-direction: row; align-items: center; gap: 18px; }
   .gmid { width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 0 20px rgba(227, 194, 112, 0.2); flex: none; }
   .abouttext { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }

@@ -23,6 +23,8 @@
   import Deals from "./lib/screens/Deals.svelte";
   import WrappedScreen from "./lib/screens/Wrapped.svelte";
   import SearchPalette from "./lib/components/SearchPalette.svelte";
+  import Welcome from "./lib/components/Welcome.svelte";
+  import { maybeShowWelcome, welcome } from "./lib/welcome.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
@@ -105,6 +107,7 @@
       showSplash = splash && settings.splash;
       revealed = !showSplash;
       ready = true;
+      maybeShowWelcome();
 
       const pending = await api.takePendingRoute().catch(() => null);
       if (pending) navigate(pending);
@@ -214,6 +217,10 @@
       onstop={stopPlayer}
       onpick={(d) => (player.item = d)}
     />
+  {/if}
+
+  {#if welcome.open && !showSplash}
+    <Welcome onnavigate={navigate} />
   {/if}
 
   {#if showSplash}

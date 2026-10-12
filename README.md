@@ -20,6 +20,10 @@ Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı
 Kolay yol: deponun **Releases** sayfasındaki en son `GMID-Tool-Kurulum.exe`. Bir kez kurduktan sonra yeni
 sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar, Kontrol Odası → Hakkında → **Güncelle**.
 
+İlk açılışta beş adımlık kısa bir **tanıtım turu** çıkar (Discord'a katıl, kısayollar, oyun içi panel ve FPS izni,
+klip klasörleri, Windows ile başlat); sonra Kontrol Odası → Hakkında → **Tanıtım turunu yeniden aç**. Bir sorun olursa
+aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükler tek zip olur (kullanıcı adın gizlenir).
+
 ## Neler var?
 
 ### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)
@@ -80,7 +84,8 @@ sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar,
 - **Oyun İçi Panel** (**Ctrl+Shift+G**): oyunun bulunduğu ekranın üstünde yarı saydam panel — üstte FPS, işlemci,
   ekran kartı (yük ve sıcaklık) ve RAM (FPS için bir kez Oyun Modu → **FPS ölçümünü aç**; RivaTuner/RTSS açıksa ona
   gerek yok). Kenarlıksız/pencereli oyunlarda Steam'deki Shift+Tab gibi fare serbest kalır, oyun arkada görünür;
-  özel tam ekran oyunlarda oyunu küçültmeden bakış kipinde açılır. Ses çıkışı ve seviyesi,
+  özel tam ekran oyunlarda oyunu küçültmeden bakış kipinde açılır. Ses çıkışı ve seviyesi, **uygulama başına ses**
+  (oyun, Discord, Spotify, tarayıcı ayrı ayrı; Ses & Mikrofon ekranında da var),
   mikrofon (seviye, sessize alma, kilit), Oyun Modu, sayaç (5/15/30 dk mola), o oyuna not (Notlar'da da görünür), son
   klip (Discord'a sığdır), yaklaşan hatırlatıcılar. Esc ya da aynı tuşla kapanır, oyuna geri dönersin. Oyuna hiçbir şey
   eklenmez; çerçevesiz ya da pencereli oyunlarda görünür.
@@ -189,6 +194,8 @@ sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar,
 - **Topluluk listesi** bu depodaki [`topluluk/sunucular.json`](topluluk/sunucular.json) dosyasından gelir;
   dosya GitHub'da düzenlenince herkesin uygulamasında kendiliğinden güncellenir ([nasıl?](topluluk/README.md))
 - **Kendi sunucuların:** arkadaşının sunucusunu adres, logo ve notla ekleyebilirsin
+- **Sunucu bildirimi:** kartın zil düğmesiyle "sunucu açılınca" ya da "en az N kişi olunca" Windows bildirimi
+  (yalnızca izlenen sunucular, 2 dakikada bir; aynı şey için tekrar tekrar gelmez)
 
 ### Faz 2 — Günlük araçlar
 

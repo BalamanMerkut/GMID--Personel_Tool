@@ -27,6 +27,7 @@
     ["veri", "Veri ve yedekler", "yedek geri yükle klasör günlük"],
     ["hakkinda", "Hakkında ve güncelleme", "sürüm güncelle"],
     ["hakkinda", "Sorun bildir", "sorun hata rapor bozuk çalışmıyor destek"],
+    ["hakkinda", "Tanıtım turu", "rehber tanıtım nasıl kullanılır yardım başlangıç"],
   ];
   const KIND: Record<SearchHit["kind"], [string, IconName]> = {
     note: ["Notlar", "note"],
