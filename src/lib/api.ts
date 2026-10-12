@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BackupManifest, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BackupManifest, DealsSnapshot, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -316,6 +316,15 @@ export const api = {
     hide: () => call<void>("panel_hide"),
     /** Nota yazmak için klavye odağı (panel normalde odak almaz, oyun önde kalır). */
     focus: () => call<void>("panel_focus"),
+  },
+
+  /** Bağlantıyı varsayılan tarayıcıda açar (yalnız https). */
+  openUrl: (url: string) => (inTauri ? invoke<void>("open_url", { url }) : (window.open(url, "_blank"), Promise.resolve())),
+
+  deals: {
+    get: () => call<DealsSnapshot>("deals_get"),
+    /** Kaynaklara şimdi bakar (birkaç saniye sürebilir). */
+    refresh: () => call<DealsSnapshot>("deals_refresh"),
   },
 
   update: {

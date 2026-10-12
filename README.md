@@ -37,6 +37,13 @@ sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar,
   sıralama; oyun penceresinde **Oyna**, klasörü aç, **Gerçek oynama** (GMID'in ölçtüğü) ve **Steam'deki süre** ayrı.
 - **Oturum Geçmişi:** son 7/30 gün, günlük oynama grafiği (en çok oynanan 5 oyun renkli), gün gün oturum listesi.
 
+### Fırsatlar
+
+- Epic, Steam, GOG, PlayStation, Xbox, Ubisoft, EA, Prime Gaming ve itch'te **şu an ücretsiz** oyunlar; Epic'in
+  sıradaki ücretsiz oyunu; Oyun Arşivi'nde **İstiyorum** dediğin oyunların indirimleri (Steam, GOG, Epic, EA,
+  Ubisoft, Humble…). Yenisi çıkınca Windows bildirimi; hangi mağazalardan ve en az yüzde kaç indirimde haber
+  verileceğini sen seçersin.
+
 ### Faz 6 — Format Sonrası Kurulum
 
 - **Katalog** (Çalışma Odası → Format Sonrası Kurulum): tarayıcılar, oyun platformları, iletişim, araçlar, medya,

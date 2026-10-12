@@ -161,3 +161,30 @@ pub async fn update_install(app: AppHandle) -> CmdResult<()> {
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Ücretsiz oyunlar ve istek listesi indirimleri (son bakıştan).
+#[tauri::command]
+pub fn deals_get(app: AppHandle) -> crate::deals::Snapshot {
+    use tauri::Manager;
+    app.state::<crate::deals::Deals>()
+        .snapshot(&app.state::<Db>())
+}
+
+#[tauri::command]
+pub async fn deals_refresh(app: AppHandle) -> CmdResult<crate::deals::Snapshot> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        app.state::<crate::deals::Deals>().refresh(&app)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Bağlantıyı varsayılan tarayıcıda açar (yalnız https).
+#[tauri::command]
+pub fn open_url(url: String) -> CmdResult<()> {
+    if !url.starts_with("https://") {
+        return Err("Geçersiz bağlantı".into());
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+}

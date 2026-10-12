@@ -3,6 +3,7 @@ mod backup;
 mod clips;
 mod commands;
 mod db;
+mod deals;
 mod dictation;
 mod downloader;
 mod gamemode;
@@ -122,6 +123,7 @@ pub fn run() {
             app.manage(clips::Clips::default());
             app.manage(install::Installer::default());
             app.manage(updater::Updater::default());
+            app.manage(deals::Deals::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -137,6 +139,7 @@ pub fn run() {
             clips::start(handle);
             titles::fetch_meta(handle);
             updater::start(handle);
+            deals::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -180,6 +183,9 @@ pub fn run() {
             commands::open_log,
             commands::backup_now,
             commands::import_background,
+            commands::open_url,
+            commands::deals_get,
+            commands::deals_refresh,
             commands::update_status,
             commands::update_check,
             commands::update_install,

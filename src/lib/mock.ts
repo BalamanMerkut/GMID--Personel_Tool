@@ -348,6 +348,29 @@ let installList: InstallItem[] = ["Google.Chrome", "Valve.Steam", "Discord.Disco
   .filter(Boolean);
 let installRun: InstallRun = { running: false, stopping: false, steps: [], started: null, finished: null };
 let installStop = false;
+const day = 86_400_000;
+const gw = (id: string, title: string, store: string, platforms: string, worth: string | null, ends: number | null, color: string, upcoming = false) => ({
+  id, title, store, platforms, worth, ends, upcoming, starts: upcoming ? now() + 4 * day : now() - day,
+  image: thumb(color, "#121417", title.toUpperCase()), url: "https://store.epicgames.com/tr/free-games",
+});
+let dealsSnap = {
+  free: [
+    gw("epic-1", "Hogwarts Legacy", "epic", "PC, Epic Games Store", "₺1.799,00", now() + 2 * day + 3_600_000, "#6b4aa8"),
+    gw("gp-2", "Rogue Lords", "steam", "PC, Steam", "$19.99", now() + 5 * day, "#3a5f8a"),
+    gw("gp-3", "Alan Wake", "gog", "PC, GOG", "$14.99", now() + 9 * 3_600_000, "#7a3a3a"),
+    gw("gp-4", "Ghostrunner", "prime", "PC, DRM-Free", "$29.99", now() + 20 * day, "#3a7a5a"),
+    gw("gp-5", "Sackboy Weekend", "playstation", "PS4, PS5", null, now() + 2 * day, "#2a4a9a"),
+    gw("gp-6", "Halo Free Weekend", "xbox", "Xbox Series X|S, Xbox One", null, null, "#2a7a2a"),
+  ],
+  upcoming: [gw("epic-9", "Mystery Game", "epic", "PC, Epic Games Store", null, now() + 11 * day, "#4a4a4a", true)],
+  wishlist: [
+    { gameId: "g2", name: "Baldur's Gate 3", cover: thumb("#8a5a2a", "#121417", "BG3"), store: "Steam", price: "$41.99", regular: "$59.99", discount: 30, url: "https://store.steampowered.com/app/1086940" },
+    { gameId: "g5", name: "Hades II", cover: thumb("#5a2a6a", "#121417", "HADES"), store: "GOG", price: "$22.49", regular: "$29.99", discount: 25, url: "https://www.gog.com" },
+  ],
+  wishCount: 4,
+  fetchedAt: now() - 40 * 60_000,
+  error: null as string | null,
+};
 let updateStatus = { current: 29 as number | null, latest: null as unknown, available: false, checkedAt: null as number | null, error: null as string | null, progress: null as number | null };
 
 export async function handle(cmd: string, a: Record<string, unknown>): Promise<unknown> {
@@ -861,6 +884,13 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return;
     case "extension_install":
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Eklenti";
+    case "deals_get":
+      return dealsSnap;
+    case "deals_refresh":
+      await wait(800);
+      dealsSnap = { ...dealsSnap, fetchedAt: now() };
+      emit("deals", dealsSnap);
+      return dealsSnap;
     case "update_status":
       return updateStatus;
     case "update_check":

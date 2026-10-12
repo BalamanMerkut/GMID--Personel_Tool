@@ -715,3 +715,47 @@ export interface UpdateStatus {
   error: string | null;
   progress: number | null;
 }
+
+/** Ücretsiz oyun dağıtımı (GamerPower ya da Epic). */
+export interface Giveaway {
+  id: string;
+  title: string;
+  /** epic | steam | gog | playstation | xbox | ubisoft | ea | prime | itch | battlenet | mobile | other */
+  store: string;
+  platforms: string;
+  worth: string | null;
+  image: string | null;
+  url: string;
+  starts: number | null;
+  ends: number | null;
+  upcoming: boolean;
+}
+
+/** İstek listesindeki bir oyunun en iyi indirimi. */
+export interface WishDeal {
+  gameId: string;
+  name: string;
+  cover: string | null;
+  store: string;
+  price: string;
+  regular: string | null;
+  discount: number;
+  url: string;
+}
+
+export interface DealsSnapshot {
+  free: Giveaway[];
+  upcoming: Giveaway[];
+  wishlist: WishDeal[];
+  wishCount: number;
+  fetchedAt: number | null;
+  error: string | null;
+}
+
+export interface DealsPrefs {
+  notifyFree: boolean;
+  /** Bildirim gelecek mağazalar (boşsa hepsi). */
+  stores: string[];
+  notifyWish: boolean;
+  minDiscount: number;
+}
