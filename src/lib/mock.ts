@@ -702,6 +702,17 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       emit("clips-changed");
       return;
     }
+    case "clips_plan": {
+      const o = a.options as { start?: number; end?: number; limitMb: number | null; codec: string };
+      const c = clipList.find((x) => x.id === a.id);
+      const d = Math.max(0.5, (o.end ?? c?.duration ?? 30) - (o.start ?? 0));
+      if (o.limitMb == null) return { video: 0, audio: 192, height: c?.height ?? 1080, fps: 60, quality: "great" };
+      const kbps = (o.limitMb * 1e6 * 0.94 * 8) / 1000 / d;
+      const bpp = o.codec === "av1" ? 0.022 : 0.065;
+      const h = [1440, 1080, 720, 540, 480, 360].filter((x) => x <= (c?.height ?? 1080)).find((x) => (kbps * 1000) / (x * x * 1.777 * 30) >= bpp);
+      const fps = h && (kbps * 1000) / (h * h * 1.777 * 60) >= bpp ? 60 : 30;
+      return { video: Math.round(kbps - 96), audio: 96, height: h ?? 360, fps, quality: !h ? "poor" : h >= 1080 ? "great" : h >= 720 ? "good" : h >= 480 ? "ok" : "poor" };
+    }
     case "clips_fit_discord": {
       for (let k = 1; k <= 10; k++) {
         await new Promise((r) => setTimeout(r, 150));

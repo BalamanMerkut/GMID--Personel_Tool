@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { api } from "../api";
   import { on } from "../bus";
+  import ClipTrim from "../components/ClipTrim.svelte";
   import Icon from "../Icon.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
@@ -38,6 +39,8 @@
   let view: Clip | null = $state(null);
   let titleDraft = $state("");
   let armedDelete = $state(false);
+  /** Kırp ve hazırla penceresi. */
+  let trim: Clip | null = $state(null);
   /** Kartta "Sil?" onayı bekleyen klip. */
   let armed: string | null = $state(null);
 
@@ -134,7 +137,7 @@
     fitting = { ...fitting, [c.id]: 0 };
     try {
       await api.clips.fitDiscord(c.id);
-      notify(c.size <= 10_000_000 ? "Zaten 10 MB'tan küçük · panoya kopyalandı, Discord'da Ctrl+V" : "Discord'a hazır · panoya kopyalandı, Discord'da Ctrl+V", "check");
+      notify("Discord'a hazır · panoya kopyalandı, Discord'da Ctrl+V", "check");
     } catch (e) {
       notify(String(e), "info");
     } finally {
@@ -258,7 +261,7 @@
                   {#if c.kind === "clip" && c.duration}<span class="dur tnum">{dur(c.duration)}</span>{/if}
                   <button class="fav" class:on={c.favorite} onclick={(e) => (e.stopPropagation(), act(api.clips.setFavorite(c.id, !c.favorite)))} title={c.favorite ? "Favoriden çıkar" : "Favori"}>{c.favorite ? "★" : "☆"}</button>
                   {#if c.kind === "clip"}
-                    <button class="dc" onclick={(e) => (e.stopPropagation(), fit(c))} title="Discord'a sığdır (10 MB) ve panoya kopyala">Discord'a sığdır</button>
+                    <button class="dc" onclick={(e) => (e.stopPropagation(), fit(c))} title="Son seçtiğin boyuta sığdır ve panoya kopyala (kırpmak için klibi aç)">Discord'a sığdır</button>
                   {/if}
                   {#if c.id in fitting}
                     <div class="fit"><span>Hazırlanıyor %{Math.round(fitting[c.id] * 100)}</span><span class="pb"><span style={`width:${fitting[c.id] * 100}%`}></span></span></div>
@@ -327,8 +330,8 @@
         <div class="row">
           <button class="btn ghost sm" onclick={() => act(api.clips.setFavorite(c.id, !c.favorite))}>{c.favorite ? "★ Favoride" : "☆ Favori"}</button>
           {#if c.kind === "clip"}
-            <button class="btn sm" disabled={c.id in fitting} onclick={() => fit(c)}>
-              <Icon name="copy" size={15} />{c.id in fitting ? `Hazırlanıyor %${Math.round(fitting[c.id] * 100)}` : "Discord'a sığdır"}
+            <button class="btn sm" disabled={c.id in fitting} onclick={() => ((trim = c), (view = null))}>
+              <Icon name="clip" size={15} />{c.id in fitting ? `Hazırlanıyor %${Math.round(fitting[c.id] * 100)}` : "Kırp ve Discord'a hazırla"}
             </button>
           {/if}
           <button class="btn ghost sm" onclick={() => act(api.clips.open(c.id))}><Icon name="play" size={15} />Aç</button>
@@ -338,6 +341,10 @@
       </div>
     </div>
   </div>
+{/if}
+
+{#if trim}
+  <ClipTrim clip={trim} onclose={() => (trim = null)} />
 {/if}
 
 <style>

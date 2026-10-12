@@ -1,4 +1,4 @@
-//! ffmpeg ile küçük resim ve süre; "Discord'a sığdır" (10 MB'a sığan kopya).
+//! ffmpeg ile küçük resim ve süre; klip kırpma ve "Discord'a sığdır" (seçilen boyuta sığan kopya).
 
 use crate::util::hide_console;
 use std::io::{BufRead, BufReader};
@@ -81,97 +81,288 @@ pub fn thumbnail(ffmpeg: &Path, input: &Path, out: &Path, video: bool) -> Result
     }
 }
 
-/// Discord'un ücretsiz yükleme sınırı.
+/// Discord'un ücretsiz yükleme sınırı (testlerde kullanılır; asıl sınır ayardan gelir).
+#[cfg(test)]
 pub const DISCORD_LIMIT: u64 = 10 * 1000 * 1000;
 
-/// Hedef boyuta göre bit hızı ve yükseklik.
-pub fn plan(duration: f64, limit: u64, factor: f64) -> (u32, u32, u32) {
-    let total_kbps = (limit as f64 * 0.92 * 8.0 / 1000.0 / duration.max(1.0) * factor) as u32;
-    let audio = if total_kbps < 500 { 64 } else { 96 };
-    let video = total_kbps.saturating_sub(audio).max(80);
-    let height = match video {
-        v if v >= 3500 => 1080,
-        v if v >= 1500 => 720,
-        v if v >= 600 => 480,
-        _ => 360,
-    };
-    (video, audio, height)
+/// "…, 59.94 fps, …" → 59.94
+pub fn parse_fps(stderr: &str) -> Option<f64> {
+    let line = stderr.lines().find(|l| l.contains("Video:"))?;
+    line.split(',')
+        .map(str::trim)
+        .find_map(|t| t.strip_suffix(" fps")?.trim().parse::<f64>().ok())
+        .filter(|f| *f > 1.0)
 }
 
-/// Discord'a sığan bir kopya üretir. `progress(0..1)`.
-pub fn fit(
-    ffmpeg: &Path,
-    input: &Path,
-    out: &Path,
-    duration: f64,
-    progress: &dyn Fn(f32),
-) -> Result<(), String> {
-    if let Some(d) = out.parent() {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+/// Süre, çözünürlük ve kare hızı (`ffmpeg -i` çıktısından; dosyaya bir şey yazılmaz).
+pub fn probe(ffmpeg: &Path, input: &Path) -> (Option<f64>, Option<(i64, i64)>, Option<f64>) {
+    let mut cmd = Command::new(ffmpeg);
+    cmd.args(["-hide_banner", "-i"])
+        .arg(input)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    hide_console(&mut cmd);
+    let err = cmd
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())
+        .unwrap_or_default();
+    (parse_duration(&err), parse_size(&err), parse_fps(&err))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Codec {
+    /// Aynı boyutta belirgin şekilde daha net (Discord masaüstü, tarayıcı, yeni telefonlar oynatır).
+    #[default]
+    Av1,
+    /// Her yerde oynar.
+    H264,
+}
+
+impl Codec {
+    /// Bu kodek için "iyi görünür" en düşük piksel başına bit (ölçümle seçildi: aynı boyutta AV1 1080p,
+    /// H.264 480p'den daha net çıktı).
+    fn min_bpp(self) -> f64 {
+        match self {
+            Codec::Av1 => 0.022,
+            Codec::H264 => 0.065,
+        }
     }
-    let mut factor = 1.0;
-    for attempt in 0..3 {
-        let (video, audio, height) = plan(duration, DISCORD_LIMIT, factor);
-        let mut cmd = Command::new(ffmpeg);
-        cmd.args(["-hide_banner", "-y", "-i"])
-            .arg(input)
-            .args([
-                "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
-                "-pix_fmt", "yuv420p",
-            ])
-            .args(["-b:v", &format!("{video}k")])
-            .args(["-maxrate", &format!("{}k", video * 5 / 4)])
-            .args(["-bufsize", &format!("{}k", video * 2)])
-            .args(["-vf", &{
-                // Düşük bit hızında 60 kare yerine 30: görüntü bulanıklaşmasın.
-                let fps = if height <= 480 { ",fps=30" } else { "" };
-                format!("scale=-2:'min(ih,{height})'{fps}")
-            }])
-            .args(["-c:a", "aac", "-b:a", &format!("{audio}k"), "-ac", "2"])
-            .args(["-movflags", "+faststart", "-progress", "pipe:1", "-nostats"])
-            .arg(out)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        hide_console(&mut cmd);
-        let mut child = cmd.spawn().map_err(|e| format!("ffmpeg açılamadı: {e}"))?;
-        // stderr dolup ffmpeg takılmasın.
-        let stderr = child.stderr.take();
-        let err_reader = std::thread::spawn(move || {
-            let mut s = String::new();
-            if let Some(mut e) = stderr {
-                let _ = std::io::Read::read_to_string(&mut e, &mut s);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Plan {
+    pub video: u32,
+    pub audio: u32,
+    pub height: u32,
+    pub fps: u32,
+    /// great | good | ok | poor
+    pub quality: &'static str,
+}
+
+const HEIGHTS: &[u32] = &[1440, 1080, 900, 720, 540, 480, 360];
+
+/// Hedef boyuta göre bit hızı, çözünürlük ve kare hızı. Önce netlik: 720p60 yerine 1080p30 seçilir.
+pub fn plan(
+    duration: f64,
+    limit: u64,
+    src: (u32, u32),
+    src_fps: f64,
+    codec: Codec,
+    factor: f64,
+) -> Plan {
+    let total_kbps = (limit as f64 * 0.94 * 8.0 / 1000.0 / duration.max(1.0) * factor) as u32;
+    let audio = match total_kbps {
+        k if k < 600 => 64,
+        k if k < 3000 => 96,
+        _ => 128,
+    };
+    let video = total_kbps.saturating_sub(audio).max(60);
+    let (sw, sh) = (src.0.max(16), src.1.max(16));
+    let aspect = sw as f64 / sh as f64;
+    let src_fps = src_fps.clamp(1.0, 60.0).round() as u32;
+    let bpp =
+        |h: u32, fps: u32| video as f64 * 1000.0 / (h as f64 * aspect * h as f64 * fps as f64);
+    let mut pick = None;
+    'outer: for &h in HEIGHTS.iter().filter(|&&h| h <= sh) {
+        for fps in [src_fps, src_fps.min(30)] {
+            if bpp(h, fps) >= codec.min_bpp() {
+                pick = Some((h, fps));
+                break 'outer;
             }
-            s
-        });
-        if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if let Some(us) = line.strip_prefix("out_time_us=") {
-                    if let Ok(us) = us.trim().parse::<f64>() {
-                        let done = (us / 1e6 / duration.max(0.1)).clamp(0.0, 1.0) as f32;
-                        progress((attempt as f32 + done) / (attempt as f32 + 1.0));
-                    }
+        }
+    }
+    let (height, fps) = pick.unwrap_or((sh.min(360), src_fps.min(30)));
+    let quality = match (pick.is_some(), height) {
+        (false, _) => "poor",
+        (true, h) if h >= 1080 || h >= sh => "great",
+        (true, h) if h >= 720 => "good",
+        (true, h) if h >= 480 => "ok",
+        _ => "poor",
+    };
+    Plan {
+        video,
+        audio,
+        height,
+        fps,
+        quality,
+    }
+}
+
+pub struct Job {
+    pub start: f64,
+    pub end: f64,
+    /// `None`: boyut sınırı yok, kırpılmış yüksek kaliteli kopya.
+    pub limit: Option<u64>,
+    pub codec: Codec,
+    pub src: (u32, u32),
+    pub src_fps: f64,
+}
+
+fn null_sink() -> &'static str {
+    if cfg!(windows) {
+        "NUL"
+    } else {
+        "/dev/null"
+    }
+}
+
+/// ffmpeg'i çalıştırır; `-progress` çıktısından `done(0..1)`.
+fn run(mut cmd: Command, duration: f64, done: &dyn Fn(f32)) -> Result<(), String> {
+    cmd.args(["-progress", "pipe:1", "-nostats"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    hide_console(&mut cmd);
+    let mut child = cmd.spawn().map_err(|e| format!("ffmpeg açılamadı: {e}"))?;
+    // stderr dolup ffmpeg takılmasın.
+    let stderr = child.stderr.take();
+    let err_reader = std::thread::spawn(move || {
+        let mut s = String::new();
+        if let Some(mut e) = stderr {
+            let _ = std::io::Read::read_to_string(&mut e, &mut s);
+        }
+        s
+    });
+    if let Some(stdout) = child.stdout.take() {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(us) = line.strip_prefix("out_time_us=") {
+                if let Ok(us) = us.trim().parse::<f64>() {
+                    done((us / 1e6 / duration.max(0.1)).clamp(0.0, 1.0) as f32);
                 }
             }
         }
-        let status = child.wait().map_err(|e| e.to_string())?;
-        let err = err_reader.join().unwrap_or_default();
-        if !status.success() {
-            return Err(err
-                .lines()
-                .rev()
-                .find(|l| !l.trim().is_empty())
-                .unwrap_or("ffmpeg hata verdi")
-                .to_string());
+    }
+    let status = child.wait().map_err(|e| e.to_string())?;
+    let err = err_reader.join().unwrap_or_default();
+    if status.success() {
+        Ok(())
+    } else {
+        Err(err
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty() && !l.starts_with("Svt[info]"))
+            .unwrap_or("ffmpeg hata verdi")
+            .to_string())
+    }
+}
+
+fn base(ffmpeg: &Path, input: &Path, job: &Job) -> Command {
+    let mut cmd = Command::new(ffmpeg);
+    cmd.args(["-hide_banner", "-y", "-loglevel", "error"]);
+    // Girişten önce -ss: hızlı ve (yeniden kodlandığı için) kare doğruluğunda.
+    if job.start > 0.05 {
+        cmd.args(["-ss", &format!("{:.3}", job.start)]);
+    }
+    cmd.arg("-i").arg(input);
+    cmd.args(["-t", &format!("{:.3}", (job.end - job.start).max(0.1))]);
+    cmd.args(["-map", "0:v:0", "-map", "0:a:0?", "-pix_fmt", "yuv420p"]);
+    cmd
+}
+
+/// Klibi kırpar ve (sınır varsa) o boyuta sığdırır. `progress(0..1)`.
+pub fn encode(
+    ffmpeg: &Path,
+    input: &Path,
+    out: &Path,
+    job: &Job,
+    progress: &dyn Fn(f32),
+) -> Result<Plan, String> {
+    if let Some(d) = out.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let duration = (job.end - job.start).max(0.1);
+    let Some(limit) = job.limit else {
+        // Yalnız kırpma: neredeyse kayıpsız.
+        let mut cmd = base(ffmpeg, input, job);
+        cmd.args(["-c:v", "libx264", "-preset", "fast", "-crf", "18"])
+            .args(["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"])
+            .arg(out);
+        run(cmd, duration, progress)?;
+        return Ok(Plan {
+            video: 0,
+            audio: 192,
+            height: job.src.1,
+            fps: job.src_fps.round() as u32,
+            quality: "great",
+        });
+    };
+    let passlog = std::env::temp_dir().join(format!("gmid-pass-{}", std::process::id()));
+    // SVT-AV1'in bit hızı denetimi biraz taşabiliyor: baştan küçük bir pay (yeniden kodlamayı önler).
+    let mut factor = if job.codec == Codec::Av1 { 0.93 } else { 1.0 };
+    let mut last = None;
+    for attempt in 0..3 {
+        let p = plan(duration, limit, job.src, job.src_fps, job.codec, factor);
+        last = Some(p);
+        let vf = format!("scale=-2:{},fps={}", p.height, p.fps);
+        let rate = |cmd: &mut Command| {
+            cmd.args(["-b:v", &format!("{}k", p.video)]);
+        };
+        // Her deneme ilerlemenin bir dilimi; deneme tekrarlanırsa çubuk geri gitmesin.
+        let slice = |a: f32, b: f32| {
+            let lo = attempt as f32 / (attempt as f32 + 1.0);
+            move |x: f32| progress(lo + (1.0 - lo) * (a + (b - a) * x))
+        };
+        match job.codec {
+            Codec::H264 => {
+                // İki geçiş: aynı boyutta tek geçişten daha net, hedef boyuta da daha sadık.
+                let mut p1 = base(ffmpeg, input, job);
+                p1.args(["-c:v", "libx264", "-preset", "medium", "-vf", &vf]);
+                rate(&mut p1);
+                p1.args(["-pass", "1", "-passlogfile"]).arg(&passlog).args([
+                    "-an",
+                    "-f",
+                    "null",
+                    null_sink(),
+                ]);
+                run(p1, duration, &slice(0.0, 0.45))?;
+                let mut p2 = base(ffmpeg, input, job);
+                p2.args(["-c:v", "libx264", "-preset", "medium", "-vf", &vf]);
+                rate(&mut p2);
+                p2.args(["-pass", "2", "-passlogfile"]).arg(&passlog);
+                p2.args(["-c:a", "aac", "-b:a", &format!("{}k", p.audio), "-ac", "2"])
+                    .args(["-movflags", "+faststart"])
+                    .arg(out);
+                run(p2, duration, &slice(0.45, 1.0))?;
+            }
+            Codec::Av1 => {
+                let mut c = base(ffmpeg, input, job);
+                // Uzun kliplerde biraz daha hızlı ön ayar.
+                let preset = if duration > 180.0 { "9" } else { "7" };
+                c.args([
+                    "-c:v",
+                    "libsvtav1",
+                    "-preset",
+                    preset,
+                    "-svtav1-params",
+                    "rc=1",
+                ])
+                .args(["-vf", &vf]);
+                rate(&mut c);
+                c.args(["-c:a", "aac", "-b:a", &format!("{}k", p.audio), "-ac", "2"])
+                    .args(["-movflags", "+faststart"])
+                    .arg(out);
+                run(c, duration, &slice(0.0, 1.0))?;
+            }
+        }
+        for ext in ["-0.log", "-0.log.mbtree", ".log", ".log.mbtree"] {
+            let _ = std::fs::remove_file(format!("{}{ext}", passlog.display()));
         }
         let size = std::fs::metadata(out).map(|m| m.len()).unwrap_or(u64::MAX);
-        if size <= DISCORD_LIMIT {
-            return Ok(());
+        if size <= limit {
+            progress(1.0);
+            return Ok(p);
         }
         // Biraz taştı: bit hızını oranla düşürüp yeniden.
-        factor *= DISCORD_LIMIT as f64 / size as f64 * 0.95;
+        factor *= limit as f64 / size as f64 * 0.95;
     }
-    Err("Klip 10 MB'a sığdırılamadı (çok uzun olabilir)".into())
+    let _ = last;
+    Err(format!(
+        "Klip {} MB'a sığdırılamadı; seçimi kısaltmayı dene",
+        limit / 1_000_000
+    ))
 }
 
 #[cfg(test)]
@@ -186,14 +377,41 @@ mod tests {
     }
 
     #[test]
-    fn plan_scales_down_long_clips() {
-        // 30 sn → ~2.3 Mbit: 720p
-        let (v, a, h) = plan(30.0, DISCORD_LIMIT, 1.0);
-        assert_eq!((a, h), (96, 720));
-        assert!((2000..2500).contains(&v), "{v}");
-        assert_eq!(plan(90.0, DISCORD_LIMIT, 1.0).2, 480);
-        assert_eq!(plan(120.0, DISCORD_LIMIT, 1.0).2, 360);
-        assert_eq!(plan(600.0, DISCORD_LIMIT, 1.0).2, 360);
+    fn plan_prefers_sharpness_and_av1_keeps_resolution() {
+        let src = (2560, 1440);
+        // 30 sn, 10 MB: AV1 1080p'yi korur, H.264 küçültür.
+        let av1 = plan(30.0, DISCORD_LIMIT, src, 60.0, Codec::Av1, 1.0);
+        let h264 = plan(30.0, DISCORD_LIMIT, src, 60.0, Codec::H264, 1.0);
+        assert!(av1.height >= 1080, "{av1:?}");
+        assert!(h264.height < av1.height, "{h264:?}");
+        assert!((2000..2600).contains(&(av1.video + av1.audio)), "{av1:?}");
+        // Kısa klip: 60 kare korunur.
+        let short = plan(8.0, DISCORD_LIMIT, (1920, 1080), 60.0, Codec::Av1, 1.0);
+        assert_eq!(
+            (short.height, short.fps, short.quality),
+            (1080, 60, "great")
+        );
+        // Çok uzun klip 10 MB'a: bulanık uyarısı.
+        let long = plan(600.0, DISCORD_LIMIT, (1920, 1080), 60.0, Codec::H264, 1.0);
+        assert_eq!(long.quality, "poor");
+        // Nitro (500 MB): 5 dakikalık klip bile 1080p60.
+        let nitro = plan(
+            300.0,
+            500 * 1000 * 1000,
+            (1920, 1080),
+            60.0,
+            Codec::H264,
+            1.0,
+        );
+        assert_eq!((nitro.height, nitro.fps), (1080, 60));
+        // Kaynaktan büyük çözünürlüğe çıkılmaz.
+        assert!(plan(5.0, DISCORD_LIMIT, (1280, 720), 30.0, Codec::Av1, 1.0).height <= 720);
+    }
+
+    #[test]
+    fn fps_is_parsed() {
+        let err = "  Stream #0:0: Video: h264 (High), yuv420p, 1920x1080, 49000 kb/s, 59.94 fps, 59.94 tbr";
+        assert_eq!(parse_fps(err), Some(59.94));
     }
 }
 
@@ -241,14 +459,26 @@ mod real_ffmpeg {
         assert_eq!(p.size, Some((1920, 1080)));
         let d = p.duration.unwrap();
         assert!((39.0..41.0).contains(&d), "{d}");
-        let out = dir.join("out (Discord).mp4");
-        let last = std::sync::Mutex::new(0.0f32);
-        fit(ff, &src, &out, d, &|x| *last.lock().unwrap() = x).unwrap();
-        let size = std::fs::metadata(&out).unwrap().len();
-        println!(
-            "sığdırılan: {size} bayt, son ilerleme {}",
-            last.lock().unwrap()
-        );
-        assert!(size <= DISCORD_LIMIT && size > DISCORD_LIMIT / 3);
+        for codec in [Codec::H264, Codec::Av1] {
+            let out = dir.join(format!("out {codec:?} (Discord).mp4"));
+            let last = std::sync::Mutex::new(0.0f32);
+            let job = Job {
+                start: 5.0,
+                end: d,
+                limit: Some(DISCORD_LIMIT),
+                codec,
+                src: (1920, 1080),
+                src_fps: 60.0,
+            };
+            let p = encode(ff, &src, &out, &job, &|x| *last.lock().unwrap() = x).unwrap();
+            let size = std::fs::metadata(&out).unwrap().len();
+            println!(
+                "{codec:?}: {size} bayt, {p:?}, son ilerleme {}",
+                last.lock().unwrap()
+            );
+            assert!(size <= DISCORD_LIMIT && size > DISCORD_LIMIT / 3);
+            let (dur, _, _) = probe(ff, &out);
+            assert!((34.0..36.0).contains(&dur.unwrap()), "{dur:?}");
+        }
     }
 }

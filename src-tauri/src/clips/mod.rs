@@ -16,7 +16,7 @@ use crate::paths::DataDir;
 use crate::util::{new_id, now_ms};
 use detect::{FoundFile, Root};
 use rusqlite::{params, OptionalExtension, Row};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -394,20 +394,31 @@ impl Clips {
     }
 
     /// Discord'a sığan kopya üretir ve panoya koyar; kopyanın yolu.
-    pub fn fit_discord(&self, app: &AppHandle, id: &str) -> Result<String, String> {
+    pub fn fit_discord(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        opts: FitOptions,
+    ) -> Result<String, String> {
         let db = app.state::<Db>();
         let clip = get(&db, id)?;
         let src = PathBuf::from(&clip.path);
         if !src.is_file() {
             return Err("Dosya bulunamadı (silinmiş ya da taşınmış)".into());
         }
-        // Zaten sığıyorsa kendisi.
-        if clip.size as u64 <= media::DISCORD_LIMIT {
-            win::copy_file(&src)?;
-            return Ok(clip.path);
+        let limit = opts.limit_mb.map(|mb| mb as u64 * 1_000_000);
+        let trimmed = opts.start.is_some_and(|s| s > 0.05) || opts.end.is_some();
+        // Kırpılmıyor ve zaten sığıyorsa kendisi.
+        if !trimmed {
+            if let Some(l) = limit {
+                if clip.size as u64 <= l {
+                    win::copy_file(&src)?;
+                    return Ok(clip.path);
+                }
+            }
         }
         if clip.kind != "clip" {
-            return Err("Ekran görüntüsü 10 MB'tan büyük".into());
+            return Err("Ekran görüntüsü sığmıyor".into());
         }
         if !self
             .fitting
@@ -421,29 +432,46 @@ impl Clips {
             let dir = app.state::<DataDir>();
             let ff = ffmpeg(dir.root())
                 .ok_or("Önce Video İndirici'de araçları kur (ffmpeg gerekiyor)")?;
-            let duration = match clip.duration {
-                Some(d) if d > 0.0 => d,
-                _ => media::thumbnail(
-                    &ff,
-                    &src,
-                    &dir.folder(Some("Kapaklar"))
-                        .join("Klipler")
-                        .join(format!("{id}.jpg")),
-                    true,
-                )?
+            let (pdur, psize, pfps) = media::probe(&ff, &src);
+            let duration = clip
                 .duration
-                .ok_or("Klibin süresi okunamadı")?,
+                .filter(|d| *d > 0.0)
+                .or(pdur)
+                .ok_or("Klibin süresi okunamadı")?;
+            let start = opts.start.unwrap_or(0.0).clamp(0.0, duration);
+            let end = opts
+                .end
+                .unwrap_or(duration)
+                .clamp(start + 0.5, duration.max(start + 0.5));
+            let (w, h) = psize
+                .or(clip.width.zip(clip.height))
+                .unwrap_or((1920, 1080));
+            let job = media::Job {
+                start,
+                end,
+                limit,
+                codec: opts.codec,
+                src: (w.max(16) as u32, h.max(16) as u32),
+                src_fps: pfps.unwrap_or(60.0),
             };
-            let out = dir.folder(Some(READY_DIR)).join(format!(
-                "{}.mp4",
-                safe_name(&clip.title.clone().unwrap_or(clip.name.clone()))
-            ));
+            let base = clip.title.clone().unwrap_or(clip.name.clone());
+            let out = match limit {
+                Some(_) => dir
+                    .folder(Some(READY_DIR))
+                    .join(format!("{}.mp4", safe_name(&base))),
+                // Kırpılmış kopya: klibin yanına; bir sonraki taramada listeye girer.
+                None => {
+                    unique(&src.with_file_name(format!("{} (kırpılmış).mp4", clean(&clip.name))))
+                }
+            };
             let app2 = app.clone();
             let id2 = id.to_string();
-            media::fit(&ff, &src, &out, duration, &move |p| {
+            media::encode(&ff, &src, &out, &job, &move |p| {
                 let _ = app2.emit("clip-fit", serde_json::json!({ "id": id2, "progress": p }));
             })?;
-            win::copy_file(&out)?;
+            if limit.is_some() {
+                win::copy_file(&out)?;
+            }
             Ok(out.to_string_lossy().into_owned())
         })();
         self.fitting
@@ -452,6 +480,111 @@ impl Clips {
             .remove(id);
         result
     }
+
+    /// Seçime göre beklenen sonuç (çözünürlük, kare hızı, netlik); kodlamadan önce göstermek için.
+    pub fn plan(db: &Db, id: &str, opts: &FitOptions) -> Result<media::Plan, String> {
+        let clip = get(db, id)?;
+        let duration = clip.duration.filter(|d| *d > 0.0).unwrap_or(30.0);
+        let start = opts.start.unwrap_or(0.0).clamp(0.0, duration);
+        let end = opts
+            .end
+            .unwrap_or(duration)
+            .clamp(start + 0.5, duration.max(start + 0.5));
+        let src = (
+            clip.width.unwrap_or(1920).max(16) as u32,
+            clip.height.unwrap_or(1080).max(16) as u32,
+        );
+        Ok(match opts.limit_mb {
+            Some(mb) => media::plan(
+                end - start,
+                mb as u64 * 1_000_000,
+                src,
+                60.0,
+                opts.codec,
+                1.0,
+            ),
+            None => media::Plan {
+                video: 0,
+                audio: 192,
+                height: src.1,
+                fps: 60,
+                quality: "great",
+            },
+        })
+    }
+}
+
+/// Kaydedilmiş varsayılanlar (hedef boyut ve kodek); hızlı "Discord'a sığdır" bunları kullanır.
+pub const FIT_KEY: &str = "clips.discord";
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct FitDefaults {
+    limit_mb: Option<u32>,
+    codec: Option<media::Codec>,
+}
+
+pub fn saved_options(db: &Db) -> FitOptions {
+    let d: FitDefaults = db.setting_json(FIT_KEY).unwrap_or_default();
+    FitOptions {
+        limit_mb: d.limit_mb.or(default_limit()),
+        codec: d.codec.unwrap_or_default(),
+        ..FitOptions::default()
+    }
+}
+
+/// "Discord'a sığdır" / "Kırp" seçenekleri.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FitOptions {
+    #[serde(default)]
+    pub start: Option<f64>,
+    #[serde(default)]
+    pub end: Option<f64>,
+    /// Hedef boyut (MB); `None`: sınırsız (yalnız kırp).
+    #[serde(default = "default_limit")]
+    pub limit_mb: Option<u32>,
+    #[serde(default)]
+    pub codec: media::Codec,
+}
+
+fn default_limit() -> Option<u32> {
+    Some(10)
+}
+
+impl Default for FitOptions {
+    fn default() -> Self {
+        Self {
+            start: None,
+            end: None,
+            limit_mb: default_limit(),
+            codec: media::Codec::default(),
+        }
+    }
+}
+
+fn clean(s: &str) -> String {
+    s.chars()
+        .map(|c| if r#"\/:*?"<>|"#.contains(c) { '_' } else { c })
+        .take(100)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+/// Dosya varsa "ad (2).mp4", "ad (3).mp4"…
+fn unique(p: &Path) -> PathBuf {
+    if !p.exists() {
+        return p.to_path_buf();
+    }
+    let stem = p
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    (2..1000)
+        .map(|n| p.with_file_name(format!("{stem} ({n}).mp4")))
+        .find(|c| !c.exists())
+        .unwrap_or_else(|| p.to_path_buf())
 }
 
 fn safe_name(s: &str) -> String {

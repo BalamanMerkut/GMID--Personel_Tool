@@ -679,3 +679,21 @@ export interface BackupManifest {
   home: string;
   folders: string[];
 }
+
+/** Klip kırpma / Discord'a sığdırma seçenekleri. */
+export interface FitOptions {
+  start?: number | null;
+  end?: number | null;
+  /** Hedef boyut (MB); `null`: sınırsız, yalnız kırp. */
+  limitMb: number | null;
+  /** av1: aynı boyutta daha net · h264: her yerde oynar */
+  codec: "av1" | "h264";
+}
+
+export interface FitPlan {
+  video: number;
+  audio: number;
+  height: number;
+  fps: number;
+  quality: "great" | "good" | "ok" | "poor";
+}

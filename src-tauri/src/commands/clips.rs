@@ -74,8 +74,25 @@ pub fn clips_reveal(app: AppHandle, id: String) -> CmdResult<()> {
 
 /// Discord'a sığan kopya (ya da zaten sığıyorsa kendisi) panoya; ilerleme "clip-fit" olayıyla.
 #[tauri::command]
-pub async fn clips_fit_discord(app: AppHandle, id: String) -> CmdResult<String> {
-    tauri::async_runtime::spawn_blocking(move || app.state::<Clips>().fit_discord(&app, &id))
-        .await
-        .map_err(|e| e.to_string())?
+pub async fn clips_fit_discord(
+    app: AppHandle,
+    id: String,
+    options: Option<clips::FitOptions>,
+) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let opts = options.unwrap_or_else(|| clips::saved_options(&app.state::<Db>()));
+        app.state::<Clips>().fit_discord(&app, &id, opts)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Seçime göre beklenen çözünürlük, kare hızı ve netlik.
+#[tauri::command]
+pub fn clips_plan(
+    db: State<'_, Db>,
+    id: String,
+    options: clips::FitOptions,
+) -> CmdResult<crate::clips::media::Plan> {
+    Clips::plan(&db, &id, &options)
 }

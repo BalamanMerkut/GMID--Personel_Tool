@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BackupManifest, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BackupManifest, FitOptions, FitPlan, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -292,8 +292,10 @@ export const api = {
     remove: (id: string) => call<void>("clips_delete", { id }),
     open: (id: string) => call<void>("clips_open", { id }),
     reveal: (id: string) => call<void>("clips_reveal", { id }),
-    /** 10 MB'a sığan kopya panoya; kopyanın yolu. */
-    fitDiscord: (id: string) => call<string>("clips_fit_discord", { id }),
+    /** Seçilen boyuta sığan (istersen kırpılmış) kopya panoya; kopyanın yolu. Seçenek yoksa kayıtlı varsayılanlar. */
+    fitDiscord: (id: string, options?: FitOptions) => call<string>("clips_fit_discord", { id, options: options ?? null }),
+    /** Seçime göre beklenen çözünürlük ve netlik. */
+    plan: (id: string, options: FitOptions) => call<FitPlan>("clips_plan", { id, options }),
     /** İzlenecek klasör seçtirir. */
     pickFolder: async (): Promise<string | null> => {
       if (!inTauri) return "D:\\Kayıtlar";
