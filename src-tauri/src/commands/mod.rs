@@ -218,3 +218,9 @@ pub fn wrapped_save(
     let _ = app.opener().reveal_item_in_dir(&path);
     Ok(path)
 }
+
+/// Her şeyde tek arama (Ctrl+K).
+#[tauri::command]
+pub fn search_all(db: State<'_, Db>, query: String) -> Vec<crate::search::Hit> {
+    crate::search::search(&db, &query)
+}

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { api, inTauri } from "../api";
+  import { focus, takeFocus } from "../focus.svelte";
   import { on } from "../bus";
   import NoteEditor from "../components/NoteEditor.svelte";
   import Icon from "../Icon.svelte";
@@ -33,9 +34,20 @@
     confirmDelete = null;
   }
 
+  // Aramadan gelen istek: o notu aç.
+  let focused = false;
+  $effect(() => {
+    void focus.n;
+    const id = untrack(() => takeFocus("note"));
+    if (id) {
+      focused = true;
+      void open(id);
+    }
+  });
+
   onMount(() => {
     void refresh().then(() => {
-      if (!current && list[0]) void open(list[0].id);
+      if (!current && !focused && list[0]) void open(list[0].id);
     });
     // Başka bir pencerede (yapışkan not, hızlı not) değişirse listeyi ve açık notu güncelle.
     const stop = on<string>("notes-changed", async (id) => {

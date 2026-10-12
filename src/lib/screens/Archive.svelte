@@ -1,7 +1,8 @@
 <script lang="ts">
   // Oyun Arşivi: puanladığın oyunlar. Alışveriş sitesi düzeni: solda kartlar, sağda filtre kutusu
   // (tür ve etiket, puan, durum, tavsiye, mağaza; her seçeneğin yanında kaç oyun kalacağı), "Bana bir oyun seç".
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { focus, takeFocus } from "../focus.svelte";
   import { api } from "../api";
   import { on } from "../bus";
   import RatingCard from "../components/RatingCard.svelte";
@@ -80,6 +81,15 @@
 
   const byId = $derived(new Map(games.map((g) => [g.id, g])));
   const items: Item[] = $derived(reviews.flatMap((r) => (byId.has(r.subjectId) ? [{ g: byId.get(r.subjectId)!, r }] : [])));
+
+  // Aramadan gelen istek: o oyunun puan kartını göster.
+  $effect(() => {
+    void focus.n;
+    if (!loaded) return;
+    const id = untrack(() => takeFocus("game"));
+    const it = id ? untrack(() => items.find((x) => x.g.id === id)) : null;
+    if (it) detail = it;
+  });
   const reviewed = $derived(new Set(reviews.map((r) => r.subjectId)));
   const labelsOf = (g: Game) => [...new Set([...g.genres, ...g.tags])];
 

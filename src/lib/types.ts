@@ -786,3 +786,12 @@ export interface Wrapped {
   notes: number;
   badges: { id: string; title: string; desc: string }[];
 }
+
+/** Genel arama sonucu. */
+export interface SearchHit {
+  kind: "note" | "game" | "title" | "video" | "clip" | "reminder";
+  id: string;
+  title: string;
+  sub: string;
+  image: string | null;
+}

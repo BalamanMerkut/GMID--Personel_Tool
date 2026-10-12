@@ -1,8 +1,9 @@
 <script lang="ts">
   // Kliplerim: NVIDIA, Xbox Game Bar, AMD, OBS, Steam, Medal kayıtları oyuna göre. Dosyalar yerinde kalır.
   // Üzerine gelince sessiz önizleme, tıklayınca büyük görünüm, çift tıklayınca varsayılan programda açılır.
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { api } from "../api";
+  import { focus, takeFocus } from "../focus.svelte";
   import { on } from "../bus";
   import ClipTrim from "../components/ClipTrim.svelte";
   import Icon from "../Icon.svelte";
@@ -145,6 +146,15 @@
       fitting = rest;
     }
   }
+
+  // Aramadan gelen istek: o klibi büyük görünümde aç.
+  $effect(() => {
+    void focus.n;
+    if (!loaded) return;
+    const id = untrack(() => takeFocus("clip"));
+    const c = id ? untrack(() => clips.find((x) => x.id === id)) : null;
+    if (c) openView(c);
+  });
 
   function openView(c: Clip) {
     view = c;

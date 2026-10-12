@@ -22,6 +22,7 @@
   import Install from "./lib/screens/Install.svelte";
   import Deals from "./lib/screens/Deals.svelte";
   import WrappedScreen from "./lib/screens/Wrapped.svelte";
+  import SearchPalette from "./lib/components/SearchPalette.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
   import { activeSummary, downloads, startDownloadsSync } from "./lib/downloads.svelte";
@@ -52,6 +53,15 @@
 
   /** Ayarlar ekranında açık bölüm ("settings/kisayollar" gibi adreslerle de seçilir). */
   let settingsTab = $state("genel");
+  let searchOpen = $state(false);
+
+  // Her yerden Ctrl+K: genel arama.
+  function globalKey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      searchOpen = !searchOpen;
+    }
+  }
 
   nav.go = (r) => navigate(r);
 
@@ -120,6 +130,8 @@
   });
 </script>
 
+<svelte:window onkeydown={globalKey} />
+
 {#if ready}
   <Background active={active && revealed} {quality} />
 
@@ -131,6 +143,9 @@
           <span class="crumb">{roomOf(route) ?? "GMID Tool"}</span>
           <h1>{screen.label}</h1>
         </div>
+        <button class="find" onclick={() => (searchOpen = true)} title="Her şeyde ara (Ctrl+K)">
+          <Icon name="search" size={15} /><span>Ara</span><kbd>Ctrl K</kbd>
+        </button>
         {#if dl.count}
           <button class="dlind" onclick={() => navigate("videos")} title="Video İndirici">
             <Icon name="download" size={17} />
@@ -186,6 +201,8 @@
     </div>
   </div>
 
+  <SearchPalette bind:open={searchOpen} onnavigate={navigate} />
+
   {#if player.item}
     <!-- Ekran değişse de çalmaya devam eder; küçültülünce altta çalma çubuğu. -->
     <Player
@@ -223,6 +240,13 @@
     background: rgba(18, 20, 23, 0.55);
   }
   .titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .find {
+    display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: none;
+    border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); color: var(--muted);
+    border-radius: 999px; padding: 6px 8px 6px 12px; font-size: 13px;
+  }
+  .find:hover { border-color: var(--gold-dim); color: var(--text); }
+  .find kbd { font: 600 10.5px var(--f-body); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line-2); color: var(--dim); }
   .dlind {
     display: inline-flex; align-items: center; gap: 8px; flex: none;
     border: 1px solid rgba(53, 160, 162, 0.55); background: rgba(53, 160, 162, 0.1); color: var(--neon);

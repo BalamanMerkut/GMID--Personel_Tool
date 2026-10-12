@@ -21,6 +21,7 @@ mod reminders;
 mod restore;
 mod reviews;
 mod scheduler;
+mod search;
 mod servers;
 mod timers;
 mod titles;
@@ -185,6 +186,7 @@ pub fn run() {
             commands::backup_now,
             commands::import_background,
             commands::open_url,
+            commands::search_all,
             commands::wrapped_get,
             commands::wrapped_save,
             commands::deals_get,

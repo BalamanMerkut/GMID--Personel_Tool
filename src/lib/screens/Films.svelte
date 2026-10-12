@@ -1,7 +1,8 @@
 <script lang="ts">
   // Film & Dizi Arşivi: izlediğin film ve dizileri 5 kısa soruyla puanla (Oyun Arşivi ile aynı düzen).
   // Bilgiler (Türkçe ad, afiş, özet, yönetmen, oyuncular, tür) Wikipedia ve Wikidata'dan kendiliğinden gelir.
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { focus, takeFocus } from "../focus.svelte";
   import { api } from "../api";
   import { on } from "../bus";
   import RatingCard from "../components/RatingCard.svelte";
@@ -65,6 +66,15 @@
 
   const byId = $derived(new Map(titles.map((t) => [t.id, t])));
   const items: Item[] = $derived(reviews.flatMap((r) => (byId.has(r.subjectId) ? [{ t: byId.get(r.subjectId)!, r }] : [])));
+
+  // Aramadan gelen istek: o film/dizinin ayrıntısını aç.
+  $effect(() => {
+    void focus.n;
+    if (!loaded) return;
+    const id = untrack(() => takeFocus("title"));
+    const it = id ? untrack(() => items.find((x) => x.t.id === id)) : null;
+    if (it) detail = it;
+  });
 
   type Group = "search" | "genre" | "kind" | "score" | "status" | "rec" | "people";
   function passes(i: Item, skip?: Group): boolean {

@@ -1,8 +1,9 @@
 <script lang="ts">
   // Kütüphanem: Steam ve Epic'ten içe aktarılan, elle eklenen oyunlar. Açık oyun 5 sn içinde yakalanır,
   // gerçek oynama süresi tutulur (Steam'in tuttuğu süre ayrıca görünür).
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { api } from "../api";
+  import { focus, takeFocus } from "../focus.svelte";
   import { on } from "../bus";
   import RatingCard from "../components/RatingCard.svelte";
   import Icon from "../Icon.svelte";
@@ -51,6 +52,15 @@
     loaded = true;
     if (detail) detail = games.find((g) => g.id === detail?.id) ?? null;
   }
+
+  // Aramadan gelen istek: o oyunun penceresini aç.
+  $effect(() => {
+    void focus.n;
+    if (!loaded) return;
+    const id = untrack(() => takeFocus("game"));
+    const g = id ? untrack(() => games.find((x) => x.id === id)) : null;
+    if (g) detail = g;
+  });
 
   onMount(() => {
     void load();

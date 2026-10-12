@@ -884,6 +884,17 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return;
     case "extension_install":
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Eklenti";
+    case "search_all": {
+      const q = String(a.query).toLocaleLowerCase("tr");
+      if (q.trim().length < 2) return [];
+      const has = (t: string) => t.toLocaleLowerCase("tr").includes(q);
+      return [
+        ...notes.filter((n) => has(n.title) || has(n.body)).slice(0, 6).map((n) => ({ kind: "note", id: n.id, title: n.title || "Adsız not", sub: n.body.replace(/[#*\n]/g, " ").slice(0, 80), image: null })),
+        ...libGames.filter((g) => has(g.name)).slice(0, 6).map((g) => ({ kind: "game", id: g.id, title: g.name, sub: "Kütüphanem", image: g.cover })),
+        ...titles.filter((t) => has(t.name)).slice(0, 6).map((t) => ({ kind: "title", id: t.id, title: t.name, sub: `${t.kind === "series" ? "Dizi" : "Film"} · ${t.year ?? ""}`, image: t.poster })),
+        ...clipList.filter((c) => has(c.title ?? c.name)).slice(0, 6).map((c) => ({ kind: "clip", id: c.id, title: c.title ?? c.name, sub: c.kind === "clip" ? "Klip" : "Ekran görüntüsü", image: c.thumb })),
+      ];
+    }
     case "wrapped_get": {
       const h = (n: number) => n * 3600;
       const hours = Array.from({ length: 24 }, (_, i) => (i < 3 ? h(6) : i >= 20 ? h(9) : i >= 14 ? h(2) : 0));
