@@ -731,7 +731,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       await wait(500);
       return { path: "C:\\Users\\Sen\\Documents\\GMID Tool\\Raporlar\\GMID-Sorun.zip", summary: `🐞 GMID Tool sorunu: ${String(a.description).split("\n")[0] || "açıklama yok"}` };
     case "community_discord":
-      return "https://discord.gg/gmid";
+      return "https://discord.gg/upu9VQwFrV";
     case "fps_status":
       return { state: "missing", relogin: false, message: null };
     case "fps_setup":

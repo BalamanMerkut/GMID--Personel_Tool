@@ -227,7 +227,7 @@ struct RemoteList {
 }
 
 /// Topluluk listesinde bağlantı yoksa (ya da liste hiç indirilemediyse) kullanılan davet.
-pub const DEFAULT_DISCORD: &str = "";
+pub const DEFAULT_DISCORD: &str = "https://discord.gg/upu9VQwFrV";
 const DISCORD_KEY: &str = "community.discord";
 
 /// Yalnız Discord davet bağlantıları kabul edilir.
@@ -747,6 +747,7 @@ mod tests {
         assert!(valid_invite("https://discord.gg/gmid"));
         assert!(valid_invite("https://discord.com/invite/AbC-12_x"));
         assert!(!valid_invite("http://discord.gg/gmid"));
+        assert!(valid_invite(DEFAULT_DISCORD));
         assert!(!valid_invite("https://discord.gg/"));
         assert!(!valid_invite("https://evil.com/discord.gg/x"));
         assert!(!valid_invite("https://discord.gg/a b"));

@@ -6,6 +6,8 @@
 indirdiğin videoları ve Windows'taki küçük can sıkıcı işleri tek bir şık pencerede toplayan
 kişisel Windows uygulaması.
 
+**GMID Discord:** [discord.gg/upu9VQwFrV](https://discord.gg/upu9VQwFrV)
+
 > **Durum:** Faz 1 (İskelet), Faz 2 (Günlük araçlar), Faz 3a (Sunucular), Faz 3b (Oyun: Kütüphanem, Oturum Geçmişi, Oyun Arşivi, Kliplerim), Faz 4 (Oyun Modu, Oyun İçi Panel), Faz 5 (Video İndirici) ve Faz 6 (Film & Dizi Arşivi, Format Sonrası Kurulum) kodlandı. Sonrası için bkz. [Yol haritası](docs/TASARIM.md#9-yol-haritası).
 
 ## Kurulum (Windows 10/11)
