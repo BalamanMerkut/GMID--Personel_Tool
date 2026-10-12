@@ -50,6 +50,9 @@ jobs:
   windows:
     name: Windows kurulum dosyası
     runs-on: windows-latest
+    # Uygulama içi güncelleme için her derleme bir GitHub sürümü olarak yayınlanır.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +71,18 @@ jobs:
         run: cargo clippy --locked -- -D warnings
       - name: Kurulum dosyasını derle
         run: npm run tauri build -- --bundles nsis
+        env:
+          # Uygulama kendi derleme numarasını bilir; daha yenisi yayınlanınca güncellemeyi önerir.
+          GMID_BUILD: ${{ github.run_number }}
+
+      - name: Sürüm dosyalarını hazırla
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path yayin | Out-Null
+          Copy-Item $exe.FullName yayin/GMID-Tool-Kurulum.exe
+          $h = (Get-FileHash yayin/GMID-Tool-Kurulum.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -NoNewline -Path yayin/GMID-Tool-Kurulum.exe.sha256 -Value "$h  GMID-Tool-Kurulum.exe"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -75,3 +90,16 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
           retention-days: 30
+
+      - name: GitHub sürümü olarak yayınla
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: GMID Tool · derleme ${{ github.run_number }}
+          body: ${{ github.event.head_commit.message }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: |
+            yayin/GMID-Tool-Kurulum.exe
+            yayin/GMID-Tool-Kurulum.exe.sha256

@@ -25,6 +25,7 @@ mod timers;
 mod titles;
 mod transcript;
 mod tray;
+mod updater;
 mod util;
 mod window;
 
@@ -120,6 +121,7 @@ pub fn run() {
             app.manage(panel::Panel::default());
             app.manage(clips::Clips::default());
             app.manage(install::Installer::default());
+            app.manage(updater::Updater::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -134,6 +136,7 @@ pub fn run() {
             games::start(handle);
             clips::start(handle);
             titles::fetch_meta(handle);
+            updater::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
             // güncelle (tarayıcıda bir kez "yenile" demek yeter).
             let h = handle.clone();
@@ -177,6 +180,9 @@ pub fn run() {
             commands::open_log,
             commands::backup_now,
             commands::import_background,
+            commands::update_status,
+            commands::update_check,
+            commands::update_install,
             commands::install::install_catalog,
             commands::install::install_list,
             commands::install::install_save_list,

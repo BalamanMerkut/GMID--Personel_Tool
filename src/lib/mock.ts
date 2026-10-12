@@ -348,6 +348,7 @@ let installList: InstallItem[] = ["Google.Chrome", "Valve.Steam", "Discord.Disco
   .filter(Boolean);
 let installRun: InstallRun = { running: false, stopping: false, steps: [], started: null, finished: null };
 let installStop = false;
+let updateStatus = { current: 29 as number | null, latest: null as unknown, available: false, checkedAt: null as number | null, error: null as string | null, progress: null as number | null };
 
 export async function handle(cmd: string, a: Record<string, unknown>): Promise<unknown> {
   switch (cmd) {
@@ -860,6 +861,25 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return;
     case "extension_install":
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Eklenti";
+    case "update_status":
+      return updateStatus;
+    case "update_check":
+      await wait(700);
+      updateStatus = {
+        ...updateStatus,
+        checkedAt: now(),
+        available: true,
+        latest: { build: 31, title: "Klip kırpma ve daha net 'Discord'a sığdır'", notes: "- Kırp ve hazırla penceresi\n- Net (AV1) ya da Uyumlu (H.264)", published: new Date().toISOString(), size: 9_400_000 },
+      };
+      emit("update", updateStatus);
+      return updateStatus;
+    case "update_install":
+      for (let k = 0; k <= 10; k++) {
+        updateStatus = { ...updateStatus, progress: k / 10 };
+        emit("update", updateStatus);
+        await wait(200);
+      }
+      return;
     case "install_catalog":
       return installCatalog;
     case "install_list":

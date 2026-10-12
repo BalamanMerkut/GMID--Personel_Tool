@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AudioState, BackupManifest, FitOptions, FitPlan, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AudioState, BackupManifest, FitOptions, FitPlan, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -316,6 +316,14 @@ export const api = {
     hide: () => call<void>("panel_hide"),
     /** Nota yazmak için klavye odağı (panel normalde odak almaz, oyun önde kalır). */
     focus: () => call<void>("panel_focus"),
+  },
+
+  update: {
+    status: () => call<UpdateStatus>("update_status"),
+    /** GitHub'daki en son sürüme bakar. */
+    check: () => call<UpdateStatus>("update_check"),
+    /** İndirir, doğrular, kurar; uygulama kapanıp yeni sürümle açılır. İlerleme "update" olayıyla. */
+    install: () => call<void>("update_install"),
   },
 
   install: {

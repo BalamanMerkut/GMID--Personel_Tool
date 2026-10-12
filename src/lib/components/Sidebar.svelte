@@ -4,9 +4,19 @@
   import { activeSummary } from "../downloads.svelte";
   import { ROOMS } from "../nav";
   import { player } from "../player.svelte";
+  import { onMount } from "svelte";
+  import { api } from "../api";
+  import { on } from "../bus";
+  import type { UpdateStatus } from "../types";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
   const downloading = $derived(activeSummary().count);
+  let update = $state<UpdateStatus | null>(null);
+  onMount(() => {
+    void api.update.status().then((s) => (update = s)).catch(() => {});
+    const stop = on<UpdateStatus>("update", (s) => (update = s));
+    return () => void stop.then((f) => f());
+  });
 </script>
 
 <aside class="side" aria-label="Malikâne odaları">
@@ -36,7 +46,12 @@
       {/each}
     {/each}
   </nav>
-  <div class="foot"><span>Merkut Studios</span><span class="tnum">v{version}</span></div>
+  {#if update?.available}
+    <button class="upd" onclick={() => onnavigate("settings/hakkinda")} title={update.latest?.title ?? ""}>
+      <Icon name="download" size={15} /><span>Güncelleme var</span>
+    </button>
+  {/if}
+  <div class="foot"><span>Merkut Studios</span><span class="tnum">v{version}{update?.current ? ` · ${update.current}` : ""}</span></div>
 </aside>
 
 <style>
@@ -79,6 +94,8 @@
   .eq.paused i { animation: none; height: 4px; background: var(--dim); }
   .eq i:nth-child(3) { animation-delay: 0.4s; }
   @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+  .upd { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.1); color: var(--gold-glow); font-weight: 600; font-size: 13px; }
+  .upd:hover { background: rgba(227, 194, 112, 0.18); }
   .foot {
     margin-top: auto; padding: 12px 18px 14px; border-top: 1px solid var(--line);
     font-size: 11px; color: var(--dim); display: flex; justify-content: space-between; gap: 8px;
@@ -87,7 +104,7 @@
   /* Dar pencerede sadece ikonlar */
   @media (max-width: 1100px) {
     .brand { justify-content: center; padding: 16px 8px; }
-    .name, .room, .label, .soon, .foot { display: none; }
+    .name, .room, .label, .soon, .foot, .upd span { display: none; }
     nav { padding: 6px 10px; gap: 4px; }
     .sep { display: block; height: 1px; background: var(--line); margin: 8px 6px; }
     button { justify-content: center; padding: 11px; position: relative; }

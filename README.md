@@ -17,6 +17,9 @@ kişisel Windows uygulaması.
 Windows SmartScreen "tanınmayan uygulama" uyarısı verebilir (uygulama imzalı değil):
 **Ek bilgi → Yine de çalıştır**.
 
+Kolay yol: deponun **Releases** sayfasındaki en son `GMID-Tool-Kurulum.exe`. Bir kez kurduktan sonra yeni
+sürümler uygulamanın içinden gelir: yan menüde **Güncelleme var** çıkar, Kontrol Odası → Hakkında → **Güncelle**.
+
 ## Neler var?
 
 ### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)

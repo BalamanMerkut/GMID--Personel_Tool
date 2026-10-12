@@ -697,3 +697,21 @@ export interface FitPlan {
   fps: number;
   quality: "great" | "good" | "ok" | "poor";
 }
+
+export interface UpdateRelease {
+  build: number;
+  title: string;
+  notes: string;
+  published: string;
+  size: number;
+}
+
+export interface UpdateStatus {
+  /** Bu kopyanın derleme numarası (geliştirme derlemesinde yok). */
+  current: number | null;
+  latest: UpdateRelease | null;
+  available: boolean;
+  checkedAt: number | null;
+  error: string | null;
+  progress: number | null;
+}

@@ -133,3 +133,31 @@ pub fn import_background(dir: State<'_, DataDir>, source: String) -> CmdResult<S
     std::fs::copy(src, &dest).map_err(|e| format!("Dosya kopyalanamadı: {e}"))?;
     Ok(dest.to_string_lossy().into_owned())
 }
+
+#[tauri::command]
+pub fn update_status(updater: State<'_, crate::updater::Updater>) -> crate::updater::Status {
+    let mut s = updater.status();
+    s.current = crate::updater::current_build();
+    s
+}
+
+#[tauri::command]
+pub async fn update_check(app: AppHandle) -> CmdResult<crate::updater::Status> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        app.state::<crate::updater::Updater>().check(&app)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// İndirir, doğrular ve kurar; uygulama kapanıp yeni sürümle yeniden açılır.
+#[tauri::command]
+pub async fn update_install(app: AppHandle) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        app.state::<crate::updater::Updater>().install(&app)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

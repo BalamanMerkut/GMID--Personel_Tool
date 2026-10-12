@@ -29,7 +29,8 @@ export type AppEvent =
   | "panel-open"
   | "titles-changed"
   | "install"
-  | "install-kit";
+  | "install-kit"
+  | "update";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

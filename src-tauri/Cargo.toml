@@ -29,6 +29,7 @@ ureq = { version = "3", features = ["platform-verifier", "win-system-proxy"] }
 tauri-plugin-notification = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tiny_http = "0.12.0"
+sha2 = "0.10"
 tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(windows)'.dependencies]
