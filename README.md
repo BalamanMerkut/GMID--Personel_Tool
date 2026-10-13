@@ -35,11 +35,22 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   - **Çark:** çevir, ibrenin gösterdiği kazanır (ilk çıkan). İstersen çıkan sonraki çevirişte listeden çıkar.
   - **Eleme:** her çevirişte ibrenin gösterdiği elenir (dilimi yumuşakça daralır), **son kalan** kazanır; "Otomatik"
     ile son kalana kadar kendisi çevirir. Elenme sırası yanda.
-  - **Kura:** N kazanan seç, rastgele **sıraya diz** ya da **takımlara böl**.
+  - **Turnuva:** eleme ağacı (sayı 2, 4, 8, 16 değilse ilk turda bay); kazanana tıkla, şampiyona kadar; 🎲 ile maçı
+    rastgele bitir; sonuçları Discord'a kopyala.
+  - **Kura:** N kazanan seç, rastgele **sıraya diz** ya da **takımlara böl**; "Seviyeye göre dengele" ile herkese 1–5
+    yıldız verip güçleri eşit takımlar kur.
   - **Zar & yazı-tura:** üç kart (yazı-tura, zar, sayı seç); birine tıklayınca ekranın ortasında büyür (Geri / Esc).
     Para havaya atılıp dönerek düşer (3B, kalınlıklı, gölgeli), zarlar noktalı yüzlerle yuvarlanır (1–6 zar, toplam).
 - Rastgelelik kriptografik ve eşit. Tık sesi, kutlama, **Büyük göster** (Discord'da ekran paylaşırken), son sonuçlar ve
   **Discord'a kopyala**. Boşluk tuşu çevirir.
+
+### Bağlantı Testi (Oyun Salonu)
+
+- "Lag bende mi, sunucuda mı?": modem, internet (Cloudflare, Google, Discord), GMID sunucuları ve en yakın Steam
+  noktalarına aynı anda ping. Ortalama, en iyi/en kötü, **titreme**, **kayıp** ve her ping'in çubuğu; en üstte tek
+  cümlelik teşhis (ev ağı / Wi-Fi, internet sağlayıcısı ya da sunucu). Oyundayken **Oyun İçi Panel → Ping** kartından
+  tek tıkla (~1 sn), alt-tab yok.
+- **Ekran kartı sürücüsü:** yeni NVIDIA sürücüsü çıkınca bir kez bildirir; Sistem özelliklerinde "Yeni sürücü · İndir".
 
 ### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)
 
@@ -117,6 +128,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   yanlışsa büyük görünümden değiştir. Yeni klipte köşede "Klip kaydedildi — Valorant (0:30)".
 - Üzerine gelince sessiz önizleme, tıklayınca büyük görünüm (← → ile gezin), çift tıklayınca varsayılan oynatıcı.
   Favori, yeniden adlandır, klasörde göster, sil (Geri Dönüşüm Kutusu'na; geri alınabilir).
+- **Kapaklar** videonun içinden rastgele bir kareden (başındaki siyah ekran değil). Kapak için gereken ffmpeg yoksa bir
+  kez kendiliğinden iner (~90 MB); çıkarılamayan kapaklar sonra yeniden denenir.
 - **Discord'a sığdır (tek tık):** klip **çözünürlüğü korunarak** küçültülür (AV1, görsel kalite ayarı; gerekirse
   30 kare) ve panoya konur — Discord'da **Ctrl+V**. Ölçümde aynı boyutta küçültmekten daha net çıktı. Klip o kadar
   uzunsa ki çözünürlük korunursa görüntü dağılacak, o zaman küçültülür. Yanındaki ⚙ seçenekleri açar:

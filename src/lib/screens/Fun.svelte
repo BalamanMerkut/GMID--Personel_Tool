@@ -9,20 +9,21 @@
   import { api } from "../api";
   import Icon from "../Icon.svelte";
   import Wheel from "../components/Wheel.svelte";
-  import { pickMany, randInt, shuffle, sliceColor, splitItems, teams, WHEEL_COLORS } from "../fun";
+  import { balancedTeams, bracket, choose, pickMany, randInt, roundName, shuffle, sliceColor, splitItems, teams, WHEEL_COLORS, type Match } from "../fun";
   import { getJson, setJson } from "../settings.svelte";
   import { notify } from "../toast.svelte";
 
   type Item = { id: string; name: string };
-  type Mode = "wheel" | "elim" | "draw" | "dice";
-  type Result = { mode: Mode; title: string; lines: string[]; teams?: string[][]; text: string };
+  type Mode = "wheel" | "elim" | "cup" | "draw" | "dice";
+  type Result = { mode: Mode; title: string; lines: string[]; teams?: string[][]; powers?: number[]; text: string };
   type Saved = { name: string; items: string[] };
   type Past = { at: number; text: string };
 
   const MAX = 100;
-  const MODES: { id: Mode; label: string; icon: "wheel" | "trophy" | "users" | "dice"; hint: string }[] = [
+  const MODES: { id: Mode; label: string; icon: "wheel" | "trophy" | "users" | "dice" | "flag"; hint: string }[] = [
     { id: "wheel", label: "Çark", icon: "wheel", hint: "Çevir; ibrenin gösterdiği kazanır." },
     { id: "elim", label: "Eleme", icon: "trophy", hint: "Her çevirişte ibrenin gösterdiği elenir; son kalan kazanır." },
+    { id: "cup", label: "Turnuva", icon: "flag", hint: "Listeden eşleşmeler çekilir; her maçın kazananına tıkla, şampiyona kadar." },
     { id: "draw", label: "Kura", icon: "users", hint: "Rastgele kazanan seç, sıraya diz ya da takımlara böl." },
     { id: "dice", label: "Zar & Yazı-tura", icon: "dice", hint: "Listeye gerek yok: zar at, yazı-tura, sayı seç." },
   ];
@@ -50,6 +51,15 @@
   let drawKind = $state<"pick" | "order" | "teams">("pick");
   let drawCount = $state(1);
   let teamCount = $state(2);
+  /** Takımlara bölerken seviyeye göre dengele; seviyeler ada göre saklanır (1–5, varsayılan 3). */
+  let balanced = $state(getJson("fun.balanced", false));
+  let levels = $state<Record<string, number>>(getJson<Record<string, number>>("fun.levels", {}));
+  const levelOf = (name: string) => levels[name] ?? 3;
+  function setLevel(name: string, v: number) {
+    levels = { ...levels, [name]: v };
+    void setJson("fun.levels", levels);
+  }
+  const showLevels = $derived(mode === "draw" && drawKind === "teams" && balanced);
   let slot = $state("");
   let wheel: Wheel | undefined = $state();
   /** Çarkta çıkan, sonraki çevirişte listeden çıkarılacak. */
@@ -321,19 +331,73 @@
       fanfare();
     } else {
       const k = Math.min(Math.max(2, teamCount), names.length);
-      const t = teams(names, k);
+      const made = balanced
+        ? balancedTeams(names.map((name) => ({ name, level: levelOf(name) })), k)
+        : teams(names, k).map((members) => ({ members, power: 0 }));
       finish(
         {
           mode,
-          title: `${t.length} takım`,
+          title: `${made.length} takım${balanced ? " · dengeli" : ""}`,
           lines: [],
-          teams: t,
-          text: `🎲 **Takımlar**\n${t.map((x, i) => `**Takım ${i + 1}:** ${x.join(", ")}`).join("\n")}`,
+          teams: made.map((t) => t.members),
+          powers: balanced ? made.map((t) => t.power) : undefined,
+          text: `🎲 **Takımlar${balanced ? " (seviyeye göre dengeli)" : ""}**\n${made
+            .map((x, i) => `**Takım ${i + 1}${balanced ? ` · güç ${x.power}` : ""}:** ${x.members.join(", ")}`)
+            .join("\n")}`,
         },
         false,
       );
       fanfare();
     }
+  }
+
+  // ---- turnuva ----
+  let cup = $state<Match[][]>(getJson<Match[][]>("fun.cup", []));
+  const champion = $derived(cup.length ? cup[cup.length - 1][0].winner : null);
+  function saveCup() {
+    void setJson("fun.cup", cup);
+  }
+  function newCup() {
+    const names = items.map((i) => i.name);
+    if (names.length < 2) return;
+    cup = bracket(names);
+    saveCup();
+    tick();
+  }
+  function cupText() {
+    const lines = [`🏆 **Turnuva** (${cup[0].length * 2 - cup[0].filter((m) => !m.a || !m.b).length} kişi)`];
+    if (champion) lines.push(`Şampiyon: **${champion}**`);
+    for (let r = cup.length - 1; r >= 0; r--) {
+      const done = cup[r].filter((m) => m.a && m.b && m.winner);
+      if (!done.length) continue;
+      lines.push(`${roundName(cup[r].length, r)}: ${done.map((m) => `${m.winner} > ${m.winner === m.a ? m.b : m.a}`).join(" · ")}`);
+    }
+    return lines.join("\n");
+  }
+  function pick(r: number, k: number, name: string) {
+    const had = champion;
+    cup = choose(cup, r, k, name);
+    saveCup();
+    beep(1100, 0.06, 0.04, "sine");
+    if (!had && champion) {
+      celebrate();
+      log(cupText());
+    }
+  }
+  /** Kalan maçları sırayla rastgele oynatır (kimse oynamayacaksa). */
+  async function autoCup() {
+    if (busy) return;
+    busy = true;
+    for (let r = 0; r < cup.length; r++) {
+      for (let k = 0; k < cup[r].length; k++) {
+        const m = cup[r][k];
+        if (m.a && m.b && !m.winner) {
+          pick(r, k, randInt(2) ? m.a : m.b);
+          await wait(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260);
+        }
+      }
+    }
+    busy = false;
   }
 
   // ---- zar & yazı-tura ----
@@ -532,6 +596,11 @@
               <li class:out={mode === "elim" && out.includes(it.id)}>
                 <span class="sw" style:background={sliceColor(i, items.length)}></span>
                 <span class="nm">{it.name}</span>
+                {#if showLevels}
+                  <span class="lvl" title="Seviye: takımlar buna göre dengelenir">
+                    {#each [1, 2, 3, 4, 5] as v (v)}<button class:on={v <= levelOf(it.name)} onclick={() => setLevel(it.name, v)} aria-label="{it.name} seviye {v}">★</button>{/each}
+                  </span>
+                {/if}
                 <button class="x" disabled={busy} onclick={() => remove(it.id)} title="Çıkar" aria-label="{it.name} çıkar"><Icon name="x" size={13} /></button>
               </li>
             {/each}
@@ -655,6 +724,44 @@
           {/if}
         </div>
       </div>
+    {:else if mode === "cup"}
+      <div class="cup">
+        <div class="row">
+          <button class="btn go" disabled={busy || items.length < 2} onclick={newCup}><Icon name="flag" size={18} />{cup.length ? "Yeni eşleşme çek" : "Eşleşmeleri çek"}</button>
+          {#if cup.length && !champion}<button class="btn ghost sm" disabled={busy} onclick={() => void autoCup()}><Icon name="dice" size={14} />Kalanları rastgele oynat</button>{/if}
+          {#if cup.length}<button class="btn ghost sm" onclick={() => copy(cupText())}><Icon name="discord" size={14} />Discord'a kopyala</button>{/if}
+          {#if items.length < 2}<span class="sub small">Önce listeye en az iki isim ekle.</span>{/if}
+        </div>
+        {#if cup.length}
+          <p class="sub small">Maçın kazananına tıkla; yanlış tıkladıysan aynı isme yeniden tıkla. 🎲: o maçı rastgele bitir. Kişi sayısı 2, 4, 8, 16 değilse ilk turda bazıları <b>bay</b> geçer.</p>
+          {#if champion}
+            <div class="result gold champ"><span class="kind"><Icon name="trophy" size={16} />Şampiyon</span><b class="win">{champion}</b></div>
+          {/if}
+          <div class="bracket">
+            {#each cup as round, r (r)}
+              <div class="col">
+                <span class="rname">{roundName(round.length, r)}</span>
+                <div class="matches">
+                  {#each round as m, k (k)}
+                    <div class="match" class:done={!!m.winner}>
+                      {#each [m.a, m.b] as p, side (side)}
+                        <button class="pl" class:won={!!p && m.winner === p} class:lost={!!m.winner && !!p && m.winner !== p} class:bye={!p} disabled={busy || !m.a || !m.b} onclick={() => p && pick(r, k, p)}>
+                          {p ?? (r === 0 ? "bay" : "—")}
+                        </button>
+                      {/each}
+                      {#if m.a && m.b && !m.winner}
+                        <button class="rnd" disabled={busy} title="Rastgele kazanan" onclick={() => pick(r, k, randInt(2) ? m.a! : m.b!)}><Icon name="dice" size={13} /></button>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="sub">Listeye katılanları yaz (2–64 kişi), sonra <b>Eşleşmeleri çek</b>. 1v1 turnuvalar için: FIFA, CS2 aim, satranç…</p>
+        {/if}
+      </div>
     {:else if mode === "draw"}
       <div class="draw">
         <div class="seg">
@@ -667,12 +774,16 @@
             <label class="num">Kaç kazanan <input type="number" min="1" max={Math.max(1, items.length)} bind:value={drawCount} /></label>
           {:else if drawKind === "teams"}
             <label class="num">Kaç takım <input type="number" min="2" max={Math.max(2, items.length)} bind:value={teamCount} /></label>
+            <label class="opt"><input type="checkbox" bind:checked={balanced} onchange={() => void setJson("fun.balanced", balanced)} />Seviyeye göre dengele</label>
           {/if}
           <button class="btn go" disabled={busy || items.length < 2} onclick={() => void runDraw()}>
             <Icon name="dice" size={18} />{busy ? "Çekiliyor…" : drawKind === "pick" ? "Kura çek" : drawKind === "order" ? "Sırala" : "Takımları kur"}
           </button>
           {#if items.length < 2}<span class="sub small">Önce listeye en az iki şey ekle.</span>{/if}
         </div>
+        {#if drawKind === "teams" && balanced}
+          <p class="sub small">Soldaki listede herkese 1–5 yıldız ver (varsayılan 3): takımların toplam gücü olabildiğince eşit, kişi sayıları en fazla bir farklı olur.</p>
+        {/if}
 
         {#if slot}
           <div class="slot"><b>{slot}</b></div>
@@ -683,7 +794,7 @@
               <div class="teams">
                 {#each result.teams as t, i (i)}
                   <div class="team" style:--c={WHEEL_COLORS[i % WHEEL_COLORS.length]}>
-                    <b>Takım {i + 1}</b>
+                    <b>Takım {i + 1}{#if result.powers}<span class="pow tnum">güç {result.powers[i]}</span>{/if}</b>
                     <ul>{#each t as n, j (j)}<li>{n}</li>{/each}</ul>
                   </div>
                 {/each}
@@ -904,6 +1015,30 @@
   .bignum.spin { opacity: 0.55; }
   @keyframes tumble { 0% { transform: translateY(0) rotate(-14deg); } 50% { transform: translateY(-22px) rotate(10deg) scale(1.04); } 100% { transform: translateY(0) rotate(18deg); } }
   @keyframes land { from { transform: translateY(-14px) scale(1.08) rotate(-6deg); } }
+
+  .lvl { display: inline-flex; gap: 0; flex: none; }
+  .lvl button { background: none; border: 0; padding: 0 1px; font-size: 13px; line-height: 1; color: var(--line-2); }
+  .lvl button.on { color: var(--gold); }
+  .lvl button:hover { color: var(--gold-glow); }
+  .pow { margin-left: 8px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+
+  .cup { display: flex; flex-direction: column; gap: 12px; padding: 6px 0; }
+  .champ { max-width: 420px; }
+  .bracket { display: flex; gap: 22px; overflow-x: auto; padding: 4px 2px 10px; }
+  .col { display: flex; flex-direction: column; min-width: 170px; flex: 1 0 170px; }
+  .rname { font-family: var(--f-display); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 8px; }
+  .matches { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 10px; }
+  .match { position: relative; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); overflow: hidden; }
+  .match.done { border-color: rgba(227, 194, 112, 0.45); }
+  .pl { text-align: left; padding: 8px 34px 8px 12px; background: none; border: 0; color: var(--text); font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl + .pl { border-top: 1px solid var(--line); }
+  .pl:hover:not(:disabled) { background: rgba(227, 194, 112, 0.08); }
+  .pl:disabled { cursor: default; }
+  .pl.won { color: #1b1608; background: var(--gold); }
+  .pl.lost { color: var(--dim); text-decoration: line-through; }
+  .pl.bye { color: var(--dim); font-style: italic; font-weight: 500; }
+  .rnd { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--coal-2); border: 1px solid var(--line-2); color: var(--muted); padding: 0; }
+  .rnd:hover:not(:disabled) { color: var(--gold-glow); border-color: var(--gold-dim); }
 
   .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; overflow: hidden; }
   .confetti i { position: absolute; top: -12px; border-radius: 2px; animation: fall linear forwards; }
