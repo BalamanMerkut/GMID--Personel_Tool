@@ -909,6 +909,16 @@ export interface PowerPlan {
   hidden: boolean;
 }
 
+/** Şimdi çalan (Windows medya oturumu: Spotify, YouTube…). */
+export interface NowPlaying {
+  app: string;
+  title: string;
+  artist: string;
+  playing: boolean;
+  /** Kapak (data: URL). */
+  thumb: string | null;
+}
+
 /** Bağlantı testi: bir hedefin ping sonuçları. */
 export interface NetProbe {
   id: string;

@@ -321,6 +321,32 @@ pub fn power_now(app: AppHandle) -> CmdResult<()> {
     crate::power::now(&app)
 }
 
+/// Discord durumu ayarı değişti: hemen uygula.
+#[tauri::command]
+pub async fn presence_refresh(app: AppHandle) {
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::presence::Presence>().tick(&app)
+    })
+    .await;
+}
+
+/// Şimdi çalan (Windows medya oturumu: Spotify, YouTube…); yoksa `None`.
+#[tauri::command]
+pub async fn media_now() -> Option<crate::mediactl::NowPlaying> {
+    tauri::async_runtime::spawn_blocking(crate::mediactl::now)
+        .await
+        .ok()
+        .flatten()
+}
+
+/// "toggle" | "next" | "prev"
+#[tauri::command]
+pub async fn media_control(action: String) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::mediactl::control(&action))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Bağlantı testi (ping): modem, internet, GMID sunucuları, Steam. `quick`: oyun içi panel için kısa test.
 #[tauri::command]
 pub async fn net_test(app: AppHandle, quick: bool) -> CmdResult<crate::nettest::Report> {

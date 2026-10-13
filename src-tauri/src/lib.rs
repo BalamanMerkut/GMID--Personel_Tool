@@ -15,6 +15,7 @@ mod games;
 mod hotkeys;
 mod install;
 mod log;
+mod mediactl;
 mod net;
 mod nettest;
 mod notes;
@@ -24,6 +25,7 @@ mod paths;
 mod perf;
 mod playlists;
 mod power;
+mod presence;
 mod reminders;
 mod report;
 mod restore;
@@ -133,6 +135,7 @@ pub fn run() {
             app.manage(sysinfo::SysInfo::default());
             app.manage(nettest::NetTest::default());
             app.manage(drivers::Drivers::default());
+            app.manage(presence::Presence::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -163,6 +166,7 @@ pub fn run() {
             updater::start(handle);
             deals::start(handle);
             drivers::start(handle);
+            presence::start(handle);
             servers::watch::start(handle);
             borderless::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
@@ -343,6 +347,9 @@ pub fn run() {
             commands::tools::power_now,
             commands::tools::power_dismiss,
             commands::tools::net_test,
+            commands::tools::media_now,
+            commands::tools::presence_refresh,
+            commands::tools::media_control,
             commands::tools::driver_status,
             commands::tools::system_info,
             commands::tools::system_info_text,

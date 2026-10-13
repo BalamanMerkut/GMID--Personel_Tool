@@ -9,7 +9,7 @@
   import Icon from "../Icon.svelte";
   import { msText, summary, tone } from "../ping";
   import { clock, playtime } from "../time";
-  import type { NetReport, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
+  import type { NetReport, NowPlaying, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
 
   let audio = $state<AudioState | null>(null);
   let game = $state<Game | null>(null);
@@ -72,15 +72,29 @@
   let perfTimer: ReturnType<typeof setInterval> | undefined;
 
   // Ölçüm yalnız panel açıkken (saniyede bir).
+  // Şimdi çalan (Spotify, YouTube…): panel açıkken 2 sn'de bir.
+  let media = $state<NowPlaying | null>(null);
+  let mediaTimer: ReturnType<typeof setInterval> | undefined;
+  const loadMedia = () => void api.media.now().then((m) => (media = m)).catch(() => {});
+  async function mediaDo(action: "toggle" | "next" | "prev") {
+    if (media && action === "toggle") media = { ...media, playing: !media.playing };
+    await api.media.control(action).catch((e) => flash(String(e)));
+    setTimeout(loadMedia, action === "toggle" ? 250 : 700);
+  }
+
   function startPerf() {
     stopPerf();
     const tick = () => void api.panel.perf().then((p) => (perf = p)).catch(() => {});
     tick();
     perfTimer = setInterval(tick, 1000);
+    loadMedia();
+    mediaTimer = setInterval(loadMedia, 2000);
   }
   function stopPerf() {
     clearInterval(perfTimer);
     perfTimer = undefined;
+    clearInterval(mediaTimer);
+    mediaTimer = undefined;
   }
 
   const out = $derived(audio?.outputs.find((d) => d.isDefault) ?? null);
@@ -364,6 +378,23 @@
         {/if}
       </section>
 
+      <section class="card np" class:on={media?.playing}>
+        <h3><Icon name="headphones" size={17} />Şimdi çalan{#if media}<span class="sub small app">{media.app}</span>{/if}</h3>
+        {#if media}
+          <div class="track">
+            {#if media.thumb}<img src={media.thumb} alt="" />{:else}<span class="art"><Icon name="headphones" size={22} /></span>{/if}
+            <div class="tt"><b title={media.title}>{media.title}</b><span class="sub small">{media.artist}</span></div>
+          </div>
+          <div class="mctl">
+            <button class="ib" onclick={() => mediaDo("prev")} title="Önceki"><Icon name="prev" size={16} /></button>
+            <button class="ib big" onclick={() => mediaDo("toggle")} title={media.playing ? "Duraklat" : "Oynat"}><Icon name={media.playing ? "pause" : "play"} size={18} /></button>
+            <button class="ib" onclick={() => mediaDo("next")} title="Sonraki"><Icon name="next" size={16} /></button>
+          </div>
+        {:else}
+          <p class="sub small">Spotify, YouTube ya da başka bir oynatıcıda bir şey çalınca burada görünür; oyundan çıkmadan durdur, geç.</p>
+        {/if}
+      </section>
+
       <section class="card wide">
         <h3><Icon name="headphones" size={17} />Uygulamalar</h3>
         <AppMixer compact max={6} />
@@ -517,6 +548,15 @@
   .tog.on { background: var(--gold); border-color: var(--gold); color: #1b1608; }
   .tog.big { padding: 12px; font-size: 15px; }
   .cd { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+  .np .app { margin-left: auto; font-weight: 600; }
+  .np.on { border-color: rgba(92, 192, 138, 0.5); }
+  .track { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .track img, .track .art { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; }
+  .track .art { display: grid; place-items: center; background: var(--coal-2); color: var(--dim); }
+  .tt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tt b, .tt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mctl { display: flex; justify-content: center; align-items: center; gap: 10px; }
+  .mctl .ib.big { place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--gold); color: #1b1608; }
   .ping h3 .mini { margin-left: auto; padding: 4px 10px; font-size: 12px; }
   .ping.good { border-color: rgba(92, 192, 138, 0.55); }
   .ping.warn { border-color: rgba(227, 194, 112, 0.6); }

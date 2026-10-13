@@ -21,6 +21,7 @@ const inputs: Device[] = [
 ];
 let lock: number | null = 1;
 let fpsReady = false;
+let mockMedia = { app: "Spotify", title: "Gül ki Sevgilim", artist: "Oğuzhan Koç", playing: true, thumb: null as string | null };
 let powerPlan: { action: "shutdown" | "restart" | "sleep"; at: number; hidden: boolean } | null = new URLSearchParams(location.search).has("power") ? { action: "shutdown", at: Date.now() + 42_000, hidden: false } : null;
 let borderlessList = ["cod2mp_s.exe"];
 
@@ -581,6 +582,14 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return { vendor: "nvidia", gpu: "NVIDIA GeForce RTX 4070", installed: "566.14", latest: "572.83", released: "Tue Mar 18, 2025", newer: true, url: "https://www.nvidia.com/tr-tr/geforce/drivers/", checkedAt: Date.now(), error: null };
     case "system_info_text":
       return "🖥️ Sistem özellikleri (GMID Tool)\n…";
+    case "presence_refresh":
+      return;
+    case "media_now":
+      return mockMedia;
+    case "media_control":
+      if (a.action === "toggle") mockMedia = { ...mockMedia, playing: !mockMedia.playing };
+      else mockMedia = { ...mockMedia, title: a.action === "next" ? "Yakar Geçerim" : "Dudu", artist: a.action === "next" ? "Ajda Pekkan" : "Tarkan", playing: true };
+      return;
     case "net_test": {
       await wait(a.quick ? 900 : 2200);
       const mk = (id: string, group: string, label: string, host: string, base: number, spread: number, lost: number[] = [], via = "icmp") => {
