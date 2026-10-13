@@ -69,6 +69,42 @@ pub fn app_info(app: AppHandle, dir: State<'_, DataDir>) -> AppInfo {
     }
 }
 
+/// Futbol: ligler (ESPN kodu, görünen ad).
+#[tauri::command]
+pub fn football_leagues() -> Vec<(String, String)> {
+    crate::football::LEAGUES
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect()
+}
+
+/// Futbol: seçilen ligler ve günler (YYYYMMDD) için maçlar.
+#[tauri::command]
+pub async fn football_matches(
+    app: AppHandle,
+    leagues: Vec<String>,
+    days: Vec<String>,
+) -> CmdResult<Vec<crate::football::Match>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri::Manager::state::<crate::football::Football>(&app).matches(&leagues, &days)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Futbol: ligin puan durumu.
+#[tauri::command]
+pub async fn football_standings(
+    app: AppHandle,
+    league: String,
+) -> CmdResult<Vec<crate::football::Group>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri::Manager::state::<crate::football::Football>(&app).standings(&league)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Dosyaları uygulamadan dışarı sürükler (Masaüstü, klasör, Discord…); yalnız kopyalanır.
 #[tauri::command]
 pub fn drag_out(window: tauri::WebviewWindow, paths: Vec<String>) -> CmdResult<()> {

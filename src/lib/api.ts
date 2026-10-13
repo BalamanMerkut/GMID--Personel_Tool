@@ -28,6 +28,8 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
+  FootballGroup,
+  FootballMatch,
   CleanResult, InstalledProgram,
   ProgramList, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
@@ -72,6 +74,13 @@ export const api = {
 
   openDataFolder: (sub?: string): Promise<void> =>
     inTauri ? invoke("open_data_folder", { sub: sub ?? null }) : Promise.resolve(),
+
+  football: {
+    leagues: () => call<[string, string][]>("football_leagues"),
+    /** Günler: "YYYYMMDD". */
+    matches: (leagues: string[], days: string[]) => call<FootballMatch[]>("football_matches", { leagues, days }),
+    standings: (league: string) => call<FootballGroup[]>("football_standings", { league }),
+  },
 
   /** Dosyaları uygulamadan dışarı sürükler (fare basılıyken çağrılır); bırakılan yere kopyalanır. */
   dragOut: (paths: string[]): Promise<void> => (inTauri ? invoke("drag_out", { paths }) : Promise.resolve()),

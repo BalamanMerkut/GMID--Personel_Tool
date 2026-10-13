@@ -1121,3 +1121,42 @@ export interface CleanResult {
   failed: [string, string][];
   backup: string;
 }
+
+export interface FootballTeam {
+  id: string;
+  name: string;
+  short: string;
+  logo: string;
+}
+
+export interface FootballMatch {
+  id: string;
+  league: string;
+  /** Başlama zamanı (UTC). */
+  date: string;
+  state: "pre" | "in" | "post";
+  /** "67'", "İY", "MS"… (başlamamışsa boş) */
+  status: string;
+  home: { team: FootballTeam; score: number | null; winner: boolean };
+  away: { team: FootballTeam; score: number | null; winner: boolean };
+  events: { kind: "goal" | "pen" | "own" | "red"; minute: string; player: string; side: "home" | "away" }[];
+}
+
+export interface FootballRow {
+  rank: number;
+  team: FootballTeam;
+  played: number;
+  won: number;
+  draw: number;
+  lost: number;
+  gf: number;
+  ga: number;
+  points: number;
+  note: string;
+  color: string;
+}
+
+export interface FootballGroup {
+  name: string;
+  rows: FootballRow[];
+}

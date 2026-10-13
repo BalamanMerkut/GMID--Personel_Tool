@@ -10,6 +10,7 @@ mod dictation;
 mod downloader;
 mod dragout;
 mod drivers;
+mod football;
 mod fps;
 mod gamemode;
 mod games;
@@ -156,6 +157,7 @@ pub fn run() {
             app.manage(install::Installer::default());
             app.manage(updater::Updater::default());
             app.manage(deals::Deals::default());
+            app.manage(football::Football::default());
             app.manage(perf::Perf::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
@@ -220,6 +222,9 @@ pub fn run() {
             commands::app_info,
             commands::open_data_folder,
             commands::drag_out,
+            commands::football_leagues,
+            commands::football_matches,
+            commands::football_standings,
             commands::open_log,
             commands::backup_now,
             commands::import_background,

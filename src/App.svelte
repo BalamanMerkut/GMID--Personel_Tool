@@ -19,6 +19,7 @@
   import Clips from "./lib/screens/Clips.svelte";
   import GameMode from "./lib/screens/GameMode.svelte";
   import Films from "./lib/screens/Films.svelte";
+  import Football from "./lib/screens/Football.svelte";
   import Fun from "./lib/screens/Fun.svelte";
   import Ping from "./lib/screens/Ping.svelte";
   import Install from "./lib/screens/Install.svelte";
@@ -186,6 +187,8 @@
           <Library />
         {:else if route === "films"}
           <Films />
+        {:else if route === "football"}
+          <Football />
         {:else if route === "fun"}
           <Fun />
         {:else if route === "ping"}

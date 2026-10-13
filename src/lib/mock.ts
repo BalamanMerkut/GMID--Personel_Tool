@@ -788,6 +788,38 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "uninstall_list":
       await wait(400);
       return { programs: mockPrograms, hidden: 37 };
+    case "football_leagues":
+      return [["tur.1", "Süper Lig"], ["uefa.champions", "Şampiyonlar Ligi"], ["eng.1", "Premier Lig"], ["esp.1", "La Liga"], ["ita.1", "Serie A"], ["ger.1", "Bundesliga"]];
+    case "football_matches": {
+      await wait(350);
+      const days = a.days as string[];
+      const d = days[days.length - 1];
+      const at = (h: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${h}Z`;
+      const t = (id: string, name: string) => ({ id, name, short: name, logo: "" });
+      const side = (team: ReturnType<typeof t>, score: number | null, winner = false) => ({ team, score, winner });
+      const all = [
+        { id: "1", league: "tur.1", date: at("14:00"), state: "post", status: "MS", home: side(t("1", "Galatasaray"), 3, true), away: side(t("2", "Konyaspor"), 1),
+          events: [{ kind: "goal", minute: "12'", player: "M. Icardi", side: "home" }, { kind: "pen", minute: "38'", player: "V. Osimhen", side: "home" }, { kind: "goal", minute: "61'", player: "U. Nayir", side: "away" }, { kind: "goal", minute: "88'", player: "B. Yılmaz", side: "home" }] },
+        { id: "2", league: "tur.1", date: at("16:00"), state: "in", status: "67'", home: side(t("3", "Fenerbahçe"), 1), away: side(t("4", "Beşiktaş"), 1),
+          events: [{ kind: "goal", minute: "23'", player: "E. Dzeko", side: "home" }, { kind: "red", minute: "54'", player: "G. Paulista", side: "away" }, { kind: "goal", minute: "59'", player: "C. Immobile", side: "away" }] },
+        { id: "3", league: "tur.1", date: at("17:00"), state: "pre", status: "", home: side(t("5", "Trabzonspor"), null), away: side(t("6", "Başakşehir"), null), events: [] },
+        { id: "4", league: "eng.1", date: at("11:30"), state: "post", status: "MS", home: side(t("7", "Arsenal"), 2, true), away: side(t("8", "Chelsea"), 0),
+          events: [{ kind: "goal", minute: "45'+2'", player: "B. Saka", side: "home" }, { kind: "own", minute: "77'", player: "L. Colwill", side: "away" }] },
+        { id: "5", league: "esp.1", date: at("19:00"), state: "pre", status: "", home: side(t("9", "Real Madrid"), null), away: side(t("10", "Barcelona"), null), events: [] },
+      ];
+      const want = a.leagues as string[];
+      return all.filter((m) => want.includes(m.league));
+    }
+    case "football_standings": {
+      await wait(300);
+      const names = ["Galatasaray", "Fenerbahçe", "Samsunspor", "Beşiktaş", "Göztepe", "Trabzonspor", "Başakşehir", "Kocaelispor", "Gaziantep FK", "Alanyaspor", "Rizespor", "Konyaspor", "Kasımpaşa", "Antalyaspor", "Eyüpspor", "Kayserispor", "Gençlerbirliği", "Karagümrük"];
+      const note = (i: number) => (i === 0 ? ["Champions League", "#81D6AC"] : i === 1 ? ["Champions League qualifying", "#B2D7FD"] : i === 2 ? ["Europa League qualifying", "#FFC979"] : i >= 15 ? ["Relegation", "#FF7F84"] : ["", ""]);
+      return [{ name: "Süper Lig", rows: names.map((n, i) => {
+        const [desc, color] = note(i);
+        const w = Math.max(0, 7 - Math.floor(i / 3)), dr = (i * 7) % 3, l = 9 - w - dr;
+        return { rank: i + 1, team: { id: String(i), name: n, short: n, logo: "" }, played: 9, won: w, draw: dr, lost: l, gf: 20 - i, ga: 6 + i, points: w * 3 + dr, note: desc, color };
+      }) }];
+    }
     case "uninstall_open_folder":
       return null;
     case "uninstall_icons": {

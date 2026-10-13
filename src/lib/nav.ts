@@ -48,6 +48,8 @@ export const ROOMS: Room[] = [
     screens: [
       { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: null,
         description: "Film ve dizileri aynı sade kartla puanla; afiş, özet, yönetmen ve oyuncular Vikipedi'den kendiliğinden gelir." },
+      { id: "football", label: "Futbol", icon: "trophy", phase: null,
+        description: "Süper Lig ve Avrupa ligleri: haftanın maçları, canlı skor ve dakika, golü kimin attığı, puan durumu." },
       { id: "fun", label: "Çark & Çekiliş", icon: "wheel", phase: null,
         description: "İsimleri, filmleri ya da oyunları yaz; çarkı çevir (ilk çıkan) ya da eleme yap (son kalan). Kura çek, takımlara böl, zar at, yazı-tura." },
       { id: "media", label: "Medya Oynatıcı", icon: "headphones", phase: null,
@@ -139,6 +141,7 @@ export const NAV: NavRoom[] = [
         ],
       },
       { id: "films", label: "Film & Dizi", icon: "film", tabs: [{ id: "films", label: "Film & Dizi" }] },
+      { id: "football", label: "Futbol", icon: "trophy", tabs: [{ id: "football", label: "Futbol" }] },
       { id: "fun", label: "Çark & Çekiliş", icon: "wheel", tabs: [{ id: "fun", label: "Çark & Çekiliş" }] },
     ],
   },

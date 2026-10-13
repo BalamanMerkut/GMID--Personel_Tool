@@ -94,6 +94,11 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 - Yedeği uygulamanın içinden de geri yükleyebilirsin: **Kontrol Odası → Veri ve yedekler → Yedekten geri yükle**.
 
 
+### Futbol
+
+- **Eğlence Salonu → Futbol:** Süper Lig, Avrupa kupaları ve büyük ligler: haftanın maçları, canlı skor ve dakika, golü
+  kimin attığı, kırmızı kartlar ve puan durumu (kaynak: ESPN; canlı maçlar 30 sn'de bir yenilenir).
+
 ### Windows Defender uyarısı
 
 GMID henüz dijital imzalı değil; Defender yeni ve imzasız programları bazen yapay zekâ tahminiyle (`…!ml` ile biten
