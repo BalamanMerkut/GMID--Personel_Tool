@@ -313,11 +313,20 @@ let dictLearn = [{ id: 1, from: "videoyu", to: "VDS" }];
 
 // ---- Yazılar ----
 const karaokeReady = new Set<string>();
+const karaokeOnline = new Map<string, { file: string; title: string; url: string; offset: number; score: number }>();
 let karaokeRecs: { path: string; name: string; size: number; modified: number }[] = [];
-const karaokeOf = (id: string) =>
-  karaokeReady.has(id)
-    ? { ready: true, music: `/mock/Karaoke/${id}/muzik.m4a`, vocals: `/mock/Karaoke/${id}/vokal.m4a`, downloadMb: 0 }
-    : { ready: false, music: null, vocals: null, downloadMb: karaokeReady.size ? 0 : 123 };
+const karaokeOf = (id: string) => {
+  const online = karaokeOnline.get(id) ?? null;
+  const sep = karaokeReady.has(id);
+  return {
+    ready: sep || !!online,
+    music: online ? `/mock/Karaoke/${id}/${online.file}` : sep ? `/mock/Karaoke/${id}/muzik.m4a` : null,
+    vocals: sep ? `/mock/Karaoke/${id}/vokal.m4a` : null,
+    downloadMb: karaokeReady.size ? 0 : 123,
+    online,
+    separated: sep,
+  };
+};
 
 const lyric = (start: number, text: string): Segment => {
   const words = text.split(" ");
@@ -780,6 +789,27 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     }
     case "karaoke_cancel":
       return null;
+    case "karaoke_search": {
+      await wait(700);
+      const q = String(a.query).replace(/ (instrumental|karaoke|beat)$/i, "");
+      return [
+        { url: "https://www.youtube.com/watch?v=i1", title: `${q} (Instrumental)`, channel: "Resmî Kanal", duration: 186 },
+        { url: "https://www.youtube.com/watch?v=i2", title: `${q} - Karaoke Version`, channel: "Sing King", duration: 189 },
+        { url: "https://www.youtube.com/watch?v=i3", title: `${q} beat (remake)`, channel: "Prod. Biri", duration: 240 },
+      ];
+    }
+    case "karaoke_online": {
+      const id = a.id as string;
+      for (const [stage, p] of [["download", 0], ["align", 0.3], ["align", 1]] as const) {
+        await wait(400);
+        emit("karaoke-progress", { id, stage, progress: p, gpu: false });
+      }
+      karaokeOnline.set(id, { file: `muzik-internet-${Date.now()}.m4a`, title: String(a.title), url: String(a.url), offset: 0.42, score: 0.61 });
+      return { ...karaokeOf(id), busy: null };
+    }
+    case "karaoke_online_remove":
+      karaokeOnline.delete(a.id as string);
+      return { ...karaokeOf(a.id as string), busy: null };
     case "karaoke_voice":
       return "/mock/Karaoke/Kayıtlar/.ham/ses.webm";
     case "karaoke_mix": {

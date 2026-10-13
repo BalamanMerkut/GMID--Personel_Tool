@@ -19,13 +19,7 @@ pub fn karaoke_status(k: State<'_, Karaoke>, dir: State<'_, DataDir>, id: String
 pub async fn karaoke_prepare(app: AppHandle, id: String, cpu: Option<bool>) -> CmdResult<Status> {
     tauri::async_runtime::spawn_blocking(move || {
         let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
-        let d = crate::downloader::get(&db, &id)
-            .map_err(|e| e.to_string())?
-            .ok_or("Şarkı bulunamadı")?;
-        let file = d
-            .file_path
-            .filter(|f| Path::new(f).is_file())
-            .ok_or("Dosya bulunamadı; taşınmış ya da silinmiş olabilir.")?;
+        let file = song_file(&db, &id)?;
         app.state::<Karaoke>().prepare(
             &app,
             dir.root(),
@@ -36,6 +30,50 @@ pub async fn karaoke_prepare(app: AppHandle, id: String, cpu: Option<bool>) -> C
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// YouTube'da şarkının temiz (instrumental / karaoke) sürümünü arar.
+#[tauri::command]
+pub async fn karaoke_search(app: AppHandle, query: String) -> CmdResult<Vec<karaoke::online::Hit>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        karaoke::online::search(app.state::<DataDir>().root(), &query)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Seçilen sürümü indirir ve şarkıya hizalar.
+#[tauri::command]
+pub async fn karaoke_online(
+    app: AppHandle,
+    id: String,
+    url: String,
+    title: String,
+) -> CmdResult<Status> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
+        let file = song_file(&db, &id)?;
+        app.state::<Karaoke>()
+            .fetch_online(&app, dir.root(), &id, Path::new(&file), &url, &title)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// İnternetten bulunan müziği bırakır (varsa yapay zekâyla ayrılana dönülür).
+#[tauri::command]
+pub fn karaoke_online_remove(k: State<'_, Karaoke>, dir: State<'_, DataDir>, id: String) -> Status {
+    karaoke::online::remove(&karaoke::song_dir(dir.root(), &id));
+    k.status(dir.root(), &id)
+}
+
+fn song_file(db: &Db, id: &str) -> CmdResult<String> {
+    crate::downloader::get(db, id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Şarkı bulunamadı")?
+        .file_path
+        .filter(|f| Path::new(f).is_file())
+        .ok_or_else(|| "Dosya bulunamadı; taşınmış ya da silinmiş olabilir.".to_string())
 }
 
 #[tauri::command]

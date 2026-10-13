@@ -8,6 +8,7 @@
 
 pub mod demucs;
 pub mod dsp;
+pub mod online;
 
 use crate::downloader::tools;
 use crate::util::{hide_console, new_id};
@@ -55,6 +56,10 @@ pub struct Status {
     pub download_mb: u32,
     /// Şu an ayrılan şarkı.
     pub busy: Option<String>,
+    /// Müzik internetten bulunan temiz sürümse (ör. YouTube'daki "instrumental") onun bilgisi.
+    pub online: Option<online::Info>,
+    /// Yapay zekâyla ayrılmış müzik de var mı (internetten bulunan silinince ona dönülür).
+    pub separated: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -102,11 +107,15 @@ impl Karaoke {
         };
         let current =
             std::fs::read_to_string(d.join(VERSION_FILE)).is_ok_and(|v| v.trim() == VERSION);
-        let (music, vocals) = if current {
+        let (separated, vocals) = if current {
             (file(MUSIC), file(VOCALS))
         } else {
             (None, None)
         };
+        let online = online::info(&d);
+        let music = online::music_file(&d)
+            .map(|p| p.to_string_lossy().into_owned())
+            .or(separated.clone());
         let mut mb = 0;
         if !runtime_ready(root) {
             mb += 25;
@@ -115,12 +124,50 @@ impl Karaoke {
             mb += 98;
         }
         Status {
-            ready: music.is_some() && vocals.is_some(),
+            ready: music.is_some(),
             music,
             vocals,
             download_mb: mb,
             busy: self.busy.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+            online,
+            separated: separated.is_some(),
         }
+    }
+
+    /// İnternetten temiz müziği indirip şarkıya hizalar (ayırmayla aynı anda yapılmaz).
+    pub fn fetch_online(
+        &self,
+        app: &AppHandle,
+        root: &Path,
+        id: &str,
+        file: &Path,
+        url: &str,
+        title: &str,
+    ) -> Result<Status, String> {
+        {
+            let mut busy = self.busy.lock().unwrap_or_else(|e| e.into_inner());
+            if busy.is_some() {
+                return Err("Başka bir şarkı hazırlanıyor; bitince dene.".into());
+            }
+            *busy = Some(id.to_string());
+        }
+        let emit = |stage: &str, progress: f64| {
+            let _ = app.emit(
+                "karaoke-progress",
+                Progress {
+                    id,
+                    stage,
+                    progress,
+                    gpu: false,
+                },
+            );
+        };
+        let r = online::fetch(root, &song_dir(root, id), file, url, title, &emit);
+        *self.busy.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        if let Err(e) = &r {
+            crate::log!("Karaoke: internetten müzik alınamadı: {e}");
+        }
+        r.map(|_| self.status(root, id))
     }
 
     pub fn cancel(&self) {
@@ -178,7 +225,10 @@ impl Karaoke {
         };
         install(root, &|stage, p| emit(stage, p))?;
         let dir = song_dir(root, id);
-        let _ = std::fs::remove_dir_all(&dir);
+        // İnternetten bulunan müzik (varsa) kalır; yalnız eski ayırma sonucu silinir.
+        for f in [MUSIC, VOCALS, VERSION_FILE] {
+            let _ = std::fs::remove_file(dir.join(f));
+        }
 
         emit("decode", 0.0);
         let mix = decode(root, file)?;
@@ -420,7 +470,7 @@ fn ffmpeg(root: &Path) -> Result<PathBuf, String> {
 }
 
 /// Dosyayı 44,1 kHz stereo `f32` olarak okur.
-fn decode(root: &Path, file: &Path) -> Result<demucs::Stereo, String> {
+pub(crate) fn decode(root: &Path, file: &Path) -> Result<demucs::Stereo, String> {
     let mut cmd = Command::new(ffmpeg(root)?);
     cmd.args(["-nostdin", "-loglevel", "error", "-i"])
         .arg(file)
@@ -450,7 +500,7 @@ fn decode(root: &Path, file: &Path) -> Result<demucs::Stereo, String> {
 }
 
 /// Stereo sesi AAC (.m4a) olarak yazar.
-fn encode(root: &Path, st: &demucs::Stereo, dest: &Path) -> Result<(), String> {
+pub(crate) fn encode(root: &Path, st: &demucs::Stereo, dest: &Path) -> Result<(), String> {
     let tmp = dest.with_extension("yaziliyor.m4a");
     let mut cmd = Command::new(ffmpeg(root)?);
     cmd.args([
@@ -551,7 +601,9 @@ pub struct Mix {
 
 /// Müziği ve sesi karıştırıp `Karaoke\Kayıtlar` içine .m4a yazar; yolunu döner.
 pub fn mix(root: &Path, id: &str, m: &Mix) -> Result<String, String> {
-    let music = song_dir(root, id).join(MUSIC);
+    let dir = song_dir(root, id);
+    // Çalınan müzikle aynısı: internetten bulunan varsa o, yoksa ayrılan.
+    let music = online::music_file(&dir).unwrap_or_else(|| dir.join(MUSIC));
     if !music.is_file() {
         return Err("Şarkının müziği hazır değil.".into());
     }

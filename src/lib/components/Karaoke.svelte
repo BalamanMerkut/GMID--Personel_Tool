@@ -9,7 +9,7 @@
   import { fill, wordsOf } from "../karaoke";
   import { getJson, setJson } from "../settings.svelte";
   import { notify } from "../toast.svelte";
-  import type { Download, KaraokeProgress, KaraokeRecording, KaraokeStatus, Segment } from "../types";
+  import type { Download, KaraokeHit, KaraokeProgress, KaraokeRecording, KaraokeStatus, Segment } from "../types";
 
   let {
     item,
@@ -91,6 +91,8 @@
     const pct = `%${Math.round(p.progress * 100)}`;
     if (p.stage === "runtime") return `Ses ayırma programı indiriliyor… ${pct}`;
     if (p.stage === "model") return `Yapay zekâ modeli indiriliyor (bir kez)… ${pct}`;
+    if (p.stage === "download") return "İndiriliyor…";
+    if (p.stage === "align") return "Sözlere göre hizalanıyor…";
     if (p.stage === "decode") return "Şarkı okunuyor…";
     if (p.stage === "check") return "Ekran kartının sonucu işlemciyle karşılaştırılıyor…";
     if (p.stage === "separate") return `Ses müzikten ayrılıyor${p.gpu ? " (ekran kartıyla)" : " (işlemciyle)"}… ${pct}`;
@@ -284,14 +286,67 @@
     onclose(time);
   }
 
+  // ---- internetten temiz müzik (şarkının resmî enstrümantal / karaoke sürümü) ----
+  let finder = $state(false);
+  let query = $state("");
+  let hits = $state<KaraokeHit[]>([]);
+  let searching = $state(false);
+  let fetching = $state<string | null>(null);
+  /** "Sanatçı - Şarkı (Official Video) [4K]" → "Sanatçı - Şarkı" */
+  const cleanTitle = (t: string) =>
+    t
+      .replace(/[([][^)\]]*(official|video|lyric|klip|audio|hd|4k|music|söz|sozleri|şarkı sözleri)[^)\]]*[)\]]/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  function openFinder(kind = "instrumental") {
+    finder = true;
+    query = `${cleanTitle(item.title)} ${kind}`;
+    void search();
+  }
+  async function search() {
+    searching = true;
+    error = "";
+    try {
+      hits = await api.karaoke.search(query);
+    } catch (e) {
+      error = String(e);
+      hits = [];
+    } finally {
+      searching = false;
+    }
+  }
+  async function useHit(h: KaraokeHit) {
+    music?.pause();
+    vocals?.pause();
+    fetching = h.url;
+    error = "";
+    prog = null;
+    try {
+      status = await api.karaoke.online(item.id, h.url, h.title);
+      finder = false;
+      notify("Temiz müzik hazır", "check");
+    } catch (e) {
+      error = String(e);
+    } finally {
+      fetching = null;
+    }
+  }
+  async function dropOnline() {
+    music?.pause();
+    status = await api.karaoke.onlineRemove(item.id).catch(() => status);
+  }
+  /** Bulunan sürümün süresi şarkıdan ne kadar farklı (sn). */
+  const durDiff = (h: KaraokeHit) => (h.duration && item.duration ? Math.round(h.duration - item.duration) : null);
+
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t.closest("input, textarea")) return;
     if (e.key === "Escape") {
       e.preventDefault();
-      if (result) result = null;
+      if (finder) finder = false;
+      else if (result) result = null;
       else close();
-    } else if (e.key === " " && status?.ready && !result) {
+    } else if (e.key === " " && status?.ready && !result && !finder) {
       e.preventDefault();
       toggle();
     }
@@ -328,26 +383,30 @@
     <div class="center">
       <div class="setup">
         <span class="bigicon"><Icon name="mic" size={34} /></span>
-        <h2>Şarkıdan ses ayrılsın</h2>
-        <p>
-          Şarkıcının sesi yapay zekâyla (Meta'nın Demucs modeli) müzikten ayrılır; yalnız müzik çalar, sözler akar, sen söylersin.
-          Bu bilgisayarda yapılır, şarkı başına <b>bir kez</b>: ekran kartıyla birkaç saniye–1 dakika, işlemciyle 1–3 dakika.
-        </p>
-        {#if status.downloadMb}
-          <p class="sub small">İlk seferde ses ayırma programı ve model iner (~{status.downloadMb} MB).</p>
-        {/if}
-        {#if preparing}
-          <div class="kprog">
-            <span>{stageText(prog)}</span>
-            <div class="pbar" class:busy={!prog || prog.stage === "decode" || prog.stage === "save" || prog.progress === 0}>
-              <i style:width="{(prog?.progress ?? 0) * 100}%"></i>
+        <h2>Müzik nereden gelsin?</h2>
+        <button class="choice rec" onclick={() => openFinder()} disabled={preparing}>
+          <span class="ctop"><Icon name="search" size={18} /><b>İnternetten temiz müzik bul</b><span class="tag">En temiz</span></span>
+          <span class="cdesc">Şarkının resmî enstrümantal ya da karaoke sürümü YouTube'da aranır; müzik stüdyodaki gibi temiz olur. Seçtiğin sürüm sözlere göre kendiliğinden hizalanır.</span>
+        </button>
+        <div class="choice">
+          <span class="ctop"><Icon name="sparkle" size={18} /><b>Yapay zekâyla ayır</b></span>
+          <span class="cdesc">
+            Şarkıcının sesi bu bilgisayarda müzikten ayrılır (Meta'nın Demucs modeli). İnternette sürümü olmayan şarkılar için; ses
+            girince müzik biraz boğuklaşabilir. Şarkı başına bir kez, 1–3 dakika.{#if status.downloadMb}{" "}İlk seferde ~{status.downloadMb} MB iner.{/if}
+          </span>
+          {#if preparing}
+            <div class="kprog">
+              <span>{stageText(prog)}</span>
+              <div class="pbar" class:busy={!prog || prog.stage === "decode" || prog.stage === "save" || prog.progress === 0}>
+                <i style:width="{(prog?.progress ?? 0) * 100}%"></i>
+              </div>
+              <button class="btn ghost sm" onclick={() => api.karaoke.cancel()}>Durdur</button>
             </div>
-            <button class="btn ghost sm" onclick={() => api.karaoke.cancel()}>Durdur</button>
-          </div>
-        {:else}
-          <button class="btn big" onclick={() => prepare()} disabled={!!status.busy && status.busy !== item.id}><Icon name="sparkle" size={18} />Hazırla</button>
-          {#if status.busy && status.busy !== item.id}<p class="sub small">Başka bir şarkı hazırlanıyor; bitince dene.</p>{/if}
-        {/if}
+          {:else}
+            <button class="btn sm" onclick={() => prepare()} disabled={!!status.busy && status.busy !== item.id}><Icon name="sparkle" size={15} />Ayır</button>
+            {#if status.busy && status.busy !== item.id}<span class="sub small">Başka bir şarkı hazırlanıyor; bitince dene.</span>{/if}
+          {/if}
+        </div>
         {#if error}<p class="err">{error}</p>{/if}
       </div>
     </div>
@@ -382,10 +441,14 @@
         <span class="tnum sub small">{formatDuration(duration) || "0:00"}</span>
       </div>
       <div class="ctlrow">
-        <div class="knob">
-          <label for="kguide"><Icon name="mic" size={15} />Orijinal ses <b class="tnum">%{Math.round(guide * 100)}</b></label>
-          <input id="kguide" type="range" min="0" max="1" step="0.05" bind:value={guide} onchange={() => void setJson("karaoke.guide", guide)} />
-        </div>
+        {#if status.vocals}
+          <div class="knob">
+            <label for="kguide"><Icon name="mic" size={15} />Orijinal ses <b class="tnum">%{Math.round(guide * 100)}</b></label>
+            <input id="kguide" type="range" min="0" max="1" step="0.05" bind:value={guide} onchange={() => void setJson("karaoke.guide", guide)} />
+          </div>
+        {:else}
+          <div></div>
+        {/if}
         <div class="mid">
           <button class="kplay" title={playing ? "Duraklat (Boşluk)" : "Çal (Boşluk)"} onclick={toggle} disabled={recording}>
             <Icon name={playing ? "pause" : "play"} size={26} />
@@ -411,10 +474,58 @@
         Kulaklık takılı <span class="sub small">(hoparlörden çalıyorsa kapat: müziğin mikrofona girmesi engellenir)</span>
       </label>
       <p class="redo sub small">
-        Müzik bozuk ya da cızırtılı mı? <button class="link" onclick={() => prepare(true)} disabled={recording}>İşlemciyle yeniden hazırla</button>
+        {#if status.online}
+          Müzik: <b>{status.online.title}</b> (YouTube){#if status.online.score < 0.12}<span class="warn"> · şarkıyla tam uyuşmayabilir</span>{/if}
+          · <button class="link" onclick={() => openFinder()} disabled={recording}>Değiştir</button>
+          {#if status.separated} · <button class="link" onclick={dropOnline} disabled={recording}>Yapay zekâyla ayrılana dön</button>{/if}
+        {:else}
+          Müzik yapay zekâyla ayrıldı. Boğuk mu? <button class="link" onclick={() => openFinder()} disabled={recording}>İnternetten temiz müzik bul</button>
+          · <button class="link" onclick={() => prepare(true)} disabled={recording}>İşlemciyle yeniden ayır</button>
+        {/if}
       </p>
       {#if error}<p class="err">{error}</p>{/if}
     </footer>
+  {/if}
+
+  {#if finder}
+    <div class="rback" role="presentation" onclick={(e) => e.target === e.currentTarget && !fetching && (finder = false)}>
+      <div class="rcard finder" role="dialog" aria-label="Temiz müzik bul">
+        <h3><Icon name="search" size={18} />Temiz müzik bul</h3>
+        <form class="frow" onsubmit={(e) => (e.preventDefault(), void search())}>
+          <input bind:value={query} aria-label="Ara" disabled={!!fetching} />
+          <button class="btn" disabled={searching || !!fetching}>Ara</button>
+        </form>
+        <div class="kinds">
+          {#each ["instrumental", "karaoke", "beat"] as k (k)}
+            <button class="chipk" onclick={() => openFinder(k)} disabled={searching || !!fetching}>{k}</button>
+          {/each}
+        </div>
+        {#if searching}
+          <p class="sub">YouTube'da aranıyor…</p>
+        {:else}
+          <ul class="hits">
+            {#each hits as h (h.url)}
+              {@const d = durDiff(h)}
+              <li>
+                <div class="htx">
+                  <b title={h.title}>{h.title}</b>
+                  <span class="sub small">
+                    {h.channel}{h.duration ? ` · ${formatDuration(h.duration)}` : ""}
+                    {#if d !== null}<span class="dd" class:ok={Math.abs(d) <= 4}>{Math.abs(d) <= 4 ? "süre tutuyor" : `${d > 0 ? "+" : ""}${d} sn`}</span>{/if}
+                  </span>
+                </div>
+                <button class="btn sm" disabled={!!fetching} onclick={() => useHit(h)}>{fetching === h.url ? stageText(prog) : "Kullan"}</button>
+              </li>
+            {:else}
+              <p class="sub">Sonuç yok. Aramayı değiştir (ör. sanatçı adıyla) ya da yukarıdan "karaoke" / "beat" dene.</p>
+            {/each}
+          </ul>
+        {/if}
+        <p class="sub small">Süresi şarkıyla aynı olan ("süre tutuyor") genelde doğru sürümdür. Seçtiğin indirilir ve sözlere göre kendiliğinden hizalanır.</p>
+        {#if error}<p class="err">{error}</p>{/if}
+        <div class="row"><button class="btn ghost" onclick={() => (finder = false)} disabled={!!fetching}>Kapat</button></div>
+      </div>
+    </div>
   {/if}
 
   {#if result}
@@ -461,7 +572,6 @@
   .setup h2 { margin: 0; font-family: var(--f-display); font-size: 24px; }
   .setup p { margin: 0; color: var(--muted); line-height: 1.55; }
   .bigicon { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; background: rgba(227, 194, 112, 0.14); color: var(--gold); box-shadow: 0 0 30px rgba(227, 194, 112, 0.2); }
-  .btn.big { padding: 11px 26px; font-size: 15px; }
   .kprog { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
   .pbar { width: 100%; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
   .pbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-dim), var(--gold-glow)); transition: width 0.3s; }
@@ -510,6 +620,27 @@
   .lvl { width: 60px; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
   .lvl i { display: block; height: 100%; background: linear-gradient(90deg, #5cc08a, #e3c270, #e05555); }
   .redo { margin: 0; text-align: center; }
+  .redo b { color: var(--text); font-weight: 600; }
+  .warn { color: var(--gold); }
+  .choice { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.025); color: var(--text); }
+  .choice.rec { border-color: rgba(227, 194, 112, 0.5); background: rgba(227, 194, 112, 0.07); cursor: pointer; transition: background 0.15s; }
+  .choice.rec:hover:not(:disabled) { background: rgba(227, 194, 112, 0.13); }
+  .ctop { display: flex; align-items: center; gap: 8px; color: var(--gold); }
+  .ctop b { color: var(--text); font-size: 15px; }
+  .tag { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1b1608; background: var(--gold); border-radius: 999px; padding: 2px 8px; }
+  .cdesc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .finder { width: min(680px, 100%); }
+  .frow { display: flex; gap: 8px; }
+  .frow input { flex: 1; min-width: 0; background: var(--coal); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 12px; color: var(--text); }
+  .kinds { display: flex; gap: 6px; }
+  .chipk { border: 1px solid var(--line-2); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; }
+  .chipk:hover:not(:disabled) { color: var(--gold-glow); border-color: var(--gold-dim); }
+  .hits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 340px; overflow: auto; }
+  .hits li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+  .htx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .htx b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd { margin-left: 6px; padding: 0 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.07); }
+  .dd.ok { color: var(--good); background: rgba(92, 192, 138, 0.12); }
   .link { background: none; border: 0; padding: 0; color: var(--gold); font: inherit; font-weight: 600; cursor: pointer; }
   .link:hover { color: var(--gold-glow); }
   .hp { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 13px; color: var(--muted); }

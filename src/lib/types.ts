@@ -998,11 +998,32 @@ export interface KaraokeStatus {
   downloadMb: number;
   /** Şu an hazırlanan şarkı. */
   busy: string | null;
+  /** Müzik internetten bulunan temiz sürümse. */
+  online: KaraokeOnline | null;
+  /** Yapay zekâyla ayrılmış müzik de var mı. */
+  separated: boolean;
+}
+
+export interface KaraokeOnline {
+  file: string;
+  title: string;
+  url: string;
+  /** Hizalama kayması (sn). */
+  offset: number;
+  /** 0..1 benzerlik. */
+  score: number;
+}
+
+export interface KaraokeHit {
+  url: string;
+  title: string;
+  channel: string;
+  duration: number | null;
 }
 
 export interface KaraokeProgress {
   id: string;
-  stage: "runtime" | "model" | "decode" | "check" | "separate" | "save";
+  stage: "runtime" | "model" | "decode" | "check" | "separate" | "save" | "download" | "align";
   progress: number;
   gpu: boolean;
 }

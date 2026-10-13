@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  KaraokeMix, KaraokeRecording, KaraokeStatus,
+  KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
   Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
@@ -487,6 +487,11 @@ export const api = {
     /** `cpu`: ekran kartını kullanma. */
     prepare: (id: string, cpu = false) => call<KaraokeStatus>("karaoke_prepare", { id, cpu }),
     cancel: () => call<void>("karaoke_cancel"),
+    /** YouTube'da temiz (instrumental / karaoke) sürüm arar. */
+    search: (query: string) => call<KaraokeHit[]>("karaoke_search", { query }),
+    /** Seçilen sürümü indirip şarkıya hizalar. */
+    online: (id: string, url: string, title: string) => call<KaraokeStatus>("karaoke_online", { id, url, title }),
+    onlineRemove: (id: string) => call<KaraokeStatus>("karaoke_online_remove", { id }),
     /** Mikrofon kaydını (base64) saklar; yolunu döner. */
     voice: (data: string, ext: string) => call<string>("karaoke_voice", { data, ext }),
     mix: (id: string, mix: KaraokeMix) => call<string>("karaoke_mix", { id, mix }),

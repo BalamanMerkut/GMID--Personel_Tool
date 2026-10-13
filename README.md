@@ -183,8 +183,10 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   ada / sanatçıya / süreye / en çok dinlenene göre sıralama; **Liste / Kapak** görünümü. Şarkıya tıklamak oynatıcıyı
   öne getirmez, altta çalar. **Videolar:** büyük kapaklı kartlar, üstünde süre ve kalite; site ve liste süzgeci.
   Oynatıcıyı küçültünce (Esc) başka ekranlarda altta çalmaya devam eder, video köşede küçük oynar.
-- **Karaoke** (oynatıcıda **Karaoke** düğmesi): şarkıcının sesi yapay zekâyla (Meta'nın **Demucs** modeli) müzikten
-  ayrılır; yalnız müzik çalar, sözler ortada kelime kelime altınla dolar (önceki/sonraki satırlar, girişte geri sayım),
+- **Karaoke** (oynatıcıda **Karaoke** düğmesi): müzik iki yoldan gelir. **İnternetten temiz müzik bul** (en temiz):
+  şarkının resmî enstrümantal / karaoke sürümü YouTube'da aranır, seçtiğin indirilir ve sözlere göre kendiliğinden
+  hizalanır. Ya da şarkıcının sesi yapay zekâyla (Meta'nın **Demucs** modeli) müzikten ayrılır (ses girince müzik biraz
+  boğuklaşabilir); yalnız müzik çalar, sözler ortada kelime kelime altınla dolar (önceki/sonraki satırlar, girişte geri sayım),
   istersen **Orijinal ses** kaydırıcısıyla şarkıcıyı hafifçe duyarsın. **Kaydet**: mikrofonla söylediğin müzikle
   karıştırılır (hafif yankı, ses seviyesi ve gecikme düzeltmesi sonradan ayarlanır) → `Belgeler\GMID Tool\Karaoke\Kayıtlar`.
   Ayırma bu bilgisayarda, şarkı başına bir kez (ekran kartıyla DirectML: NVIDIA/AMD/Intel; yoksa işlemciyle 1–3 dk);
