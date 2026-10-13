@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -502,6 +502,11 @@ export const api = {
     info: (refresh = false) => call<Specs>("system_info", { refresh }),
     /** Discord'a yapıştırmak için düz yazı. */
     text: () => call<string>("system_info_text"),
+  },
+
+  net: {
+    /** Bağlantı testi; `quick`: oyun içi panel için kısa test (~1 sn). */
+    test: (quick = false) => call<NetReport>("net_test", { quick }),
   },
 
   power: {

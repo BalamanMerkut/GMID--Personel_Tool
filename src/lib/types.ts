@@ -909,6 +909,32 @@ export interface PowerPlan {
   hidden: boolean;
 }
 
+/** Bağlantı testi: bir hedefin ping sonuçları. */
+export interface NetProbe {
+  id: string;
+  group: "net" | "internet" | "gmid" | "game";
+  label: string;
+  host: string;
+  /** Her ping (ms); yanıt yoksa null. */
+  samples: (number | null)[];
+  avg: number | null;
+  min: number | null;
+  max: number | null;
+  jitter: number | null;
+  /** Kayıp yüzdesi. */
+  loss: number;
+  /** "game": sunucu ping'e kapalı, oyunun sorgusuyla ölçüldü. */
+  via: "icmp" | "game";
+}
+
+export interface NetReport {
+  at: number;
+  quick: boolean;
+  link: { kind: "wifi" | "ethernet" | "other" | ""; name: string };
+  probes: NetProbe[];
+  verdict: { level: "good" | "warn" | "bad"; title: string; detail: string };
+}
+
 /** Sistem özellikleri (Windows'un kendi kayıtlarından; boyutlar bayt). */
 export interface Specs {
   os: { name: string; version: string; build: string; computer: string; maker: string; model: string; uptimeMin: number };

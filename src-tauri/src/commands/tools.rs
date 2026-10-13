@@ -321,6 +321,16 @@ pub fn power_now(app: AppHandle) -> CmdResult<()> {
     crate::power::now(&app)
 }
 
+/// Bağlantı testi (ping): modem, internet, GMID sunucuları, Steam. `quick`: oyun içi panel için kısa test.
+#[tauri::command]
+pub async fn net_test(app: AppHandle, quick: bool) -> CmdResult<crate::nettest::Report> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::nettest::NetTest>().run(&app, quick)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Sistem özellikleri (önbellekten; `refresh` ile yeniden okur).
 #[tauri::command]
 pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<crate::sysinfo::Specs> {

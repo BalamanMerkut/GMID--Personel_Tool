@@ -575,6 +575,32 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       };
     case "system_info_text":
       return "🖥️ Sistem özellikleri (GMID Tool)\n…";
+    case "net_test": {
+      await wait(a.quick ? 900 : 2200);
+      const mk = (id: string, group: string, label: string, host: string, base: number, spread: number, lost: number[] = [], via = "icmp") => {
+        const samples = Array.from({ length: a.quick ? 6 : 12 }, (_, i) => (lost.includes(i) ? null : Math.round(base + Math.random() * spread)));
+        const ok = samples.filter((x): x is number => x != null);
+        const avg = ok.length ? ok.reduce((x, y) => x + y, 0) / ok.length : null;
+        const jitter = ok.length > 1 ? ok.slice(1).reduce((t, v, i) => t + Math.abs(v - ok[i]), 0) / (ok.length - 1) : 0;
+        return { id, group, label, host, samples, avg, min: ok.length ? Math.min(...ok) : null, max: ok.length ? Math.max(...ok) : null, jitter, loss: Math.round(((samples.length - ok.length) / samples.length) * 100), via };
+      };
+      return {
+        at: Date.now(),
+        quick: !!a.quick,
+        link: { kind: "wifi", name: "Wi-Fi" },
+        probes: [
+          mk("gateway", "net", "Modem", "192.168.1.1", 2, 6),
+          mk("cloudflare", "internet", "Cloudflare", "1.1.1.1", 17, 5),
+          mk("google", "internet", "Google", "8.8.8.8", 22, 6),
+          ...(a.quick ? [] : [mk("discord", "internet", "Discord", "discord.com", 24, 8)]),
+          mk("gmid-1", "gmid", "GMID CoD2 · Klasik", "cod2.gmid.gg", 38, 9, [], "game"),
+          mk("gmid-2", "gmid", "GMID Minecraft", "mc.gmid.gg", 41, 12, [7]),
+          mk("steam-fra", "game", "Steam · Frankfurt", "155.133.226.75", 48, 6),
+          ...(a.quick ? [] : [mk("steam-vie", "game", "Steam · Vienna", "155.133.230.2", 52, 5), mk("steam-ist", "game", "Steam · Istanbul", "155.133.233.98", 29, 4)]),
+        ],
+        verdict: { level: "good", title: "Bağlantın sağlıklı", detail: "İnternet 19 ms · titreme 2 ms · kayıp %0. Wi-Fi'desin; oyunda kablo daha da kararlı olur." },
+      };
+    }
     case "power_status":
       return powerPlan;
     case "power_schedule":

@@ -20,6 +20,7 @@
   import GameMode from "./lib/screens/GameMode.svelte";
   import Films from "./lib/screens/Films.svelte";
   import Fun from "./lib/screens/Fun.svelte";
+  import Ping from "./lib/screens/Ping.svelte";
   import Install from "./lib/screens/Install.svelte";
   import Deals from "./lib/screens/Deals.svelte";
   import WrappedScreen from "./lib/screens/Wrapped.svelte";
@@ -177,6 +178,8 @@
           <Films />
         {:else if route === "fun"}
           <Fun />
+        {:else if route === "ping"}
+          <Ping />
         {:else if route === "wrapped"}
           <WrappedScreen />
         {:else if route === "deals"}

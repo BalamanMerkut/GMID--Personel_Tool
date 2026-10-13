@@ -7,11 +7,26 @@
   import AppMixer from "../components/AppMixer.svelte";
   import PowerWarn from "../components/PowerWarn.svelte";
   import Icon from "../Icon.svelte";
+  import { msText, summary, tone } from "../ping";
   import { clock, playtime } from "../time";
-  import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
+  import type { NetReport, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
 
   let audio = $state<AudioState | null>(null);
   let game = $state<Game | null>(null);
+  // Ping: tek tıkla kısa bağlantı testi (alt-tab yok).
+  let ping = $state<NetReport | null>(null);
+  let pinging = $state(false);
+  async function runPing() {
+    if (pinging) return;
+    pinging = true;
+    try {
+      ping = await api.net.test(true);
+    } catch (e) {
+      flash(String(e));
+    } finally {
+      pinging = false;
+    }
+  }
   let gm: GameModeStatus = $state({ active: false, reason: null, since: null, quiet: true, stopBackground: true });
   let countdowns: Countdown[] = $state([]);
   let reminders: Reminder[] = $state([]);
@@ -377,6 +392,20 @@
         </button>
       </section>
 
+      <section class="card ping {ping && !pinging ? ping.verdict.level : ''}">
+        <h3><Icon name="network" size={17} />Ping
+          <button class="dev on mini" disabled={pinging} onclick={runPing}>{pinging ? "Ölçülüyor…" : ping ? "Yenile" : "Ölç"}</button>
+        </h3>
+        {#if ping}
+          <b class="verdict" class:fade={pinging}>{ping.verdict.title}</b>
+          {#each summary(ping.probes) as p (p.id)}
+            <div class="cd" class:fade={pinging}><span>{p.label}</span><b class="tnum {tone(p)}">{msText(p.avg)} ms{p.loss ? ` · %${p.loss}` : ""}</b></div>
+          {/each}
+        {:else}
+          <p class="sub small">{pinging ? "Modem, internet ve sunuculara ping atılıyor…" : "Lag sende mi, sunucuda mı? Tek tıkla ölç (~1 sn)."}</p>
+        {/if}
+      </section>
+
       <section class="card">
         <h3><Icon name="timer" size={17} />Sayaç</h3>
         {#each countdowns.slice(0, 3) as c (c.id)}
@@ -476,6 +505,18 @@
   .tog.on { background: var(--gold); border-color: var(--gold); color: #1b1608; }
   .tog.big { padding: 12px; font-size: 15px; }
   .cd { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+  .ping h3 .mini { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+  .ping.good { border-color: rgba(92, 192, 138, 0.55); }
+  .ping.warn { border-color: rgba(227, 194, 112, 0.6); }
+  .ping.bad { border-color: rgba(224, 106, 106, 0.65); }
+  .ping .verdict { font-size: 13.5px; }
+  .ping.good .verdict { color: var(--good); }
+  .ping.warn .verdict { color: var(--gold); }
+  .ping.bad .verdict { color: var(--bad); }
+  .ping .cd b.good { color: var(--good); }
+  .ping .cd b.warn { color: var(--gold); }
+  .ping .cd b.bad { color: var(--bad); }
+  .ping .fade { opacity: 0.45; }
   .cd span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   textarea { flex: 1; min-height: 120px; resize: none; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 10px; padding: 10px; color: var(--text); font: inherit; font-size: 14px; }
   .clip { display: flex; flex-direction: column; gap: 6px; }

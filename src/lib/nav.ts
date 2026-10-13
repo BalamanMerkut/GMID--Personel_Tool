@@ -25,6 +25,8 @@ export const ROOMS: Room[] = [
     screens: [
       { id: "servers", label: "Sunucular", icon: "server", phase: null,
         description: "GMID topluluğunun oyun sunucuları: kim açık, kaç kişi var, hangi harita. Bağlan'a bas, oyun açılıp sunucuya girsin." },
+      { id: "ping", label: "Bağlantı Testi", icon: "network", phase: null,
+        description: "Lag sende mi, sunucuda mı? Modem, internet, GMID sunucuları ve Steam'e ping; kayıp ve titremeyle tek cümlelik teşhis. Oyundayken Oyun İçi Panel'den tek tıkla." },
       { id: "library", label: "Kütüphanem", icon: "library", phase: null,
         description: "Steam, Epic ve elle eklediğin oyunlar; kapakları, türleri ve gerçek oynama süreleriyle. Açtığın oyunlar Discord'daki gibi kendiliğinden yakalanır." },
       { id: "sessions", label: "Oturum Geçmişi", icon: "clock", phase: null,
