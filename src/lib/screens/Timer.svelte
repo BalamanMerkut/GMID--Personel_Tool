@@ -3,7 +3,6 @@
   import { api } from "../api";
   import { on } from "../bus";
   import Icon from "../Icon.svelte";
-  import PowerTimer from "../components/PowerTimer.svelte";
   import { clock } from "../time";
   import { notify } from "../toast.svelte";
   import type { Countdown, TimersSnapshot } from "../types";
@@ -117,7 +116,6 @@
       {/each}
     </div>
   </section>
-  <PowerTimer />
 </div>
 
 <style>

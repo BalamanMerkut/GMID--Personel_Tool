@@ -17,6 +17,8 @@
 
   const SETTINGS: [string, string, string][] = [
     ["genel", "Genel", "başlangıç windows açılış tepsi pencere kapat"],
+    ["genel", "Bilgisayarı zamanla kapat", "kapat zamanla yeniden başlat uyku uyut kapanış shutdown"],
+    ["sistem", "Sistem özellikleri", "sistem donanım işlemci ekran kartı ram anakart disk monitör fare klavye"],
     ["gorunum", "Görünüm", "arka plan resim gif video renk tema"],
     ["kisayollar", "Kısayollar", "kısayol tuş klavye hotkey"],
     ["dikte", "Sesle yazma", "dikte konuş whisper mikrofon"],

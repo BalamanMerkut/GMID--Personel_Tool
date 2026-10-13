@@ -189,7 +189,7 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   **Ertele** (5 dk, 10 dk, 1 saat) ya da **Kapat** (Enter: kapat, Esc: 10 dk ertele). Oyundaysan pencere yerine
   **Oyun İçi Panel** açılır, uyarı en üstte: alt-tab yapmadan kapatırsın, panel kapanınca oyuna dönersin. Kontrol
   Odası → Bildirimler: açılır pencere, oyunda panel, melodi ve ses düzeyi (Dinle).
-- **Bilgisayarı zamanla kapat** (Sayaç ekranı): Kapat / Yeniden başlat / Uyut — 10 dk, 30 dk, 1 saat… ya da elle.
+- **Bilgisayarı zamanla kapat** (Kontrol Odası → Genel; yanlış tıklamaya karşı onay sorar): Kapat / Yeniden başlat / Uyut — 10 dk, 30 dk, 1 saat… ya da elle.
   Son bir dakikada ortada geri sayım çıkar (İptal / Şimdi). Zamanı gelince açık programlar kapatılır.
 - **Sistem özellikleri** (Kontrol Odası): işlemci, ekran kartı, RAM modülleri, anakart, diskler, monitörler, fare ve
   klavye adları, ses ve ağ aygıtları; **Kopyala** ile Discord'a yapıştır.

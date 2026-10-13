@@ -18,6 +18,7 @@
   import { welcome } from "../welcome.svelte";
   import ServersList from "../settings/ServersList.svelte";
   import SystemInfo from "../settings/SystemInfo.svelte";
+  import PowerTimer from "../components/PowerTimer.svelte";
   import { getJson, save, setJson, settings } from "../settings.svelte";
   import { notify } from "../toast.svelte";
 
@@ -43,7 +44,7 @@
     keys: string;
   }
   const TABS: Tab[] = [
-    { id: "genel", label: "Genel", icon: "power", keys: "başlangıç windows açılış tepsi pencere kapat çıkış" },
+    { id: "genel", label: "Genel", icon: "power", keys: "başlangıç windows açılış tepsi pencere kapat çıkış bilgisayarı kapat zamanla kapat yeniden başlat uyku uyut" },
     { id: "gorunum", label: "Görünüm", icon: "palette", keys: "arka plan resim gif video renk bulanık karartma kalite animasyon açılış tema" },
     { id: "kisayollar", label: "Kısayollar", icon: "keyboard", keys: "kısayol tuş atama klavye ctrl alt hotkey mikrofon ses not pano indir" },
     { id: "dikte", label: "Sesle yazma", icon: "mic", keys: "sesle yazma dikte konuş konuşarak yaz mikrofon whisper wispr ctrl alt nvidia yapay zeka toparla" },
@@ -186,6 +187,7 @@
           <button class="btn ghost" onclick={() => pick("kisayollar")}><Icon name="keyboard" />Kısayollar</button>
         </div>
       </section>
+      <PowerTimer />
     {:else if tab === "gorunum"}
       <Appearance {onreplay} />
     {:else if tab === "kisayollar"}

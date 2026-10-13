@@ -21,6 +21,8 @@ pub struct SysInfo {
 const SCRIPT: &str = r#"
 $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
+# Windows PowerShell 5.1 dizileri JSON'da {"value":[…],"Count":n} diye yazar; bu tür eki kaldırılınca düz dizi olur.
+Remove-TypeData System.Array
 function GB($b) { if ($b) { '{0:N1} GB' -f ($b / 1GB) } else { '' } }
 function Sec($t, $i, $r) { [pscustomobject]@{ title = $t; icon = $i; rows = @($r | Where-Object { $_ -and $_[1] }) } }
 $out = @()
@@ -187,9 +189,10 @@ fn read() -> Result<Vec<Section>, String> {
     if let Err(e) = &result {
         let err = String::from_utf8_lossy(&o.stderr);
         crate::log!(
-            "Sistem bilgisi okunamadı ({e}); çıkış {:?}, çıktı {} bayt, hata: {}",
+            "Sistem bilgisi okunamadı ({e}); çıkış {:?}, çıktı {} bayt, veri: {}, hata: {}",
             o.status.code(),
             o.stdout.len(),
+            json.chars().take(300).collect::<String>(),
             err.trim().chars().take(400).collect::<String>()
         );
     }
@@ -197,11 +200,21 @@ fn read() -> Result<Vec<Section>, String> {
         .map_err(|e| format!("{e}. Ayrıntı günlükte: Hakkında → Sorun bildir ile gönderebilirsin."))
 }
 
+/// Windows PowerShell 5.1 bazı dizileri `{"value": [...], "Count": n}` olarak yazar: içindeki diziyi al.
+fn unwrap(v: serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Object(mut o) if o.contains_key("value") && o.len() <= 2 => {
+            o.remove("value").unwrap_or(serde_json::Value::Null)
+        }
+        v => v,
+    }
+}
+
 /// PowerShell'in JSON çıktısı (tek bölüm dizi değil nesne olarak, tek satır iç içe dizi olarak gelebilir).
 pub fn parse(json: &str) -> Result<Vec<Section>, String> {
     let v: serde_json::Value =
         serde_json::from_str(json.trim()).map_err(|e| format!("Sistem bilgisi okunamadı: {e}"))?;
-    let list = match v {
+    let list = match unwrap(v) {
         serde_json::Value::Array(a) => a,
         o => vec![o],
     };
@@ -212,13 +225,14 @@ pub fn parse(json: &str) -> Result<Vec<Section>, String> {
     };
     let mut out = Vec::new();
     for s in list {
-        let rows_v = s.get("rows").cloned().unwrap_or(serde_json::Value::Null);
+        let s = unwrap(s);
+        let rows_v = unwrap(s.get("rows").cloned().unwrap_or(serde_json::Value::Null));
         // Tek satırlı bölüm: ["a","b"]; çok satırlı: [["a","b"], …]
         let rows: Vec<serde_json::Value> = match rows_v {
             serde_json::Value::Array(a) if a.first().is_some_and(|x| x.is_string()) => {
                 vec![serde_json::Value::Array(a)]
             }
-            serde_json::Value::Array(a) => a,
+            serde_json::Value::Array(a) => a.into_iter().map(unwrap).collect(),
             _ => Vec::new(),
         };
         let rows: Vec<(String, String)> = rows
@@ -284,5 +298,12 @@ mod tests {
         assert_eq!(one[0].title, "Sistem");
         assert!(as_text(&one).contains("• Windows: Windows 11 Pro 24H2"));
         assert!(parse("").is_err());
+        // Windows PowerShell 5.1 biçimi: diziler {"value": […], "Count": n} içinde.
+        let ps51 = r#"{"value":[{"title":"İşlemci","icon":"bolt","rows":{"value":[{"value":["AMD Ryzen 5 5600","6 çekirdek"],"Count":2}],"Count":1}},
+            {"title":"Ağ","icon":"link","rows":[{"value":["Ethernet","1 Gbps"],"Count":2},{"value":["Wi-Fi","866 Mbps"],"Count":2}]}],"Count":2}"#;
+        let s = parse(ps51).unwrap();
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].rows[0].0, "AMD Ryzen 5 5600");
+        assert_eq!(s[1].rows.len(), 2);
     }
 }
