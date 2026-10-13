@@ -22,7 +22,7 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder}
 pub const PANEL: &str = "panel";
 /// Odak alınca küçülen oyunlar (exe adları): bunlarda doğrudan bakış kipi.
 const GLANCE_KEY: &str = "panel.glanceExes";
-/// auto | interactive | glance
+/// auto | interactive
 const MODE_KEY: &str = "panel.mode";
 /// Bakış kipinde fareyi panele geçiren tuş: middle | left | off
 const GRAB_KEY: &str = "panel.grab";
@@ -118,11 +118,8 @@ pub fn show(app: &AppHandle) {
         .state::<crate::db::Db>()
         .setting_json(MODE_KEY)
         .unwrap_or_else(|| "auto".into());
-    let interactive = match mode.as_str() {
-        "interactive" => true,
-        "glance" => false,
-        _ => !exclusive && !remembered,
-    };
+    // "glance" (eski "Oyunda kalsın" seçeneği) kaldırıldı: kendiliğinden gibi davranır.
+    let interactive = mode == "interactive" || (!exclusive && !remembered);
     let borderless = exe.as_ref().is_some_and(|e| {
         crate::borderless::list(&app.state::<crate::db::Db>()).contains(&e.to_lowercase())
     });

@@ -46,9 +46,6 @@
     exe: params.has("exclusive") ? "hl.exe" : null,
     borderless: false,
   });
-  const grabHint = $derived(
-    openInfo.grab === "left" ? "sol tıkla." : openInfo.grab === "off" ? "aşağıdaki düğmeyi kullan:" : "farenin orta tuşuna (tekerleğe) bas.",
-  );
   let fpsBusy = $state(false);
   /** Zamanı gelen uyarılar (oyundayken pencere yerine panelde). */
   let alarmReminders: Reminder[] = $state([]);
@@ -413,15 +410,6 @@
         {:else if openInfo.borderless}
           <span class="ok"><Icon name="check" size={14} />Kenarlıksız listesinde</span>
         {/if}
-      </div>
-    {/if}
-    {#if openInfo.mode === "glance"}
-      <div class="hint">
-        <Icon name="info" size={16} />
-        <span>Oyun önde, fare oyunda. Fareyi panele almak için {grabHint}</span>
-        <button class="btn sm" onclick={() => (api.panel.interact(), (openInfo = { ...openInfo, mode: "interactive" }))}>
-          <Icon name="arrow" size={14} />Fareyi serbest bırak
-        </button>
       </div>
     {/if}
 
