@@ -6,13 +6,14 @@
   // O an söylenen satır altınla işaretlenir; kelime zamanları varsa kelime kelime (karaoke gibi).
   // Küçültülünce (mini) uygulamanın altında çalmaya devam eder; video köşede küçük oynar.
   // Filmlerde videonun yanındaki altyazılar (.tr.vtt…) seçilip görüntünün üstünde gösterilir.
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { api, inTauri } from "../api";
   import { on } from "../bus";
   import { formatDuration, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
   import { getJson, setJson } from "../settings.svelte";
-  import { nav, player } from "../player.svelte";
+  import { countPlay } from "../library.svelte";
+  import { controls, nav, player } from "../player.svelte";
   import { notify } from "../toast.svelte";
   import type { Download, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
 
@@ -392,6 +393,23 @@
   // Kenar çubuğundaki "çalıyor" göstergesi gerçek duruma uysun.
   $effect(() => {
     player.playing = playing;
+  });
+  // Medya ekranındaki "Şimdi çalan" kartı: söz satırı ve oynat/duraklat.
+  $effect(() => {
+    player.line = item.audioOnly && active >= 0 ? (segments[active]?.text ?? "") : "";
+  });
+  // "En çok dinlenenler" için: her şarkı açılışında bir kez say.
+  let counted = "";
+  $effect(() => {
+    const id = item.id;
+    if (item.audioOnly && id !== counted) {
+      counted = id;
+      untrack(() => countPlay(id));
+    }
+  });
+  onMount(() => {
+    controls.toggle = toggle;
+    return () => (controls.toggle = () => {});
   });
 
   function onKey(e: KeyboardEvent) {

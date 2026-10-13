@@ -232,10 +232,21 @@ mod tests {
         let server = std::thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
             let (op, hello) = read_frame(&mut s).unwrap();
-            assert_eq!((op, hello["client_id"].as_str()), (OP_HANDSHAKE, Some("1234567890123456789")));
-            s.write_all(&encode(OP_FRAME, &json!({ "cmd": "DISPATCH", "evt": "READY" }))).unwrap();
+            assert_eq!(
+                (op, hello["client_id"].as_str()),
+                (OP_HANDSHAKE, Some("1234567890123456789"))
+            );
+            s.write_all(&encode(
+                OP_FRAME,
+                &json!({ "cmd": "DISPATCH", "evt": "READY" }),
+            ))
+            .unwrap();
             let (_, set) = read_frame(&mut s).unwrap();
-            s.write_all(&encode(OP_FRAME, &json!({ "cmd": "SET_ACTIVITY", "evt": null }))).unwrap();
+            s.write_all(&encode(
+                OP_FRAME,
+                &json!({ "cmd": "SET_ACTIVITY", "evt": null }),
+            ))
+            .unwrap();
             set
         });
         let mut c = Conn::open("1234567890123456789").expect("bağlanmalı");

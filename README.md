@@ -118,8 +118,14 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   kendiliğinden eklenir ve Windows bildirimiyle anlatılır). Ses çıkışı ve seviyesi, **uygulama başına ses**
   (oyun, Discord, Spotify, tarayıcı ayrı ayrı; Ses & Mikrofon ekranında da var),
   mikrofon (seviye, sessize alma, kilit), Oyun Modu, sayaç (5/15/30 dk mola), o oyuna not (Notlar'da da görünür), son
-  klip (Discord'a sığdır), yaklaşan hatırlatıcılar. Esc ya da aynı tuşla kapanır, oyuna geri dönersin. Oyuna hiçbir şey
-  eklenmez; çerçevesiz ya da pencereli oyunlarda görünür.
+  klip (Discord'a sığdır), yaklaşan hatırlatıcılar, **Şimdi çalan** (Spotify, tarayıcıda YouTube, VLC… Windows'un
+  medya tuşlarına bağlanan her program: kapak, ad, önceki / oynat-duraklat / sonraki). Esc ya da aynı tuşla kapanır,
+  oyuna geri dönersin. Oyuna hiçbir şey eklenmez; çerçevesiz ya da pencereli oyunlarda görünür.
+- **Discord'da durum:** oyundayken Discord profilinde "Valorant oynuyor · Game Mansion In Discord", geçen süre ve
+  **GMID'e katıl** düğmesi. Sunucu gerekmez (Discord'un bu bilgisayardaki yerel bağlantısı). Bir kez kurulum:
+  [Discord Developer Portal](https://discord.com/developers/applications) → New Application → ad "GMID Tool" →
+  **Application ID**'yi kopyala → Kontrol Odası → Oyunlar → **Discord'da durum** kutusuna yapıştır. İstersen
+  Rich Presence → Art Assets'e GMID logosunu **gmid** adıyla yükle (profilde büyük resim olur).
 
 ### Faz 3b — Oyun (3. bölüm: Kliplerim)
 
@@ -175,8 +181,13 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   (içeriğinden) tanınır. Videonun üstüne gelince sağ üstte
   **GMID ile indir** düğmesi; videoya sağ tık → **GMID Tool ile indir** → kalite. Akış sayfalarında (X, Instagram,
   YouTube ana sayfa, **TikTok Sana Özel/Takip/Keşfet**) üstünde durulan videonun kendi bağlantısı bulunur.
-- **Medya Oynatıcı (ayrı ekran):** indirilen müzikler ve videolar; Müzik / Videolar / site / çalma listesi süzgeci,
-  "Hepsini çal". Oynatıcıyı küçültünce (Esc) başka ekranlarda altta çalmaya devam eder, video köşede küçük oynar.
+- **Medya Oynatıcı (ayrı ekran):** indirilen müzikler ve videolar. **Müzik:** solda listeler (Tüm şarkılar,
+  **Favoriler** ♥, **Son eklenenler**, **En çok dinlenenler**, kendi listelerin, indirilen listeler); üstte **Şimdi
+  çalan** kartı (kapağın bulanık hali arka planda, büyük kapak, oynat/duraklat, **Karıştırarak çal**, o an söylenen söz
+  satırı); sade satırlar (ekle/klasör/sil üzerine gelince, kapağın üstünde oynat, çalan şarkı altın ve ses dalgalı);
+  ada / sanatçıya / süreye / en çok dinlenene göre sıralama; **Liste / Kapak** görünümü. Şarkıya tıklamak oynatıcıyı
+  öne getirmez, altta çalar. **Videolar:** büyük kapaklı kartlar, üstünde süre ve kalite; site ve liste süzgeci.
+  Oynatıcıyı küçültünce (Esc) başka ekranlarda altta çalmaya devam eder, video köşede küçük oynar.
 - **Dublaj ve altyazı:** sitede birden çok ses dili ya da altyazı varsa indirirken seçilir (varsayılan: Türkçe
   dublaj, Türkçe altyazı; Kontrol Odası → Video İndirici). Altyazılar videonun yanına `<ad>.tr.vtt` olarak iner;
   eklenti, film sitelerinin ayrıca yüklediği altyazı dosyalarını da yakalar. Oynatıcıda **CC** ile açılır.
