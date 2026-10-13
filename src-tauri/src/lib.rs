@@ -323,6 +323,7 @@ pub fn run() {
             commands::videos::extension_install,
             commands::uninstall::uninstall_list,
             commands::uninstall::uninstall_icons,
+            commands::uninstall::uninstall_open_folder,
             commands::uninstall::uninstall_run,
             commands::uninstall::uninstall_state,
             commands::uninstall::uninstall_scan,

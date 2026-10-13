@@ -1,7 +1,7 @@
 //! Program Kaldırıcı komutları.
 
 use crate::paths::DataDir;
-use crate::uninstall::{CleanResult, Program, Scan, State as UState, Uninstaller};
+use crate::uninstall::{CleanResult, ProgramList, Scan, State as UState, Uninstaller};
 use tauri::{AppHandle, Manager, State};
 
 type CmdResult<T> = Result<T, String>;
@@ -16,7 +16,7 @@ async fn blocking<T: Send + 'static>(
 }
 
 #[tauri::command]
-pub async fn uninstall_list(app: AppHandle) -> CmdResult<Vec<Program>> {
+pub async fn uninstall_list(app: AppHandle) -> CmdResult<ProgramList> {
     blocking(app, |app| app.state::<Uninstaller>().list()).await
 }
 
@@ -26,6 +26,20 @@ pub async fn uninstall_icons(
     app: AppHandle,
 ) -> CmdResult<std::collections::HashMap<String, String>> {
     blocking(app, |app| app.state::<Uninstaller>().icons()).await
+}
+
+/// Programın kurulu olduğu klasörü Gezgin'de açar.
+#[tauri::command]
+pub fn uninstall_open_folder(
+    app: AppHandle,
+    u: State<'_, Uninstaller>,
+    id: String,
+) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let f = u.folder(&id)?;
+    app.opener()
+        .open_path(f.to_string_lossy(), None::<&str>)
+        .map_err(|e| format!("Klasör açılamadı: {e}"))
 }
 
 /// Programın kendi kaldırıcısını açar.

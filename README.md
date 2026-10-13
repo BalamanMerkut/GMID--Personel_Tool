@@ -101,7 +101,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   katı (ya da `Yayıncı\Program`); Windows ve Microsoft klasörleri, hâlâ kurulu başka bir programa ait ya da ortak kullanılan
   her şey ve bağlantılar (junction) asla; kayıt defterinde yalnız `Software\Program` ve `Software\Yayıncı\Program`.
   Dokunulmayanlar nedeniyle gösterilir. Sen seçip onaylarsın: dosyalar **Geri Dönüşüm Kutusu**'na gider, kayıtlar silinmeden
-  önce `.reg` olarak yedeklenir (Belgeler › GMID Tool › Yedekler). Listede her programın kendi simgesi görünür.
+  önce `.reg` olarak yedeklenir (Belgeler › GMID Tool › Yedekler). Listede her programın kendi simgesi görünür; programlar türe (uygulama, oyun, sürücü & donanım, çalışma ortamı, Microsoft) ve
+  diske göre süzülebilir, satıra tıklayınca nerede kurulu olduğu, yükleyicisi ve kaldırmanın riski görünür.
 - **Sürükle-bırak:** Medya'daki videoları ve şarkıları, Kliplerim'deki klipleri basılı tutup sürükleyerek Masaüstü'ne, bir
   klasöre ya da Discord'a bırakabilirsin (kopyalanır, kütüphanedeki dosya yerinde kalır).
 ### Faz 6 — Film & Dizi Arşivi

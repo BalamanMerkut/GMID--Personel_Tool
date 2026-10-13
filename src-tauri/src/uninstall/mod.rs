@@ -5,6 +5,7 @@
 //! seçtiği öğeler silinebilir.
 
 pub mod icon;
+pub mod info;
 pub mod reg;
 pub mod rules;
 
@@ -48,6 +49,28 @@ pub struct Program {
     /// Kayıttaki ham `DisplayIcon` ("C:\x\app.exe,0").
     #[serde(skip)]
     pub icon: String,
+    /// "app" | "game" | "driver" | "runtime" | "microsoft"
+    pub kind: String,
+    /// Türün uyarısı (boş olabilir).
+    pub note: String,
+    /// Gerçek kurulum klasörü (gösterim için; bilinmiyorsa boş).
+    pub folder: String,
+    /// "machine" (tüm kullanıcılar) | "user" (yalnız bu kullanıcı)
+    pub scope: String,
+    /// "64" | "32" | "" (bilinmiyor)
+    pub arch: String,
+    pub installer: String,
+}
+
+/// Kurulu programlar ve listede gösterilmeyen (sistem bileşeni, güncelleme, alt bileşen) kayıt sayısı.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgramList {
+    pub programs: Vec<Program>,
+    pub hidden: usize,
+    /// Gizlenen kayıtların (sistem bileşeni vb.) klasörleri: onlar da kurulu, artık taramasında korunur.
+    #[serde(skip)]
+    pub hidden_paths: Vec<PathBuf>,
 }
 
 impl Program {
@@ -84,8 +107,10 @@ fn icon_path(s: &str) -> String {
 }
 
 /// Kurulu programlar (sistem bileşenleri ve güncellemeler hariç), ada göre.
-pub fn list() -> Vec<Program> {
+pub fn list() -> ProgramList {
     let mut out: Vec<Program> = Vec::new();
+    let mut hidden = 0;
+    let mut hidden_paths = Vec::new();
     for root in UNINSTALL_ROOTS {
         for sub in reg::subkeys(root) {
             let id = format!("{root}\\{sub}");
@@ -94,8 +119,10 @@ pub fn list() -> Vec<Program> {
             let get = |k: &str| v.get(k).cloned().unwrap_or_default();
             let name = get("DisplayName");
             let uninstall = get("UninstallString");
-            if name.trim().is_empty()
-                || uninstall.trim().is_empty()
+            if name.trim().is_empty() {
+                continue;
+            }
+            if uninstall.trim().is_empty()
                 || get("SystemComponent") == "1"
                 || !get("ParentKeyName").is_empty()
                 || matches!(
@@ -103,6 +130,15 @@ pub fn list() -> Vec<Program> {
                     "Update" | "Hotfix" | "Security Update"
                 )
             {
+                hidden += 1;
+                let dir = info::folder(
+                    &get("InstallLocation"),
+                    &icon_path(&get("DisplayIcon")),
+                    None,
+                );
+                if !dir.is_empty() {
+                    hidden_paths.push(PathBuf::from(dir));
+                }
                 continue;
             }
             if out
@@ -111,13 +147,37 @@ pub fn list() -> Vec<Program> {
             {
                 continue;
             }
+            let exe = icon_path(&get("DisplayIcon"));
+            let location = get("InstallLocation");
+            let publisher = get("Publisher");
+            let unexe = split_command(&uninstall).map(|c| c.0);
+            let folder = info::folder(&location, &exe, unexe.as_deref());
+            let kind = info::kind(&name, &publisher, &folder, &uninstall, &sub);
             out.push(Program {
-                id,
                 version: get("DisplayVersion"),
-                publisher: get("Publisher"),
-                location: get("InstallLocation"),
+                installer: info::installer(&sub, &uninstall, get("WindowsInstaller") == "1").into(),
+                scope: if root.starts_with("HKCU") {
+                    "user"
+                } else {
+                    "machine"
+                }
+                .into(),
+                arch: if root.starts_with("HKCU") {
+                    ""
+                } else if root.contains("WOW6432Node") {
+                    "32"
+                } else {
+                    "64"
+                }
+                .into(),
+                kind: kind.into(),
+                note: info::note(kind).into(),
+                folder,
+                id,
+                publisher,
+                location,
                 uninstall,
-                exe: icon_path(&get("DisplayIcon")),
+                exe,
                 icon: get("DisplayIcon"),
                 size_kb: get("EstimatedSize").parse().unwrap_or(0),
                 date: get("InstallDate"),
@@ -126,7 +186,11 @@ pub fn list() -> Vec<Program> {
         }
     }
     out.sort_by_key(|p| p.name.to_lowercase());
-    out
+    ProgramList {
+        programs: out,
+        hidden,
+        hidden_paths,
+    }
 }
 
 /// Kaldırma komutu: (program, argümanlar). MSI kurulumlarında `/I` yerine `/X` (kaldır).
@@ -204,10 +268,20 @@ pub struct Uninstaller {
 }
 
 impl Uninstaller {
-    pub fn list(&self) -> Vec<Program> {
+    pub fn list(&self) -> ProgramList {
         let l = list();
-        *self.programs.lock().unwrap_or_else(|e| e.into_inner()) = l.clone();
+        *self.programs.lock().unwrap_or_else(|e| e.into_inner()) = l.programs.clone();
         l
+    }
+
+    /// Programın klasörünü Gezgin'de açar.
+    pub fn folder(&self, id: &str) -> Result<PathBuf, String> {
+        let p = self.find(id)?;
+        let f = PathBuf::from(&p.folder);
+        if p.folder.is_empty() || !f.is_dir() {
+            return Err("Programın klasörü bulunamadı.".into());
+        }
+        Ok(f)
     }
 
     /// Program simgeleri (kimlik → PNG data URL). Her simge bir kez çıkarılır, sonra bellekten gelir.
@@ -297,8 +371,18 @@ impl Uninstaller {
         }
         let t = p.target();
         // Hâlâ kurulu programlar (taze liste): onlara ait hiçbir şeye dokunulmaz.
-        let others: Vec<Program> = list().into_iter().filter(|o| o.id != p.id).collect();
-        let mut other_paths = Vec::new();
+        let fresh = list();
+        let others: Vec<Program> = fresh
+            .programs
+            .into_iter()
+            .filter(|o| o.id != p.id)
+            .collect();
+        let mut other_paths: Vec<String> = fresh
+            .hidden_paths
+            .iter()
+            .filter(|x| x.components().count() > 2)
+            .map(|x| x.to_string_lossy().to_lowercase())
+            .collect();
         for o in &others {
             let ot = o.target();
             for x in [

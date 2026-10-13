@@ -1072,6 +1072,24 @@ export interface InstalledProgram {
   sizeKb: number;
   /** "20240131" */
   date: string;
+  kind: ProgramKind;
+  /** Türün uyarısı (boş olabilir). */
+  note: string;
+  /** Gerçek kurulum klasörü (bilinmiyorsa boş). */
+  folder: string;
+  /** "machine": tüm kullanıcılar, "user": yalnız bu kullanıcı */
+  scope: "machine" | "user";
+  /** "64" | "32" | "" */
+  arch: string;
+  installer: string;
+}
+
+export type ProgramKind = "app" | "game" | "driver" | "runtime" | "microsoft";
+
+export interface ProgramList {
+  programs: InstalledProgram[];
+  /** Listede gösterilmeyen sistem bileşeni / güncelleme sayısı. */
+  hidden: number;
 }
 
 export interface UninstallState {

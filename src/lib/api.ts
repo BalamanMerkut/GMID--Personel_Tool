@@ -28,7 +28,8 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  CleanResult, InstalledProgram, LeftoverScan, UninstallState,
+  CleanResult, InstalledProgram,
+  ProgramList, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
   Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
@@ -487,7 +488,8 @@ export const api = {
   },
 
   uninstall: {
-    list: () => call<InstalledProgram[]>("uninstall_list"),
+    list: () => call<ProgramList>("uninstall_list"),
+    openFolder: (id: string) => call<void>("uninstall_open_folder", { id }),
     /** Program simgeleri: kimlik → PNG (data URL). */
     icons: () => call<Record<string, string>>("uninstall_icons"),
     /** Programın kendi kaldırıcısını açar. */

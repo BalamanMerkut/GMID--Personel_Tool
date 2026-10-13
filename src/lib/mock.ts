@@ -314,10 +314,14 @@ let dictLearn = [{ id: 1, from: "videoyu", to: "VDS" }];
 // ---- Yazılar ----
 let unState = { running: false, removed: false };
 const mockPrograms = [
-  { id: "HKLM\\...\\Coolapp", name: "Coolapp 2.1 (x64)", version: "2.1.0", publisher: "Acme", location: "C:\\Program Files\\Coolapp", uninstall: "\"C:\\Program Files\\Coolapp\\unins000.exe\"", exe: "C:\\Program Files\\Coolapp\\coolapp.exe", sizeKb: 184_000, date: "20250911" },
-  { id: "HKLM\\...\\7zip", name: "7-Zip 23.01 (x64)", version: "23.01", publisher: "Igor Pavlov", location: "C:\\Program Files\\7-Zip", uninstall: "C:\\Program Files\\7-Zip\\Uninstall.exe", exe: "", sizeKb: 5_600, date: "20240102" },
-  { id: "HKCU\\...\\Discord", name: "Discord", version: "1.0.9170", publisher: "Discord Inc.", location: "C:\\Users\\ali\\AppData\\Local\\Discord", uninstall: "...", exe: "", sizeKb: 410_000, date: "20260301" },
-  { id: "HKLM\\...\\VLC", name: "VLC media player", version: "3.0.21", publisher: "VideoLAN", location: "C:\\Program Files\\VideoLAN\\VLC", uninstall: "...", exe: "", sizeKb: 170_000, date: "20250520" },
+  { id: "HKLM\\...\\Coolapp_is1", name: "Coolapp 2.1 (x64)", version: "2.1.0", publisher: "Acme", location: "C:\\Program Files\\Coolapp", uninstall: "\"C:\\Program Files\\Coolapp\\unins000.exe\"", exe: "C:\\Program Files\\Coolapp\\coolapp.exe", sizeKb: 184_000, date: "20250911", kind: "app", note: "", folder: "C:\\Program Files\\Coolapp", scope: "machine", arch: "64", installer: "Inno Setup" },
+  { id: "HKLM\\...\\7zip", name: "7-Zip 23.01 (x64)", version: "23.01", publisher: "Igor Pavlov", location: "C:\\Program Files\\7-Zip", uninstall: "C:\\Program Files\\7-Zip\\Uninstall.exe", exe: "", sizeKb: 5_600, date: "20240102", kind: "app", note: "", folder: "C:\\Program Files\\7-Zip", scope: "machine", arch: "64", installer: "Kendi kaldırıcısı" },
+  { id: "HKCU\\...\\Discord", name: "Discord", version: "1.0.9170", publisher: "Discord Inc.", location: "C:\\Users\\ali\\AppData\\Local\\Discord", uninstall: "...", exe: "", sizeKb: 410_000, date: "20260301", kind: "app", note: "", folder: "C:\\Users\\ali\\AppData\\Local\\Discord", scope: "user", arch: "", installer: "Squirrel" },
+  { id: "HKLM\\...\\VLC", name: "VLC media player", version: "3.0.21", publisher: "VideoLAN", location: "C:\\Program Files\\VideoLAN\\VLC", uninstall: "...", exe: "", sizeKb: 170_000, date: "20250520", kind: "app", note: "", folder: "C:\\Program Files\\VideoLAN\\VLC", scope: "machine", arch: "64", installer: "Kendi kaldırıcısı" },
+  { id: "HKLM\\...\\Steam App 730", name: "Counter-Strike 2", version: "", publisher: "Valve", location: "D:\\SteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive", uninstall: "steam://uninstall/730", exe: "", sizeKb: 34_000_000, date: "", kind: "game", note: "Oyun: kayıtların (save) buluta yedekli değilse kaldırınca kaybolabilir.", folder: "D:\\SteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive", scope: "machine", arch: "64", installer: "Steam" },
+  { id: "HKLM\\...\\{AMD}", name: "AMD Chipset Software", version: "7.09.23.2230", publisher: "Advanced Micro Devices, Inc.", location: "", uninstall: "MsiExec.exe /X{AMD}", exe: "", sizeKb: 15_900, date: "", kind: "driver", note: "Sürücü ya da donanım yazılımı: kaldırırsan ses, görüntü, ağ, RGB ya da fan kontrolü gibi şeyler çalışmayabilir.", folder: "", scope: "machine", arch: "64", installer: "MSI (Windows Installer)" },
+  { id: "HKLM\\...\\{VC}", name: "Microsoft Visual C++ 2015-2022 Redistributable (x64)", version: "14.40.33810", publisher: "Microsoft Corporation", location: "", uninstall: "\"C:\\ProgramData\\Package Cache\\{VC}\\VC_redist.x64.exe\" /uninstall", exe: "", sizeKb: 20_000, date: "20240611", kind: "runtime", note: "Çalışma ortamı: başka programlar ve oyunlar buna ihtiyaç duyabilir; kaldırırsan onlar açılmayabilir. Emin değilsen dokunma.", folder: "", scope: "machine", arch: "32", installer: "Kurulum paketi" },
+  { id: "HKCU\\...\\Teams", name: "Microsoft Teams", version: "1.7", publisher: "Microsoft Corporation", location: "", uninstall: "...", exe: "", sizeKb: 0, date: "20250101", kind: "microsoft", note: "Microsoft programı: bazı Windows özellikleri buna bağlı olabilir; ne olduğunu biliyorsan kaldır.", folder: "C:\\Users\\ali\\AppData\\Local\\Microsoft\\Teams", scope: "user", arch: "", installer: "Squirrel" },
 ];
 const karaokeReady = new Set<string>();
 const karaokeOnline = new Map<string, { file: string; title: string; url: string; offset: number; score: number }>();
@@ -783,7 +787,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     }
     case "uninstall_list":
       await wait(400);
-      return mockPrograms;
+      return { programs: mockPrograms, hidden: 37 };
+    case "uninstall_open_folder":
+      return null;
     case "uninstall_icons": {
       await wait(300);
       const tile = (bg: string, t: string) =>

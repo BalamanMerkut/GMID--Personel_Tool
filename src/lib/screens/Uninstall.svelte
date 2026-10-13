@@ -4,13 +4,37 @@
   import { api, formatSize } from "../api";
   import Icon from "../Icon.svelte";
   import { notify } from "../toast.svelte";
-  import type { CleanResult, InstalledProgram, Leftover, LeftoverScan } from "../types";
+  import type { CleanResult, InstalledProgram, Leftover, LeftoverScan, ProgramKind } from "../types";
 
   let programs = $state<InstalledProgram[]>([]);
   let loading = $state(true);
   let search = $state("");
   let sort = $state<"name" | "size" | "date">("name");
   let showRules = $state(false);
+  /** Listede gösterilmeyen sistem bileşeni / güncelleme sayısı. */
+  let hidden = $state(0);
+  let kindF = $state<ProgramKind | "all">("all");
+  let driveF = $state("all");
+  /** Ayrıntısı açık program. */
+  let openId = $state<string | null>(null);
+
+  const KINDS: [ProgramKind | "all", string][] = [
+    ["all", "Tümü"],
+    ["app", "Uygulamalar"],
+    ["game", "Oyunlar"],
+    ["driver", "Sürücü & donanım"],
+    ["runtime", "Çalışma ortamları"],
+    ["microsoft", "Microsoft"],
+  ];
+  const KIND_LABEL: Record<ProgramKind, string> = {
+    app: "Uygulama",
+    game: "Oyun",
+    driver: "Sürücü / donanım",
+    runtime: "Çalışma ortamı",
+    microsoft: "Microsoft",
+  };
+  /** "C:" ya da "" (konum bilinmiyor). */
+  const driveOf = (p: InstalledProgram) => (/^[a-z]:/i.test(p.folder) ? p.folder.slice(0, 2).toUpperCase() : "");
 
   type Step = "confirm" | "running" | "stuck" | "scanning" | "results" | "cleaning" | "done";
   let target = $state<InstalledProgram | null>(null);
@@ -26,16 +50,34 @@
 
   async function load() {
     loading = true;
-    programs = await api.uninstall.list().catch(() => []);
+    const l = await api.uninstall.list().catch(() => ({ programs: [], hidden: 0 }));
+    programs = l.programs;
+    hidden = l.hidden;
     loading = false;
     icons = await api.uninstall.icons().catch(() => icons);
   }
   onMount(() => void load());
   onDestroy(() => clearInterval(poll));
 
+  /** Tür ve disk sayıları (süzgeç düğmelerinde). */
+  const counts = $derived.by(() => {
+    const c: Record<string, number> = { all: programs.length };
+    for (const p of programs) c[p.kind] = (c[p.kind] ?? 0) + 1;
+    return c;
+  });
+  const drives = $derived.by(() => {
+    const m = new Map<string, number>();
+    for (const p of programs) m.set(driveOf(p), (m.get(driveOf(p)) ?? 0) + 1);
+    return [...m].sort(([a], [b]) => (a || "~").localeCompare(b || "~"));
+  });
   const shown = $derived.by(() => {
     const q = search.trim().toLocaleLowerCase("tr-TR");
-    const l = programs.filter((p) => !q || `${p.name} ${p.publisher}`.toLocaleLowerCase("tr-TR").includes(q));
+    const l = programs.filter(
+      (p) =>
+        (kindF === "all" || p.kind === kindF) &&
+        (driveF === "all" || driveOf(p) === driveF) &&
+        (!q || `${p.name} ${p.publisher} ${p.folder}`.toLocaleLowerCase("tr-TR").includes(q)),
+    );
     if (sort === "size") return [...l].sort((a, b) => b.sizeKb - a.sizeKb);
     if (sort === "date") return [...l].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     return l;
@@ -164,28 +206,85 @@
         <option value="size">Boyuta göre</option>
         <option value="date">Kurulma tarihine göre</option>
       </select>
+      {#if drives.length > 1}
+        <select bind:value={driveF} aria-label="Disk">
+          <option value="all">Tüm diskler</option>
+          {#each drives as [d, n] (d)}<option value={d}>{d ? `${d} diski` : "Konumu bilinmeyen"} ({n})</option>{/each}
+        </select>
+      {/if}
       <span class="sub small tnum">{shown.length} program</span>
       <button class="btn ghost sm" onclick={load} disabled={loading}><Icon name="refresh" size={15} />Yenile</button>
     </div>
+    {#if !loading && programs.length}
+      <div class="seg" role="group" aria-label="Tür">
+        {#each KINDS as [k, label] (k)}
+          {#if k === "all" || counts[k]}
+            <button aria-pressed={kindF === k} onclick={() => (kindF = k)}>{label} <span class="n">{counts[k] ?? 0}</span></button>
+          {/if}
+        {/each}
+      </div>
+    {/if}
     {#if loading}
       <p class="sub">Kurulu programlar okunuyor…</p>
     {:else}
       <ul class="plist">
         {#each shown as p (p.id)}
-          <li>
-            {@render picon(p, 32)}
-            <div class="pt">
-              <b title={p.name}>{p.name}</b>
-              <span class="sub small">{[p.publisher, p.version].filter(Boolean).join(" · ")}</span>
+          {@const isOpen = openId === p.id}
+          <li class:open={isOpen}>
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div class="prow" onclick={(e) => !(e.target as HTMLElement).closest("button") && (openId = isOpen ? null : p.id)} title="Ayrıntılar">
+              {@render picon(p, 32)}
+              <div class="pt">
+                <b title={p.name}>{p.name}</b>
+                <span class="sub small meta">
+                  {#if p.kind !== "app"}<span class="tag {p.kind}">{KIND_LABEL[p.kind]}</span>{/if}
+                  {#if driveOf(p)}<span class="tag drv">{driveOf(p)}</span>{/if}
+                  <span class="ell">{[p.publisher, p.version].filter(Boolean).join(" · ")}</span>
+                </span>
+              </div>
+              <span class="sub small tnum sz">{p.sizeKb ? formatSize(p.sizeKb * 1024) : ""}</span>
+              <span class="sub small tnum dt">{fmtDate(p.date)}</span>
+              <button class="btn ghost sm rm" onclick={() => open(p)}><Icon name="trash" size={15} />Kaldır</button>
             </div>
-            <span class="sub small tnum sz">{p.sizeKb ? formatSize(p.sizeKb * 1024) : ""}</span>
-            <span class="sub small tnum dt">{fmtDate(p.date)}</span>
-            <button class="btn ghost sm rm" onclick={() => open(p)}><Icon name="trash" size={15} />Kaldır</button>
+            {#if isOpen}
+              <dl class="pdet">
+                <dt>Konum</dt>
+                <dd>
+                  {#if p.folder}
+                    <span class="ip">{p.folder}</span>
+                    <button class="link" onclick={() => api.uninstall.openFolder(p.id).catch((e) => notify(String(e), "info"))}><Icon name="folder" size={14} />Klasörü aç</button>
+                  {:else}
+                    <span class="sub">Bilinmiyor (program kayıtta yazmamış)</span>
+                  {/if}
+                </dd>
+                <dt>Tür</dt>
+                <dd>
+                  <span>{KIND_LABEL[p.kind]}</span>
+                  {#if p.note}<span class="note"><Icon name="info" size={14} />{p.note}</span>{/if}
+                </dd>
+                <dt>Kurulum</dt>
+                <dd>{[p.installer, p.scope === "user" ? "Yalnız bu kullanıcı" : "Tüm kullanıcılar", p.arch ? `${p.arch}-bit` : ""].filter(Boolean).join(" · ")}</dd>
+                {#if p.sizeKb || p.date}
+                  <dt>Boyut · tarih</dt>
+                  <dd>{[p.sizeKb ? formatSize(p.sizeKb * 1024) : "", fmtDate(p.date)].filter(Boolean).join(" · ")}</dd>
+                {/if}
+                <dt>Kaldırma komutu</dt>
+                <dd><span class="ip">{p.uninstall}</span></dd>
+                <dt>Kayıt</dt>
+                <dd><span class="ip">{p.id}</span></dd>
+              </dl>
+            {/if}
           </li>
         {:else}
           <p class="sub">Program bulunamadı.</p>
         {/each}
       </ul>
+      {#if hidden}
+        <p class="sub small hid">
+          <Icon name="shield" size={14} />{hidden} sistem bileşeni ve güncelleme listede yok: bunlar Windows'un ya da başka programların parçası;
+          ait oldukları programla birlikte kaldırılırlar, tek başına kaldırılmaları Windows'u bozabilir. Artık taramasında onların klasörlerine de dokunulmaz.
+        </p>
+      {/if}
     {/if}
   </section>
 </div>
@@ -208,6 +307,7 @@
           Programın kendi kaldırıcısı açılacak; adımları orada tamamla (Windows izin isteyebilir). Bitince GMID geride
           kalanları tarar ve sana gösterir; sen onaylamadan hiçbir şey silinmez.
         </p>
+        {#if target.note}<p class="note big"><Icon name="info" size={16} />{target.note}</p>{/if}
         <div class="row">
           <button class="btn danger" onclick={start}><Icon name="trash" size={16} />Kaldırıcıyı aç</button>
           <button class="btn ghost" onclick={close}>Vazgeç</button>
@@ -297,16 +397,34 @@
   .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .search { flex: 1; min-width: 200px; background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; color: var(--text); }
   .plist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-  .plist li { display: grid; grid-template-columns: 32px minmax(0, 1fr) 90px 90px auto; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; }
-  .plist li:hover { background: rgba(255, 255, 255, 0.04); }
+  .plist li { border-radius: 10px; }
+  .plist li:hover, .plist li.open { background: rgba(255, 255, 255, 0.04); }
+  .prow { display: grid; grid-template-columns: 32px minmax(0, 1fr) 90px 90px auto; align-items: center; gap: 12px; padding: 8px 10px; cursor: pointer; }
+  .meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .tag { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); }
+  .tag.game { color: #8fe0c8; border-color: rgba(143, 224, 200, 0.4); background: rgba(143, 224, 200, 0.08); }
+  .tag.driver { color: #9cc4ff; border-color: rgba(156, 196, 255, 0.4); background: rgba(156, 196, 255, 0.08); }
+  .tag.runtime { color: var(--gold); border-color: rgba(227, 194, 112, 0.45); background: rgba(227, 194, 112, 0.1); }
+  .tag.microsoft { color: #c9cdd2; background: rgba(255, 255, 255, 0.05); }
+  .tag.drv { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+  .pdet { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 14px; margin: 0; padding: 4px 14px 14px 54px; font-size: 13px; }
+  .pdet dt { color: var(--dim); }
+  .pdet dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+  .note { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--gold); font-size: 12.5px; line-height: 1.45; }
+  .note.big { font-size: 13.5px; padding: 10px 12px; border-radius: 10px; background: rgba(227, 194, 112, 0.08); border: 1px solid rgba(227, 194, 112, 0.3); }
+  .note :global(svg) { flex: none; margin-top: 2px; }
+  .hid { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.025); line-height: 1.5; }
+  .hid :global(svg) { flex: none; margin-top: 3px; }
+  .seg .n { color: var(--dim); margin-left: 3px; font-variant-numeric: tabular-nums; }
   .picon { flex: none; display: block; object-fit: contain; image-rendering: auto; }
   .picon.ph { display: grid; place-items: center; border-radius: 8px; background: rgba(255, 255, 255, 0.06); color: var(--muted); font-weight: 700; }
   .pt { display: flex; flex-direction: column; min-width: 0; }
   .pt b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pt .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pt .sub { overflow: hidden; white-space: nowrap; }
   .sz, .dt { text-align: right; }
   .rm { opacity: 0.55; transition: opacity 0.12s; }
-  .plist li:hover .rm, .rm:focus-visible { opacity: 1; }
+  .plist li:hover .rm, .plist li.open .rm, .rm:focus-visible { opacity: 1; }
   .back { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, 0.55); }
   .dlg { width: min(760px, 100%); max-height: calc(100vh - 40px); overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 18px; border: 1px solid var(--line-2); background: var(--coal-2); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6); }
   .dlg h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-family: var(--f-display); }
@@ -332,7 +450,8 @@
   .skipped { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   .skipped li { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.025); }
   @media (max-width: 760px) {
-    .plist li { grid-template-columns: 32px minmax(0, 1fr) auto; }
+    .prow { grid-template-columns: 32px minmax(0, 1fr) auto; }
+    .pdet { grid-template-columns: 1fr; padding-left: 14px; }
     .sz, .dt { display: none; }
   }
 </style>
