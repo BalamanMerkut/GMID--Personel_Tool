@@ -114,6 +114,9 @@ pub fn run() {
             // Discord'a hazırlanan kopyalar önizlenebilsin.
             app.asset_protocol_scope()
                 .allow_directory(dir.folder(Some("Discord'a Hazır")), false)?;
+            // Karaoke: ayrılmış müzik/vokal ve kayıtlar çalınabilsin.
+            app.asset_protocol_scope()
+                .allow_directory(dir.folder(Some("Karaoke")), true)?;
 
             // Mikrofon kilidi açılışta da etkin olsun.
             let mic_lock: Option<f32> = db.setting_json("audio.micLock");

@@ -120,7 +120,7 @@
   function toggle() {
     if (!music) return;
     if (music.paused) {
-      void music.play().catch(() => {});
+      void music.play().catch((e) => (error = `Çalınamadı: ${e}`));
       void vocals?.play().catch(() => {});
     } else {
       music.pause();
@@ -341,7 +341,7 @@
       </div>
     </div>
   {:else}
-    <audio bind:this={music} src={src(status.music)} preload="auto" onloadedmetadata={onMeta} onplay={() => (playing = true)} onpause={() => (playing = false)} onended={() => (recording ? stopRec() : (playing = false))}></audio>
+    <audio bind:this={music} src={src(status.music)} preload="auto" onloadedmetadata={onMeta} onplay={() => (playing = true)} onpause={() => (playing = false)} onended={() => (recording ? stopRec() : (playing = false))} onerror={() => (error = "Müzik dosyası açılamadı. Karaoke klasörü silinmiş ya da taşınmış olabilir; oynatıcıya dönüp yeniden dene.")}></audio>
     <audio bind:this={vocals} src={src(status.vocals)} preload="auto"></audio>
 
     <section class="lyrics" aria-live="polite">

@@ -653,7 +653,7 @@
           <ol class="items">
             {#each items as it, i (it.id)}
               <li class:out={mode === "elim" && out.includes(it.id)}>
-                <span class="num tnum">{i + 1}</span>
+                <span class="ino tnum">{i + 1}</span>
                 <span class="sw" style:background={sliceColor(i, items.length)}></span>
                 <span class="nm">{it.name}</span>
                 {#if showLevels}
@@ -980,7 +980,7 @@
   .items li:hover { background: rgba(255, 255, 255, 0.04); }
   .items li.out { opacity: 0.45; }
   .items li.out .nm { text-decoration: line-through; }
-  .num { width: 18px; text-align: right; font-size: 11px; color: var(--dim); flex: none; }
+  .ino { width: 18px; text-align: right; font-size: 11px; color: var(--dim); flex: none; }
   .sw { width: 9px; height: 9px; border-radius: 50%; flex: none; }
   .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .x { background: none; border: 0; color: var(--dim); padding: 3px; border-radius: 6px; display: grid; place-items: center; }

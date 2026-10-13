@@ -23,6 +23,9 @@
       <span class="cell" aria-hidden="true">
         {#key ch}<span class="d" in:roll={{ from: dir }} out:roll={{ from: -dir }}>{ch}</span>{/key}
       </span>
+    {:else if ch >= "0" && ch <= "9"}
+      <!-- Hızlı değişen rakamlar (salise) kaymaz; sabit genişlikte durur, sayı titremez. -->
+      <span class="fx" aria-hidden="true">{ch}</span>
     {:else}
       <span aria-hidden="true">{ch}</span>
     {/if}
@@ -37,4 +40,5 @@
     mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
   }
   .d { grid-area: 1 / 1; }
+  .fx { display: inline-block; font-variant-numeric: tabular-nums; }
 </style>
