@@ -935,6 +935,19 @@ export interface NetReport {
   verdict: { level: "good" | "warn" | "bad"; title: string; detail: string };
 }
 
+/** Ekran kartı sürücüsü: kurulu ve (NVIDIA'da) en yeni sürüm. */
+export interface DriverStatus {
+  vendor: "nvidia" | "amd" | "intel" | "";
+  gpu: string;
+  installed: string;
+  latest: string | null;
+  released: string | null;
+  newer: boolean;
+  url: string;
+  checkedAt: number;
+  error: string | null;
+}
+
 /** Sistem özellikleri (Windows'un kendi kayıtlarından; boyutlar bayt). */
 export interface Specs {
   os: { name: string; version: string; build: string; computer: string; maker: string; model: string; uptimeMin: number };

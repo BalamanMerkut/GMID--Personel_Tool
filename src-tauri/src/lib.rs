@@ -8,6 +8,7 @@ mod db;
 mod deals;
 mod dictation;
 mod downloader;
+mod drivers;
 mod fps;
 mod gamemode;
 mod games;
@@ -131,6 +132,7 @@ pub fn run() {
             app.manage(power::Power::default());
             app.manage(sysinfo::SysInfo::default());
             app.manage(nettest::NetTest::default());
+            app.manage(drivers::Drivers::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -160,6 +162,7 @@ pub fn run() {
             titles::fetch_meta(handle);
             updater::start(handle);
             deals::start(handle);
+            drivers::start(handle);
             servers::watch::start(handle);
             borderless::start(handle);
             // Önceki oturumdan sırada kalanlar varsa devam et. Eklenti kuruluysa dosyalarını
@@ -340,6 +343,7 @@ pub fn run() {
             commands::tools::power_now,
             commands::tools::power_dismiss,
             commands::tools::net_test,
+            commands::tools::driver_status,
             commands::tools::system_info,
             commands::tools::system_info_text,
             commands::games::borderless_list,

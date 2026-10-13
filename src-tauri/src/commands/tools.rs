@@ -331,6 +331,20 @@ pub async fn net_test(app: AppHandle, quick: bool) -> CmdResult<crate::nettest::
     .map_err(|e| e.to_string())
 }
 
+/// Ekran kartı sürücüsü: kurulu ve (NVIDIA'da) en yeni sürüm. `refresh` ya da ilk çağrıda internetten sorar.
+#[tauri::command]
+pub async fn driver_status(app: AppHandle, refresh: bool) -> CmdResult<crate::drivers::Status> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let d = app.state::<crate::drivers::Drivers>();
+        match d.last() {
+            Some(s) if !refresh => s,
+            _ => d.check(&app),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Sistem özellikleri (önbellekten; `refresh` ile yeniden okur).
 #[tauri::command]
 pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<crate::sysinfo::Specs> {

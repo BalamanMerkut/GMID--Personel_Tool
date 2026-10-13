@@ -112,6 +112,7 @@
   let reminderVolume = $state(getJson("reminders.volume", 40));
   let reminderInGame = $state(getJson("reminders.inGame", true));
   let videosNotify = $state(getJson("videos.notify", true));
+  let driversNotify = $state(getJson("drivers.notify", true));
   let gamesTrack = $state(getJson("games.track", true));
   let gamesAsk = $state(getJson("games.ask", true));
 
@@ -288,6 +289,16 @@
             <span class="sub small">Windows bildirimiyle videonun adı.</span>
           </div>
           <Switch label="İndirme bildirimi" checked={videosNotify} onchange={(v) => toggle("videos.notify", v, (x) => (videosNotify = x))} />
+        </div>
+      </section>
+      <section class="panel">
+        <h3 class="h2"><Icon name="gpu" />Ekran kartı sürücüsü</h3>
+        <div class="line">
+          <div>
+            <b>Yeni NVIDIA sürücüsü çıkınca bildir</b>
+            <span class="sub small">Günde iki kez NVIDIA'nın sitesine bakılır; her yeni sürüm için bir kez. İndirme sayfası Sistem özelliklerinde.</span>
+          </div>
+          <Switch label="Sürücü bildirimi" checked={driversNotify} onchange={(v) => toggle("drivers.notify", v, (x) => (driversNotify = x))} />
         </div>
       </section>
       <p class="sub small">

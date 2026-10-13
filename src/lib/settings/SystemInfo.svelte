@@ -6,7 +6,7 @@
   import { api } from "../api";
   import Icon from "../Icon.svelte";
   import { notify } from "../toast.svelte";
-  import type { Specs } from "../types";
+  import type { DriverStatus, Specs } from "../types";
 
   let specs = $state<Specs | null>(null);
   let busy = $state(false);
@@ -24,7 +24,18 @@
     }
   }
 
-  onMount(() => void load());
+  let driver = $state<DriverStatus | null>(null);
+  let driverBusy = $state(false);
+  async function loadDriver(refresh = false) {
+    driverBusy = true;
+    driver = await api.system.driver(refresh).catch(() => driver);
+    driverBusy = false;
+  }
+
+  onMount(() => {
+    void load();
+    void loadDriver();
+  });
 
   async function copy() {
     try {
@@ -147,12 +158,26 @@
         {#if gpu}
           <span class="meta tnum">
             {#if gpu.vram}<span>{mem(gpu.vram)} VRAM</span>{/if}
-            {#if gpu.driver}<span>sürücü {gpu.driver}</span>{/if}
+            {#if gpu.driver}<span>sürücü {driver?.vendor === "nvidia" && driver.installed ? driver.installed : gpu.driver}</span>{/if}
           </span>
         {/if}
         {#each specs.gpu.slice(1) as g (g.name)}
           <span class="extra">+ {g.name}{g.vram ? ` · ${mem(g.vram)}` : ""}</span>
         {/each}
+        {#if driver?.newer && driver.latest}
+          <button class="drv new" onclick={() => api.openUrl(driver!.url)} title="NVIDIA'nın sürücü sayfası açılır">
+            <Icon name="download" size={14} />Yeni sürücü {driver.latest} · İndir
+          </button>
+        {:else if driver?.latest}
+          <span class="drv ok"><Icon name="check" size={14} />Sürücü güncel ({driver.installed})</span>
+        {:else if driver?.url}
+          <button class="drv" onclick={() => api.openUrl(driver!.url)}>
+            {driver.vendor === "amd" ? "AMD" : driver.vendor === "intel" ? "Intel" : "NVIDIA"} sürücü sayfası
+          </button>
+        {/if}
+        {#if driver?.error && driver.vendor === "nvidia"}
+          <button class="drv" disabled={driverBusy} onclick={() => loadDriver(true)} title={driver.error}>{driverBusy ? "Bakılıyor…" : "Yeni sürücüye bak"}</button>
+        {/if}
       </div>
       <div class="tile">
         <span class="label"><Icon name="ram" size={15} />Bellek</span>
@@ -315,6 +340,14 @@
   .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--muted); }
   .meta span:not(:last-child)::after { content: "·"; margin-left: 10px; color: var(--dim); }
   .extra { font-size: 12px; color: var(--dim); overflow-wrap: anywhere; }
+  .drv {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--line-2);
+  }
+  button.drv:hover { color: var(--text); border-color: var(--gold-dim); }
+  .drv.ok { color: var(--good); border-color: rgba(92, 192, 138, 0.4); }
+  .drv.new { color: #1b1608; background: var(--gold); border-color: var(--gold); }
+  .drv.new:hover { background: var(--gold-glow); color: #1b1608; }
 
   /* Kartların boyu farklı: sütunlara akıt, boşluk kalmasın. */
   .grid { columns: 340px; column-gap: 12px; margin-top: 12px; }

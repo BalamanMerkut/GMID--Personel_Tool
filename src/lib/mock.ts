@@ -573,6 +573,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         ],
         net: [{ name: "Ethernet", desc: "Realtek Gaming 2.5GbE Family Controller", speed: "1 Gbps" }],
       };
+    case "driver_status":
+      await wait(500);
+      return { vendor: "nvidia", gpu: "NVIDIA GeForce RTX 4070", installed: "566.14", latest: "572.83", released: "Tue Mar 18, 2025", newer: true, url: "https://www.nvidia.com/tr-tr/geforce/drivers/", checkedAt: Date.now(), error: null };
     case "system_info_text":
       return "🖥️ Sistem özellikleri (GMID Tool)\n…";
     case "net_test": {
