@@ -16,7 +16,7 @@ pub fn karaoke_status(k: State<'_, Karaoke>, dir: State<'_, DataDir>, id: String
 
 /// Şarkıyı hazırlar (ilk seferde indirir); ilerleme `karaoke-progress` olayıyla.
 #[tauri::command]
-pub async fn karaoke_prepare(app: AppHandle, id: String) -> CmdResult<Status> {
+pub async fn karaoke_prepare(app: AppHandle, id: String, cpu: Option<bool>) -> CmdResult<Status> {
     tauri::async_runtime::spawn_blocking(move || {
         let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
         let d = crate::downloader::get(&db, &id)
@@ -26,8 +26,13 @@ pub async fn karaoke_prepare(app: AppHandle, id: String) -> CmdResult<Status> {
             .file_path
             .filter(|f| Path::new(f).is_file())
             .ok_or("Dosya bulunamadı; taşınmış ya da silinmiş olabilir.")?;
-        app.state::<Karaoke>()
-            .prepare(&app, dir.root(), &id, Path::new(&file))
+        app.state::<Karaoke>().prepare(
+            &app,
+            dir.root(),
+            &id,
+            Path::new(&file),
+            cpu.unwrap_or(false),
+        )
     })
     .await
     .map_err(|e| e.to_string())?

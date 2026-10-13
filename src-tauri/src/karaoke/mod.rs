@@ -33,6 +33,9 @@ const MODEL_FILE: &str = "htdemucs.onnx";
 /// Hazır şarkının dosyaları.
 const MUSIC: &str = "muzik.m4a";
 const VOCALS: &str = "vokal.m4a";
+/// Ayırma yöntemi değişince eski (bozuk olabilecek) sonuçlar yeniden hazırlanır.
+const VERSION: &str = "2";
+const VERSION_FILE: &str = "surum.txt";
 
 #[derive(Default)]
 pub struct Karaoke {
@@ -97,7 +100,13 @@ impl Karaoke {
             let p = d.join(n);
             p.is_file().then(|| p.to_string_lossy().into_owned())
         };
-        let (music, vocals) = (file(MUSIC), file(VOCALS));
+        let current =
+            std::fs::read_to_string(d.join(VERSION_FILE)).is_ok_and(|v| v.trim() == VERSION);
+        let (music, vocals) = if current {
+            (file(MUSIC), file(VOCALS))
+        } else {
+            (None, None)
+        };
         let mut mb = 0;
         if !runtime_ready(root) {
             mb += 25;
@@ -118,13 +127,14 @@ impl Karaoke {
         self.cancel.store(true, Ordering::SeqCst);
     }
 
-    /// Şarkıyı ayırır (gerekirse önce indirir). Bitince `status`.
+    /// Şarkıyı ayırır (gerekirse önce indirir). `cpu`: ekran kartını hiç deneme. Bitince `status`.
     pub fn prepare(
         &self,
         app: &AppHandle,
         root: &Path,
         id: &str,
         file: &Path,
+        cpu: bool,
     ) -> Result<Status, String> {
         {
             let mut busy = self.busy.lock().unwrap_or_else(|e| e.into_inner());
@@ -138,7 +148,7 @@ impl Karaoke {
             *busy = Some(id.to_string());
         }
         self.cancel.store(false, Ordering::SeqCst);
-        let r = self.run(app, root, id, file);
+        let r = self.run(app, root, id, file, cpu);
         *self.busy.lock().unwrap_or_else(|e| e.into_inner()) = None;
         if let Err(e) = &r {
             crate::log!("Karaoke hazırlanamadı: {e}");
@@ -146,7 +156,14 @@ impl Karaoke {
         r.map(|_| self.status(root, id))
     }
 
-    fn run(&self, app: &AppHandle, root: &Path, id: &str, file: &Path) -> Result<(), String> {
+    fn run(
+        &self,
+        app: &AppHandle,
+        root: &Path,
+        id: &str,
+        file: &Path,
+        cpu: bool,
+    ) -> Result<(), String> {
         let gpu = std::cell::Cell::new(false);
         let emit = |stage: &str, progress: f64| {
             let _ = app.emit(
@@ -160,6 +177,8 @@ impl Karaoke {
             );
         };
         install(root, &|stage, p| emit(stage, p))?;
+        let dir = song_dir(root, id);
+        let _ = std::fs::remove_dir_all(&dir);
 
         emit("decode", 0.0);
         let mix = decode(root, file)?;
@@ -167,8 +186,42 @@ impl Karaoke {
             return Err("Ses çok kısa.".into());
         }
 
-        emit("separate", 0.0);
-        let (mut session, on_gpu) = session(root)?;
+        // Ekran kartı (DirectML) bazı kartlarda/sürücülerde yanlış sonuç verebiliyor: önce şarkının ortasından
+        // kısa bir parça hem ekran kartıyla hem işlemciyle ayrılır; sonuçlar tutmazsa işlemciyle devam edilir.
+        let mut chosen = None;
+        if cfg!(windows) && !cpu && std::env::var_os("GMID_KARAOKE_CPU").is_none() {
+            match session(root, true) {
+                Ok(mut g) => {
+                    emit("check", 0.0);
+                    let probe = excerpt(&mix);
+                    let on_gpu = demucs::separate(&mut g, &probe, &[demucs::VOCALS], |_, _| true);
+                    emit("check", 0.5);
+                    let mut c = session(root, false)?;
+                    let on_cpu = demucs::separate(&mut c, &probe, &[demucs::VOCALS], |_, _| true)?;
+                    let verdict = match on_gpu {
+                        Ok(v) => agreement(&on_cpu[0], &v[0]),
+                        Err(e) => {
+                            crate::log!("Karaoke: ekran kartında hata: {e}");
+                            -1.0
+                        }
+                    };
+                    crate::log!("Karaoke: ekran kartı ↔ işlemci uyumu {verdict:.1} dB");
+                    chosen = Some(if verdict >= 20.0 {
+                        drop(c);
+                        (g, true)
+                    } else {
+                        crate::log!("Karaoke: ekran kartının sonucu tutmadı, işlemciyle ayrılıyor");
+                        drop(g);
+                        (c, false)
+                    });
+                }
+                Err(e) => crate::log!("Karaoke: ekran kartı kullanılamadı, işlemciyle: {e}"),
+            }
+        }
+        let (mut session, on_gpu) = match chosen {
+            Some(s) => s,
+            None => (session(root, false)?, false),
+        };
         gpu.set(on_gpu);
         emit("separate", 0.0);
         let vocals = demucs::separate(&mut session, &mix, &[demucs::VOCALS], |done, total| {
@@ -177,18 +230,62 @@ impl Karaoke {
         })?
         .remove(0);
         drop(session);
+        sane(&mix, &vocals)?;
 
         emit("save", 0.0);
         // Müzik = karışım − vokal (Demucs'un iki kaynaklı çıktısıyla aynı; kalan her şey müzikte kalır).
         let music: demucs::Stereo =
             [0, 1].map(|c| mix[c].iter().zip(&vocals[c]).map(|(m, v)| m - v).collect());
-        let dir = song_dir(root, id);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         encode(root, &vocals, &dir.join(VOCALS))?;
         encode(root, &music, &dir.join(MUSIC))?;
+        std::fs::write(dir.join(VERSION_FILE), VERSION).map_err(|e| e.to_string())?;
+        crate::log!(
+            "Karaoke hazır ({})",
+            if on_gpu { "ekran kartı" } else { "işlemci" }
+        );
         emit("save", 1.0);
         Ok(())
     }
+}
+
+/// Doğrulama için şarkının ortasından tek parçalık kesit.
+fn excerpt(mix: &demucs::Stereo) -> demucs::Stereo {
+    let n = mix[0].len();
+    let len = (demucs::SEGMENT * 3 / 4).min(n);
+    let start = (n - len) / 2;
+    [0, 1].map(|c| mix[c][start..start + len].to_vec())
+}
+
+/// İki ayırma sonucunun birbirine yakınlığı (dB; yüksek = aynı). Ses yoksa (sessiz kesit) tam uyum sayılır.
+fn agreement(reference: &demucs::Stereo, other: &demucs::Stereo) -> f64 {
+    let (mut sig, mut err) = (0f64, 0f64);
+    for c in 0..2 {
+        for (a, b) in reference[c].iter().zip(&other[c]) {
+            if !b.is_finite() {
+                return -1.0;
+            }
+            sig += (*a as f64).powi(2);
+            err += ((a - b) as f64).powi(2);
+        }
+    }
+    if sig < 1e-6 {
+        return if err < 1e-6 { 99.0 } else { -1.0 };
+    }
+    10.0 * (sig / err.max(1e-12)).log10()
+}
+
+/// Bozuk sonucu (NaN, karışımdan çok güçlü "vokal") kaydetmeden durdurur: kulak sağlığı için.
+fn sane(mix: &demucs::Stereo, vocals: &demucs::Stereo) -> Result<(), String> {
+    let energy = |s: &demucs::Stereo| s.iter().flatten().map(|x| (*x as f64).powi(2)).sum::<f64>();
+    let bad = vocals.iter().flatten().any(|x| !x.is_finite());
+    if bad || energy(vocals) > 1.5 * energy(mix) + 1e-3 {
+        return Err(
+            "Ses ayırma bozuk sonuç verdi; kaydedilmedi. \"İşlemciyle hazırla\" ile yeniden dene."
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 /// ONNX Runtime ve modeli (yoksa) indirir.
@@ -258,8 +355,8 @@ fn untar_one(tgz: &Path, name: &str, dest: &Path) -> Result<(), String> {
     Err("Arşivde model yok".into())
 }
 
-/// ONNX Runtime'ı yükler (bir kez) ve oturum açar: önce ekran kartı (DirectML), olmazsa işlemci.
-fn session(root: &Path) -> Result<(ort::session::Session, bool), String> {
+/// ONNX Runtime'ı yükler (bir kez) ve oturum açar: `gpu` ise ekran kartıyla (DirectML), değilse işlemciyle.
+fn session(root: &Path, gpu: bool) -> Result<ort::session::Session, String> {
     use ort::session::Session;
     static INIT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
     let dir = tools_dir(root);
@@ -278,12 +375,9 @@ fn session(root: &Path) -> Result<(ort::session::Session, bool), String> {
     })
     .clone()?;
     let model = dir.join(MODEL_FILE);
-    let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
-    if cfg!(windows) && std::env::var_os("GMID_KARAOKE_CPU").is_none() {
+    if gpu {
         use ort::execution_providers::DirectMLExecutionProvider;
-        let gpu = Session::builder()
+        return Session::builder()
             .and_then(|b| b.with_memory_pattern(false))
             .and_then(|b| b.with_parallel_execution(false))
             .and_then(|b| {
@@ -291,17 +385,16 @@ fn session(root: &Path) -> Result<(ort::session::Session, bool), String> {
                     .build()
                     .error_on_failure()])
             })
-            .and_then(|b| b.commit_from_file(&model));
-        match gpu {
-            Ok(s) => return Ok((s, true)),
-            Err(e) => crate::log!("Karaoke: ekran kartı kullanılamadı, işlemciyle: {e}"),
-        }
+            .and_then(|b| b.commit_from_file(&model))
+            .map_err(|e| e.to_string());
     }
-    let s = Session::builder()
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    Session::builder()
         .and_then(|b| b.with_intra_threads(threads))
         .and_then(|b| b.commit_from_file(&model))
-        .map_err(|e| format!("Model açılamadı: {e}"))?;
-    Ok((s, false))
+        .map_err(|e| format!("Model açılamadı: {e}"))
 }
 
 /// Sistemdeki eski DirectML.dll yerine indirileni kullanması için önceden yüklenir.
@@ -386,9 +479,17 @@ fn encode(root: &Path, st: &demucs::Stereo, dest: &Path) -> Result<(), String> {
     {
         let mut stdin = child.stdin.take().ok_or("FFmpeg girişi yok")?;
         let mut buf = Vec::with_capacity(1 << 20);
+        // Taşan örnekler kırpılır (patlama sesi olmasın), sayı olmayanlar sessizlik.
+        let safe = |x: f32| {
+            if x.is_finite() {
+                x.clamp(-1.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         for (l, r) in st[0].iter().zip(&st[1]) {
-            buf.extend_from_slice(&l.to_le_bytes());
-            buf.extend_from_slice(&r.to_le_bytes());
+            buf.extend_from_slice(&safe(*l).to_le_bytes());
+            buf.extend_from_slice(&safe(*r).to_le_bytes());
             if buf.len() >= 1 << 20 {
                 stdin.write_all(&buf).map_err(|e| e.to_string())?;
                 buf.clear();
@@ -547,6 +648,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn agreement_and_sanity() {
+        let a: demucs::Stereo = [vec![0.5, -0.5, 0.25], vec![0.1, 0.2, -0.3]];
+        let close: demucs::Stereo = [vec![0.5, -0.49, 0.25], vec![0.1, 0.2, -0.3]];
+        let noise: demucs::Stereo = [vec![-0.4, 0.6, 0.9], vec![0.7, -0.8, 0.1]];
+        assert!(agreement(&a, &a) > 90.0);
+        assert!(agreement(&a, &close) > 30.0);
+        assert!(agreement(&a, &noise) < 5.0);
+        let nan: demucs::Stereo = [vec![f32::NAN, 0.0, 0.0], vec![0.0; 3]];
+        assert!(agreement(&a, &nan) < 0.0);
+        assert!(sane(&a, &close).is_ok());
+        let loud: demucs::Stereo = [vec![5.0, 5.0, 5.0], vec![5.0; 3]];
+        assert!(sane(&a, &loud).is_err());
+        assert!(sane(&a, &nan).is_err());
+    }
+
+    #[test]
     fn filter_is_clamped() {
         let m = Mix {
             voice: String::new(),
@@ -578,7 +695,7 @@ mod tests {
         if !dest.exists() {
             std::os::unix::fs::symlink(&model, &dest).unwrap();
         }
-        let (mut s, _) = session(&root).unwrap();
+        let mut s = session(&root, false).unwrap();
         // 10 sn: akorlar (iki yanda farklı) + ortada şarkı gibi çınlayan bir ses.
         let n = 10 * demucs::RATE;
         let mut mix: demucs::Stereo = [vec![0.0; n], vec![0.0; n]];
@@ -666,7 +783,7 @@ mod tests {
             "{}",
             mix[0].len()
         );
-        let (mut s, _) = session(&root).unwrap();
+        let mut s = session(&root, false).unwrap();
         let v = demucs::separate(&mut s, &mix, &[demucs::VOCALS], |_, _| true)
             .unwrap()
             .remove(0);
@@ -716,5 +833,59 @@ mod tests {
         untar_one(Path::new(&tgz), MODEL_FILE, &dest).unwrap();
         assert_eq!(std::fs::metadata(&dest).unwrap().len(), 174_263_526);
         let _ = std::fs::remove_file(dest);
+    }
+
+    /// Gerçeğe yakın sınama: konuşan bir ses (flite) + davul/bas/akor müziği karıştırılır; ayrılan vokal gerçek
+    /// sese, kalan müzik gerçek müziğe benzemeli. (Linux'ta ffmpeg'in flite süzgeci ve ONNX Runtime ile.)
+    #[test]
+    #[ignore]
+    fn voice_is_separated() {
+        let model = std::env::var("GMID_KARAOKE_MODEL").expect("GMID_KARAOKE_MODEL");
+        let root = std::env::temp_dir().join("gmid-karaoke-voice");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(tools_dir(&root)).unwrap();
+        std::fs::create_dir_all(tools::dir(&root).join("ffmpeg")).unwrap();
+        std::os::unix::fs::symlink("/usr/bin/ffmpeg", tools::dir(&root).join("ffmpeg/ffmpeg"))
+            .unwrap();
+        std::os::unix::fs::symlink(&model, tools_dir(&root).join(MODEL_FILE)).unwrap();
+        let ff = |args: &[&str]| {
+            let st = Command::new("ffmpeg")
+                .args(["-y", "-loglevel", "error"])
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(st.success());
+        };
+        let voice_f = root.join("ses.wav");
+        ff(&["-f", "lavfi", "-i",
+            "flite=text='Gece yine uzun yol yine sessiz, this is the night we sing together, hold on to me and never let me go, we are the champions my friend':voice=slt",
+            "-af", "aresample=44100,apad=pad_dur=1,aloop=loop=2:size=2e6,atrim=0:20,volume=1.6", "-ac", "2", voice_f.to_str().unwrap()]);
+        let music_f = root.join("muzik.wav");
+        ff(&["-f", "lavfi", "-i",
+            "aevalsrc='0.25*sin(2*PI*55*t)*(1+0.3*sin(2*PI*2*t))+0.08*sin(2*PI*220*t)+0.06*sin(2*PI*277*t)+0.05*sin(2*PI*330*t)|0.25*sin(2*PI*55*t)*(1+0.3*sin(2*PI*2*t))+0.08*sin(2*PI*262*t)+0.06*sin(2*PI*330*t)+0.05*sin(2*PI*392*t)':s=44100:d=20",
+            "-f", "lavfi", "-i", "anoisesrc=d=20:c=pink:a=0.5:r=44100",
+            "-filter_complex", "[1]volume='if(lt(mod(t,0.5),0.06),1,0)':eval=frame,highpass=f=2000[hat];[0][hat]amix=inputs=2:normalize=0,aformat=channel_layouts=stereo",
+            music_f.to_str().unwrap()]);
+        let voice = decode(&root, &voice_f).unwrap();
+        let music = decode(&root, &music_f).unwrap();
+        let n = voice[0].len().min(music[0].len());
+        let mix: demucs::Stereo =
+            [0, 1].map(|c| (0..n).map(|i| voice[c][i] + music[c][i]).collect());
+        let mut s = session(&root, false).unwrap();
+        let est = demucs::separate(&mut s, &mix, &[demucs::VOCALS], |_, _| true)
+            .unwrap()
+            .remove(0);
+        let truth_v: demucs::Stereo = [0, 1].map(|c| voice[c][..n].to_vec());
+        let truth_m: demucs::Stereo = [0, 1].map(|c| music[c][..n].to_vec());
+        let est_m: demucs::Stereo = [0, 1].map(|c| (0..n).map(|i| mix[c][i] - est[c][i]).collect());
+        let (sv, sm) = (agreement(&truth_v, &est), agreement(&truth_m, &est_m));
+        // Karşılaştırma: hiç ayırmasaydık (vokal = 0) vokal SNR'ı 0 dB olurdu.
+        eprintln!("vokal SNR {sv:.1} dB, müzik SNR {sm:.1} dB");
+        let out = root.join("tahmin-vokal.wav");
+        encode(&root, &est, &out.with_extension("m4a")).unwrap();
+        assert!(
+            sv > 4.0 && sm > 4.0,
+            "ayırma zayıf: vokal {sv:.1} dB, müzik {sm:.1} dB"
+        );
     }
 }

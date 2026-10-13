@@ -1002,7 +1002,7 @@ export interface KaraokeStatus {
 
 export interface KaraokeProgress {
   id: string;
-  stage: "runtime" | "model" | "decode" | "separate" | "save";
+  stage: "runtime" | "model" | "decode" | "check" | "separate" | "save";
   progress: number;
   gpu: boolean;
 }

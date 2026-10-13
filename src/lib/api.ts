@@ -484,7 +484,8 @@ export const api = {
 
   karaoke: {
     status: (id: string) => call<KaraokeStatus>("karaoke_status", { id }),
-    prepare: (id: string) => call<KaraokeStatus>("karaoke_prepare", { id }),
+    /** `cpu`: ekran kartını kullanma. */
+    prepare: (id: string, cpu = false) => call<KaraokeStatus>("karaoke_prepare", { id, cpu }),
     cancel: () => call<void>("karaoke_cancel"),
     /** Mikrofon kaydını (base64) saklar; yolunu döner. */
     voice: (data: string, ext: string) => call<string>("karaoke_voice", { data, ext }),

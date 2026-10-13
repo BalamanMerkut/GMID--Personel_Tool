@@ -69,12 +69,16 @@
     recordings = await api.karaoke.recordings().catch(() => []);
   }
 
-  async function prepare() {
+  /** `cpu`: ekran kartını hiç deneme (sonuç bozuk duyulduysa). */
+  async function prepare(cpu = false) {
+    music?.pause();
+    vocals?.pause();
+    if (status) status = { ...status, ready: false };
     preparing = true;
     error = "";
     prog = null;
     try {
-      status = await api.karaoke.prepare(item.id);
+      status = await api.karaoke.prepare(item.id, cpu);
     } catch (e) {
       error = String(e);
     } finally {
@@ -88,6 +92,7 @@
     if (p.stage === "runtime") return `Ses ayırma programı indiriliyor… ${pct}`;
     if (p.stage === "model") return `Yapay zekâ modeli indiriliyor (bir kez)… ${pct}`;
     if (p.stage === "decode") return "Şarkı okunuyor…";
+    if (p.stage === "check") return "Ekran kartının sonucu işlemciyle karşılaştırılıyor…";
     if (p.stage === "separate") return `Ses müzikten ayrılıyor${p.gpu ? " (ekran kartıyla)" : " (işlemciyle)"}… ${pct}`;
     return "Kaydediliyor…";
   }
@@ -95,11 +100,17 @@
   // ---- çalma ----
   const src = (p: string | null | undefined) => (p ? api.fileSrc(p) : "");
   let raf = 0;
+  let lastSync = 0;
   function frame() {
     if (music) {
       time = music.currentTime;
       // İki dosya aynı anda başlar; kayarsa vokal müziğe yetişir.
-      if (vocals && !music.paused && Math.abs(vocals.currentTime - music.currentTime) > 0.08) vocals.currentTime = music.currentTime;
+      // En çok saniyede bir düzeltilir: sık sık atlatmak cızırtı yapar.
+      const now = performance.now();
+      if (vocals && !music.paused && now - lastSync > 1000 && Math.abs(vocals.currentTime - music.currentTime) > 0.12) {
+        vocals.currentTime = music.currentTime;
+        lastSync = now;
+      }
     }
     if (recording) recElapsed = (performance.now() - recStart) / 1000;
     raf = requestAnimationFrame(frame);
@@ -334,7 +345,7 @@
             <button class="btn ghost sm" onclick={() => api.karaoke.cancel()}>Durdur</button>
           </div>
         {:else}
-          <button class="btn big" onclick={prepare} disabled={!!status.busy && status.busy !== item.id}><Icon name="sparkle" size={18} />Hazırla</button>
+          <button class="btn big" onclick={() => prepare()} disabled={!!status.busy && status.busy !== item.id}><Icon name="sparkle" size={18} />Hazırla</button>
           {#if status.busy && status.busy !== item.id}<p class="sub small">Başka bir şarkı hazırlanıyor; bitince dene.</p>{/if}
         {/if}
         {#if error}<p class="err">{error}</p>{/if}
@@ -399,6 +410,9 @@
         <input type="checkbox" bind:checked={headphones} onchange={() => void setJson("karaoke.headphones", headphones)} disabled={recording} />
         Kulaklık takılı <span class="sub small">(hoparlörden çalıyorsa kapat: müziğin mikrofona girmesi engellenir)</span>
       </label>
+      <p class="redo sub small">
+        Müzik bozuk ya da cızırtılı mı? <button class="link" onclick={() => prepare(true)} disabled={recording}>İşlemciyle yeniden hazırla</button>
+      </p>
       {#if error}<p class="err">{error}</p>{/if}
     </footer>
   {/if}
@@ -495,6 +509,9 @@
   @keyframes blink { 50% { opacity: 0.2; } }
   .lvl { width: 60px; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
   .lvl i { display: block; height: 100%; background: linear-gradient(90deg, #5cc08a, #e3c270, #e05555); }
+  .redo { margin: 0; text-align: center; }
+  .link { background: none; border: 0; padding: 0; color: var(--gold); font: inherit; font-weight: 600; cursor: pointer; }
+  .link:hover { color: var(--gold-glow); }
   .hp { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 13px; color: var(--muted); }
 
   /* Sonuç */
