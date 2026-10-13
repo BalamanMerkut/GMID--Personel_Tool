@@ -19,7 +19,10 @@
   let leagues = $state<[string, string][]>([]);
   /** "all" yalnız maçlarda: bütün ligler. */
   let league = $state(getJson<string>("football.league", "all"));
-  let offset = $state(0);
+  /** Seçili hafta: bu haftadan kaç hafta sonra (geçmiş: eksi). */
+  let week = $state(0);
+  /** Hafta içinde tek bir güne süzgeç (YYYYMMDD) ya da hepsi. */
+  let dayF = $state<string | null>(null);
   let liveOnly = $state(false);
 
   let matches = $state<FootballMatch[]>([]);
@@ -35,8 +38,9 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
   let seq = 0;
 
-  const OFFSETS = [-3, -2, -1, 0, 1, 2, 3, 4];
   const WEEKDAY = new Intl.DateTimeFormat("tr-TR", { weekday: "short" });
+  const DAYHEAD = new Intl.DateTimeFormat("tr-TR", { weekday: "long", day: "numeric", month: "long" });
+  const SHORTDATE = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long" });
   const TIME = new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
   const DATE = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short", weekday: "short" });
 
@@ -47,15 +51,37 @@
     return d;
   }
   const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const sameDay = (iso: string, d: Date) => {
-    const x = new Date(iso);
-    return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate();
-  };
-  function dayLabel(off: number): [string, string] {
-    const d = dayAt(off);
-    const name = off === 0 ? "Bugün" : off === -1 ? "Dün" : off === 1 ? "Yarın" : WEEKDAY.format(d);
-    return [name, `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}`];
+  /** Seçili haftanın pazartesisi (öğlen). */
+  function monday(w: number): Date {
+    const d = dayAt(0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + w * 7);
+    return d;
   }
+  const plus = (d: Date, n: number) => {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  };
+  const localKey = (iso: string) => ymd(new Date(iso));
+  const weekTitle = $derived.by(() => {
+    const a = monday(week);
+    const b = plus(a, 6);
+    const span = a.getMonth() === b.getMonth() ? `${a.getDate()}–${SHORTDATE.format(b)}` : `${SHORTDATE.format(a)} – ${SHORTDATE.format(b)}`;
+    const name = week === 0 ? "Bu hafta" : week === -1 ? "Geçen hafta" : week === 1 ? "Gelecek hafta" : "";
+    return [name, span] as const;
+  });
+  function dayName(key: string): string {
+    const today = ymd(dayAt(0));
+    if (key === today) return "Bugün";
+    if (key === ymd(dayAt(1))) return "Yarın";
+    if (key === ymd(dayAt(-1))) return "Dün";
+    const d = new Date(+key.slice(0, 4), +key.slice(4, 6) - 1, +key.slice(6, 8), 12);
+    return DAYHEAD.format(d);
+  }
+  const chipDay = (key: string) => {
+    const d = new Date(+key.slice(0, 4), +key.slice(4, 6) - 1, +key.slice(6, 8), 12);
+    return [WEEKDAY.format(d), `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}`];
+  };
   const leagueName = (id: string) => (id === "all" ? "Tüm maçlar" : (leagues.find(([s]) => s === id)?.[1] ?? id));
 
   async function guard<T>(work: () => Promise<T>, apply: (v: T) => void, quiet = false) {
@@ -75,12 +101,13 @@
   }
 
   function loadMatches(quiet = false) {
-    const d = dayAt(offset);
-    // Yerel gün, sitenin gün sınırıyla tam örtüşmeyebilir: bir önceki gün de istenir, yerel güne göre süzülür.
+    const mon = monday(week);
+    const keys = new Set(Array.from({ length: 7 }, (_, i) => ymd(plus(mon, i))));
+    // Yerel gün, sitenin gün sınırıyla tam örtüşmeyebilir: bir gün öncesi de istenir, yerel haftaya göre süzülür.
     const want = league === "all" ? leagues.map(([s]) => s) : [league];
     return guard(
-      () => api.football.matches(want, [ymd(dayAt(offset - 1)), ymd(d)]),
-      (list) => (matches = list.filter((m) => sameDay(m.date, d))),
+      () => api.football.week(want, ymd(plus(mon, -1)), ymd(plus(mon, 6))),
+      (list) => (matches = list.filter((m) => keys.has(localKey(m.date)))),
       quiet,
     ).then(schedule);
   }
@@ -92,7 +119,7 @@
     clearTimeout(timer);
     if (tab !== "matches" || teamOpen) return;
     const live = matches.some((m) => m.state === "in");
-    const wait = live ? 30_000 : offset === 0 ? 300_000 : 0;
+    const wait = live ? 30_000 : week === 0 ? 300_000 : 0;
     if (wait) timer = setTimeout(() => void loadMatches(true), wait);
   }
 
@@ -126,8 +153,10 @@
     if (l === "all" && tab !== "matches") tab = "matches";
     reload();
   }
-  function setDay(o: number) {
-    offset = o;
+  function setWeek(w: number) {
+    week = w;
+    dayF = null;
+    liveOnly = false;
     void loadMatches();
   }
   function openTeam(lg: string, team: FootballTeam) {
@@ -144,17 +173,30 @@
     reload();
   }
 
-  const shown = $derived(liveOnly ? matches.filter((m) => m.state === "in") : matches);
+  const shown = $derived(
+    matches.filter((m) => (!liveOnly || m.state === "in") && (!dayF || localKey(m.date) === dayF)),
+  );
+  /** Haftanın maçlı günleri ve maç sayıları. */
+  const dayCounts = $derived.by(() => {
+    const c = new Map<string, number>();
+    for (const m of matches) c.set(localKey(m.date), (c.get(localKey(m.date)) ?? 0) + 1);
+    return [...c].sort(([a], [b]) => a.localeCompare(b));
+  });
   const liveCount = $derived(matches.filter((m) => m.state === "in").length);
-  const byLeague = $derived.by(() => {
+  /** Gün gün, her günde lig lig. */
+  const byDay = $derived.by(() => {
     const order = leagues.map(([s]) => s);
-    const out: [string, FootballMatch[]][] = [];
+    const days: [string, [string, FootballMatch[]][]][] = [];
     for (const m of shown) {
-      let g = out.find(([l]) => l === m.league);
-      if (!g) out.push((g = [m.league, []]));
+      const k = localKey(m.date);
+      let d = days.find(([x]) => x === k);
+      if (!d) days.push((d = [k, []]));
+      let g = d[1].find(([l]) => l === m.league);
+      if (!g) d[1].push((g = [m.league, []]));
       g[1].push(m);
     }
-    return out.sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+    for (const [, gs] of days) gs.sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+    return days.sort(([a], [b]) => a.localeCompare(b));
   });
   const legend = $derived.by(() => {
     const seen = new Map<string, string>();
@@ -296,27 +338,42 @@
 
       {#if tab === "matches"}
         <section class="panel">
-          <div class="days" role="group" aria-label="Gün">
-            {#each OFFSETS as o (o)}
-              {@const [n, d] = dayLabel(o)}
-              <button class="day" class:on={offset === o} onclick={() => setDay(o)}><b>{n}</b><span class="tnum">{d}</span></button>
-            {/each}
+          <div class="weekbar">
+            <button class="wnav" onclick={() => setWeek(week - 1)} title="Önceki hafta" aria-label="Önceki hafta"><Icon name="back" size={16} /></button>
+            <div class="wtitle">
+              <b>{weekTitle[0] || weekTitle[1]}</b>
+              {#if weekTitle[0]}<span class="sub small tnum">{weekTitle[1]}</span>{/if}
+            </div>
+            <button class="wnav" onclick={() => setWeek(week + 1)} title="Sonraki hafta" aria-label="Sonraki hafta"><span class="flip"><Icon name="back" size={16} /></span></button>
+            {#if week !== 0}<button class="btn ghost sm" onclick={() => setWeek(0)}>Bu hafta</button>{/if}
             {#if liveCount}
               <button class="live-f" class:on={liveOnly} onclick={() => (liveOnly = !liveOnly)}><span class="dot"></span>Canlı · {liveCount}</button>
             {/if}
           </div>
+          {#if dayCounts.length > 1}
+            <div class="days" role="group" aria-label="Gün">
+              <button class="day all" class:on={!dayF} onclick={() => (dayF = null)}><b>Tüm hafta</b><span class="tnum">{matches.length} maç</span></button>
+              {#each dayCounts as [k, n] (k)}
+                {@const [wd, dd] = chipDay(k)}
+                <button class="day" class:on={dayF === k} onclick={() => (dayF = dayF === k ? null : k)}><b>{wd}</b><span class="tnum">{dd} · {n}</span></button>
+              {/each}
+            </div>
+          {/if}
           {#if error}
             {@render failed("Maçlar alınamadı")}
           {:else if loading && !matches.length}
             <p class="sub">Maçlar yükleniyor…</p>
           {:else if !shown.length}
-            <p class="sub empty">{liveOnly ? "Şu an oynanan maç yok." : "Bu gün maç yok."}</p>
+            <p class="sub empty">{liveOnly ? "Şu an oynanan maç yok." : "Bu hafta maç yok."}</p>
           {:else}
-            {#each byLeague as [lg, list] (lg)}
-              <div class="lg">
-                {#if league === "all"}<button class="lgh link" onclick={() => setLeague(lg)}>{leagueName(lg)} <Icon name="next" size={12} /></button>{/if}
-                {#each list as m (m.id)}{@render matchRow(m)}{/each}
-              </div>
+            {#each byDay as [k, gs] (k)}
+              <div class="dayh" class:today={k === ymd(dayAt(0))}>{dayName(k)}</div>
+              {#each gs as [lg, list] (lg)}
+                <div class="lg">
+                  {#if league === "all"}<button class="lgh link" onclick={() => setLeague(lg)}>{leagueName(lg)} <Icon name="next" size={12} /></button>{/if}
+                  {#each list as m (m.id)}{@render matchRow(m)}{/each}
+                </div>
+              {/each}
             {/each}
           {/if}
           {#if updated}<p class="sub small upd">Son güncelleme {TIME.format(updated)}{liveCount ? " · canlı maçlar 30 sn'de bir yenilenir" : ""} · takıma tıkla: kadro ve maçları</p>{/if}
@@ -457,6 +514,14 @@
   h2 { margin: 0; font-family: var(--f-display); font-size: 22px; }
   .sm { padding: 6px 11px; font-size: 13px; }
   .seg button:disabled { opacity: 0.4; cursor: default; }
+  .weekbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .wnav { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--coal-2); color: var(--text); cursor: pointer; }
+  .flip { display: grid; transform: scaleX(-1); }
+  .wnav:hover { border-color: var(--gold); color: var(--gold-glow); }
+  .wtitle { display: flex; flex-direction: column; min-width: 150px; align-items: center; }
+  .wtitle b { font-size: 15px; }
+  .dayh { margin-top: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 14px; color: var(--text); text-transform: capitalize; }
+  .dayh.today { color: var(--gold-glow); }
   .days { display: flex; gap: 6px; flex-wrap: wrap; align-items: stretch; }
   .day { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 60px; padding: 7px 10px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--coal-2); color: var(--muted); cursor: pointer; font: inherit; }
   .day b { font-size: 13px; color: var(--text); font-weight: 600; }

@@ -81,6 +81,8 @@ export const api = {
     leagues: () => call<[string, string][]>("football_leagues"),
     /** Günler: "YYYYMMDD". */
     matches: (leagues: string[], days: string[]) => call<FootballMatch[]>("football_matches", { leagues, days }),
+    /** İki tarih (YYYYMMDD) arası, en çok 10 gün. */
+    week: (leagues: string[], from: string, to: string) => call<FootballMatch[]>("football_week", { leagues, from, to }),
     standings: (league: string) => call<FootballGroup[]>("football_standings", { league }),
     team: (league: string, id: string) => call<FootballTeamPage>("football_team", { league, id }),
     leaders: (league: string) => call<FootballLeaders>("football_leaders", { league }),

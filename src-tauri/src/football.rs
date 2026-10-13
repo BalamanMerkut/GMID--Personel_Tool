@@ -504,7 +504,7 @@ fn fetch(url: &str) -> Result<Value, String> {
     let body = r
         .body_mut()
         .with_config()
-        .limit(8 * 1024 * 1024)
+        .limit(24 * 1024 * 1024)
         .read_to_string()
         .map_err(|e| e.to_string())?;
     serde_json::from_str(&body).map_err(|e| e.to_string())
@@ -687,14 +687,43 @@ impl Football {
         })
     }
 
-    /// Gol ve asist krallığı (ilk 10). Oyuncu ve takım bilgileri ayrı bağlantılardan aynı anda alınır.
+    /// Gol ve asist krallığı (ilk 10). Önce ESPN'in krallık servisi (birkaç adres biçimi; bazı ligler sezon
+    /// yılı ya da dil istiyor); olmazsa gol krallığı sezonun maçlarındaki gollerden sayılır.
     pub fn leaders(&self, league: &str) -> Result<Leaders, String> {
         if !known(league) {
             return Err("Bilinmeyen lig".into());
         }
-        let url = format!("{CORE}/{league}/leaders");
-        let v = self.get_cached(&url, LONG)?;
-        let lists = [leader_refs(&v, "goal"), leader_refs(&v, "assist")];
+        let y = season_year();
+        let urls = [
+            format!("{CORE}/{league}/leaders?lang=en&region=us"),
+            format!("{CORE}/{league}/seasons/{y}/types/1/leaders?lang=en&region=us"),
+            format!("{CORE}/{league}/seasons/{y}/leaders?lang=en&region=us"),
+        ];
+        let mut last_err = String::new();
+        for u in &urls {
+            match self.get_cached(u, LONG) {
+                Ok(v) => {
+                    let l = self.leaders_from(&v);
+                    if !l.goals.is_empty() || !l.assists.is_empty() {
+                        return Ok(l);
+                    }
+                }
+                Err(e) => last_err = e,
+            }
+        }
+        // Yedek: sezonun bütün maçlarındaki goller (asist bilgisi bu yoldan gelmez).
+        let today = chrono::Utc::now().format("%Y%m%d").to_string();
+        match self.range(league, &format!("{y}0701"), &today, LONG) {
+            Ok(list) => Ok(Leaders {
+                goals: scorers(&list, 15),
+                assists: Vec::new(),
+            }),
+            Err(e) => Err(if last_err.is_empty() { e } else { last_err }),
+        }
+    }
+
+    fn leaders_from(&self, v: &Value) -> Leaders {
+        let lists = [leader_refs(v, "goal"), leader_refs(v, "assist")];
         let refs: Vec<String> = lists
             .iter()
             .flatten()
@@ -731,11 +760,141 @@ impl Football {
                 .filter(|l| !l.name.is_empty())
                 .collect()
         };
-        Ok(Leaders {
+        Leaders {
             goals: build(&lists[0]),
             assists: build(&lists[1]),
-        })
+        }
     }
+
+    /// Ligin iki tarih (YYYYMMDD, dahil) arasındaki maçları: tek istekle aralık; site aralığı kabul etmezse ve
+    /// aralık kısaysa gün gün.
+    fn range(
+        &self,
+        league: &str,
+        from: &str,
+        to: &str,
+        ttl: Duration,
+    ) -> Result<Vec<Match>, String> {
+        let url = format!("{SITE}/{league}/scoreboard?dates={from}-{to}&limit=1000");
+        match self.get_cached(&url, ttl) {
+            Ok(v) => Ok(parse_scoreboard(league, &v)),
+            Err(e) => {
+                let days = days_between(from, to);
+                if days.is_empty() || days.len() > 10 {
+                    return Err(e);
+                }
+                self.matches(&[league.to_string()], &days)
+            }
+        }
+    }
+
+    /// Hafta görünümü: seçilen ligler, iki tarih arası (en çok 10 gün). Ligler aynı anda istenir.
+    pub fn week(&self, leagues: &[String], from: &str, to: &str) -> Result<Vec<Match>, String> {
+        let days = days_between(from, to);
+        if days.is_empty() || days.len() > 10 {
+            return Err("Geçersiz tarih aralığı".into());
+        }
+        let ttl = if days.iter().any(|d| near_today(d)) {
+            SHORT
+        } else {
+            LONG
+        };
+        let list: Vec<&String> = leagues.iter().filter(|l| known(l)).collect();
+        let results: Vec<Result<Vec<Match>, String>> = std::thread::scope(|s| {
+            let hs: Vec<_> = list
+                .iter()
+                .map(|l| s.spawn(move || self.range(l, from, to, ttl)))
+                .collect();
+            hs.into_iter()
+                .map(|h| {
+                    h.join()
+                        .unwrap_or_else(|_| Err("İstek yarıda kaldı".into()))
+                })
+                .collect()
+        });
+        let mut out: Vec<Match> = Vec::new();
+        let mut first_err = None;
+        let mut ok = list.is_empty();
+        for r in results {
+            match r {
+                Ok(ms) => {
+                    ok = true;
+                    for m in ms {
+                        if !out.iter().any(|x| x.id == m.id && x.league == m.league) {
+                            out.push(m);
+                        }
+                    }
+                }
+                Err(e) => {
+                    first_err.get_or_insert(e);
+                }
+            }
+        }
+        if !ok {
+            return Err(first_err.unwrap_or_else(|| "Maçlar alınamadı".into()));
+        }
+        out.sort_by(|a, b| a.date.cmp(&b.date).then(a.league.cmp(&b.league)));
+        Ok(out)
+    }
+}
+
+/// Sezonun başladığı yıl (Temmuz'dan önceyse bir önceki yıl): 2025-26 sezonu → 2025.
+fn season_year() -> i32 {
+    use chrono::Datelike;
+    let now = chrono::Utc::now();
+    if now.month() >= 7 {
+        now.year()
+    } else {
+        now.year() - 1
+    }
+}
+
+/// İki tarih arasındaki günler (YYYYMMDD, ikisi dahil); bozuksa boş.
+pub fn days_between(from: &str, to: &str) -> Vec<String> {
+    let p = |d: &str| chrono::NaiveDate::parse_from_str(d, "%Y%m%d").ok();
+    let (Some(a), Some(b)) = (p(from), p(to)) else {
+        return Vec::new();
+    };
+    if b < a || (b - a).num_days() > 400 {
+        return Vec::new();
+    }
+    a.iter_days()
+        .take_while(|d| *d <= b)
+        .map(|d| d.format("%Y%m%d").to_string())
+        .collect()
+}
+
+/// Maçlardaki gollerden gol krallığı (kendi kalesine sayılmaz); eşitlikte ada göre.
+pub fn scorers(matches: &[Match], top: usize) -> Vec<Leader> {
+    let mut map: HashMap<(String, String), (u32, Team)> = HashMap::new();
+    for m in matches {
+        for e in &m.events {
+            if !(e.kind == "goal" || e.kind == "pen") || e.player.is_empty() {
+                continue;
+            }
+            let t = if e.side == "home" {
+                &m.home.team
+            } else {
+                &m.away.team
+            };
+            let entry = map
+                .entry((e.player.clone(), t.id.clone()))
+                .or_insert((0, t.clone()));
+            entry.0 += 1;
+        }
+    }
+    let mut out: Vec<Leader> = map
+        .into_iter()
+        .map(|((name, _), (value, team))| Leader {
+            name,
+            photo: String::new(),
+            team,
+            value,
+        })
+        .collect();
+    out.sort_by(|a, b| b.value.cmp(&a.value).then(a.name.cmp(&b.name)));
+    out.truncate(top);
+    out
 }
 
 #[cfg(test)]
@@ -942,5 +1101,32 @@ mod tests {
         let f = Football::default();
         assert!(f.team("tur.1", "../1").is_err());
         assert!(f.leaders("x").is_err());
+    }
+
+    #[test]
+    fn days_and_scorers() {
+        assert_eq!(
+            days_between("20261012", "20261014"),
+            ["20261012", "20261013", "20261014"]
+        );
+        assert_eq!(days_between("20261229", "20270102").len(), 5);
+        assert!(days_between("20261014", "20261012").is_empty());
+        assert!(days_between("bozuk", "20261012").is_empty());
+        let m = parse_scoreboard("tur.1", &sample());
+        let s = scorers(&m, 10);
+        // Icardi (gol) ve Dzeko (penaltı) sayılır; kendi kalesine (Kim) ve kırmızı kart (Fred) sayılmaz.
+        let names: Vec<_> = s
+            .iter()
+            .map(|l| (l.name.as_str(), l.value, l.team.name.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [("Dzeko", 1, "Fenerbahce"), ("Icardi", 1, "Galatasaray")]
+        );
+        let twice = [m.clone(), m].concat();
+        assert_eq!(scorers(&twice, 1)[0].value, 2);
+        assert!(Football::default()
+            .week(&["tur.1".into()], "20261020", "20261001")
+            .is_err());
     }
 }

@@ -92,6 +92,21 @@ pub async fn football_matches(
     .map_err(|e| e.to_string())?
 }
 
+/// Futbol: hafta görünümü (iki tarih arası, en çok 10 gün).
+#[tauri::command]
+pub async fn football_week(
+    app: AppHandle,
+    leagues: Vec<String>,
+    from: String,
+    to: String,
+) -> CmdResult<Vec<crate::football::Match>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri::Manager::state::<crate::football::Football>(&app).week(&leagues, &from, &to)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Futbol: ligin puan durumu.
 #[tauri::command]
 pub async fn football_standings(

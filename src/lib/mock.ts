@@ -790,20 +790,24 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return { programs: mockPrograms, hidden: 37 };
     case "football_leagues":
       return [["tur.1", "Süper Lig"], ["uefa.champions", "Şampiyonlar Ligi"], ["eng.1", "Premier Lig"], ["esp.1", "La Liga"], ["ita.1", "Serie A"], ["ger.1", "Bundesliga"]];
+    case "football_week":
     case "football_matches": {
       await wait(350);
-      const days = a.days as string[];
+      const days = (a.days as string[] | undefined) ?? [String(a.to)];
       const d = days[days.length - 1];
-      const at = (h: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${h}Z`;
+      const at = (h: string, back = 0) => {
+        const x = new Date(Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8) - (a.days ? 0 : back)));
+        return `${x.toISOString().slice(0, 10)}T${h}Z`;
+      };
       const t = (id: string, name: string) => ({ id, name, short: name, logo: "" });
       const side = (team: ReturnType<typeof t>, score: number | null, winner = false) => ({ team, score, winner });
       const all = [
-        { id: "1", league: "tur.1", date: at("14:00"), state: "post", status: "MS", home: side(t("1", "Galatasaray"), 3, true), away: side(t("2", "Konyaspor"), 1),
+        { id: "1", league: "tur.1", date: at("14:00", 2), state: "post", status: "MS", home: side(t("1", "Galatasaray"), 3, true), away: side(t("2", "Konyaspor"), 1),
           events: [{ kind: "goal", minute: "12'", player: "M. Icardi", side: "home" }, { kind: "pen", minute: "38'", player: "V. Osimhen", side: "home" }, { kind: "goal", minute: "61'", player: "U. Nayir", side: "away" }, { kind: "goal", minute: "88'", player: "B. Yılmaz", side: "home" }] },
         { id: "2", league: "tur.1", date: at("16:00"), state: "in", status: "67'", home: side(t("3", "Fenerbahçe"), 1), away: side(t("4", "Beşiktaş"), 1),
           events: [{ kind: "goal", minute: "23'", player: "E. Dzeko", side: "home" }, { kind: "red", minute: "54'", player: "G. Paulista", side: "away" }, { kind: "goal", minute: "59'", player: "C. Immobile", side: "away" }] },
         { id: "3", league: "tur.1", date: at("17:00"), state: "pre", status: "", home: side(t("5", "Trabzonspor"), null), away: side(t("6", "Başakşehir"), null), events: [] },
-        { id: "4", league: "eng.1", date: at("11:30"), state: "post", status: "MS", home: side(t("7", "Arsenal"), 2, true), away: side(t("8", "Chelsea"), 0),
+        { id: "4", league: "eng.1", date: at("11:30", 1), state: "post", status: "MS", home: side(t("7", "Arsenal"), 2, true), away: side(t("8", "Chelsea"), 0),
           events: [{ kind: "goal", minute: "45'+2'", player: "B. Saka", side: "home" }, { kind: "own", minute: "77'", player: "L. Colwill", side: "away" }] },
         { id: "5", league: "esp.1", date: at("19:00"), state: "pre", status: "", home: side(t("9", "Real Madrid"), null), away: side(t("10", "Barcelona"), null), events: [] },
       ];

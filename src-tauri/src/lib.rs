@@ -224,6 +224,7 @@ pub fn run() {
             commands::drag_out,
             commands::football_leagues,
             commands::football_matches,
+            commands::football_week,
             commands::football_standings,
             commands::football_team,
             commands::football_leaders,
