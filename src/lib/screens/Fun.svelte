@@ -9,7 +9,8 @@
   import { api } from "../api";
   import Icon from "../Icon.svelte";
   import Wheel from "../components/Wheel.svelte";
-  import { balancedTeams, bracket, choose, pickMany, randInt, roundName, shuffle, sliceColor, splitItems, teams, WHEEL_COLORS, type Match } from "../fun";
+  import { drawCupCard } from "../cupcard";
+  import { balancedTeams, bracket, choose, pickMany, podium, randInt, roundName, shuffle, sliceColor, splitItems, teams, WHEEL_COLORS, type Match } from "../fun";
   import { getJson, setJson } from "../settings.svelte";
   import { notify } from "../toast.svelte";
 
@@ -20,12 +21,22 @@
   type Past = { at: number; text: string };
 
   const MAX = 100;
-  const MODES: { id: Mode; label: string; icon: "wheel" | "trophy" | "users" | "dice" | "flag"; hint: string }[] = [
-    { id: "wheel", label: "Çark", icon: "wheel", hint: "Çevir; ibrenin gösterdiği kazanır." },
-    { id: "elim", label: "Eleme", icon: "trophy", hint: "Her çevirişte ibrenin gösterdiği elenir; son kalan kazanır." },
-    { id: "cup", label: "Turnuva", icon: "flag", hint: "Listeden eşleşmeler çekilir; her maçın kazananına tıkla, şampiyona kadar." },
-    { id: "draw", label: "Kura", icon: "users", hint: "Rastgele kazanan seç, sıraya diz ya da takımlara böl." },
-    { id: "dice", label: "Zar & Yazı-tura", icon: "dice", hint: "Listeye gerek yok: zar at, yazı-tura, sayı seç." },
+  const MODES: { id: Mode; label: string; icon: "wheel" | "trophy" | "users" | "dice" | "flag"; hint: string; info: string }[] = [
+    { id: "wheel", label: "Çark", icon: "wheel", hint: "Çevir; ibrenin gösterdiği kazanır.",
+      info: "Listedekiler çarka dizilir; çevirince okun gösterdiği kazanır (ilk çıkan). Örnek: bu akşam hangi film izlenecek?" },
+    { id: "elim", label: "Eleme", icon: "trophy", hint: "Her çevirişte ibrenin gösterdiği elenir; son kalan kazanır.",
+      info: "Her çevirişte okun gösterdiği elenir ve çarktan çıkar; en son kalan kazanır. Heyecanı uzatır. 'Otomatik' ile kendisi çevirir." },
+    { id: "cup", label: "Turnuva", icon: "flag", hint: "Listeden eşleşmeler çekilir; her maçın kazananına tıkla, şampiyona kadar.",
+      info: "1v1 eleme turnuvası (LoL, FIFA, CS2 aim…): isimleri yaz, eşleşmeler çekilir; maçı kim kazandıysa ona tıkla, sonraki tura geçer. Şampiyonu görsel kartla Discord'da paylaş." },
+    { id: "draw", label: "Kura", icon: "users", hint: "Rastgele kazanan seç, sıraya diz ya da takımlara böl.",
+      info: "Çarksız, hızlı kura: listeden kazanan seç, herkesi rastgele sıraya diz ya da takımlara böl (istersen seviyeye göre dengeli)." },
+    { id: "dice", label: "Zar & Yazı-tura", icon: "dice", hint: "Listeye gerek yok: zar at, yazı-tura, sayı seç.",
+      info: "Listeye gerek yok: yazı-tura at, 1–6 zar at ya da iki sayı arasında rastgele bir sayı seç." },
+  ];
+  const DRAW_KINDS: { id: "pick" | "order" | "teams"; label: string; info: string }[] = [
+    { id: "pick", label: "Kazanan seç", info: "Listeden istediğin sayıda kazanan çekilir; aynı kişi iki kez çıkmaz." },
+    { id: "order", label: "Sıraya diz", info: "Herkes rastgele sıralanır: kim önce seçecek, kim önce oynayacak?" },
+    { id: "teams", label: "Takımlara böl", info: "Liste istediğin sayıda takıma bölünür. 'Seviyeye göre dengele' ile herkese yıldız verip güçleri eşit takımlar kurarsın." },
   ];
 
   const mk = (name: string): Item => ({ id: crypto.randomUUID(), name });
@@ -353,7 +364,32 @@
 
   // ---- turnuva ----
   let cup = $state<Match[][]>(getJson<Match[][]>("fun.cup", []));
+  let cupName = $state(getJson("fun.cupName", "GMID Turnuvası"));
   const champion = $derived(cup.length ? cup[cup.length - 1][0].winner : null);
+  const places = $derived(podium(cup));
+  const cupPlayers = $derived(cup.length ? cup[0].length * 2 - cup[0].filter((m) => !m.a || !m.b).length : 0);
+  let cardCanvas: HTMLCanvasElement | undefined = $state();
+  /** Şampiyon kartını çizip panoya görsel olarak koyar (Discord'da Ctrl+V). */
+  async function copyCard() {
+    if (!champion || !cardCanvas) return;
+    const fin = cup[cup.length - 1][0];
+    await drawCupCard(cardCanvas, {
+      title: cupName.trim() || "GMID Turnuvası",
+      first: champion,
+      second: places.second,
+      thirds: places.thirds,
+      players: cupPlayers,
+      final: fin.a && fin.b ? `${fin.a} – ${fin.b}` : null,
+    });
+    try {
+      const blob = await new Promise<Blob | null>((r) => cardCanvas!.toBlob(r, "image/png"));
+      if (!blob) throw new Error("görsel yok");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      notify("Şampiyon kartı kopyalandı · Discord'da Ctrl+V", "copy");
+    } catch {
+      await copy(cupText());
+    }
+  }
   function saveCup() {
     void setJson("fun.cup", cup);
   }
@@ -365,8 +401,10 @@
     tick();
   }
   function cupText() {
-    const lines = [`🏆 **Turnuva** (${cup[0].length * 2 - cup[0].filter((m) => !m.a || !m.b).length} kişi)`];
-    if (champion) lines.push(`Şampiyon: **${champion}**`);
+    const lines = [`🏆 **${cupName.trim() || "Turnuva"}** (${cupPlayers} kişi)`];
+    if (champion) lines.push(`🥇 Şampiyon: **${champion}**`);
+    if (places.second) lines.push(`🥈 İkinci: ${places.second}`);
+    if (places.thirds.length) lines.push(`🥉 Üçüncü: ${places.thirds.join(", ")}`);
     for (let r = cup.length - 1; r >= 0; r--) {
       const done = cup[r].filter((m) => m.a && m.b && m.winner);
       if (!done.length) continue;
@@ -654,10 +692,11 @@
 
   <section class="panel stage">
     <div class="top">
-      <div class="seg modes">
+      <div class="tabs modes" role="group" aria-label="Mod">
         {#each MODES as m (m.id)}
-          <button aria-pressed={mode === m.id} disabled={busy} onclick={() => setMode(m.id)}>
+          <button class="tab" aria-pressed={mode === m.id} disabled={busy} onclick={() => setMode(m.id)}>
             <Icon name={m.icon} size={15} />{m.label}
+            <span class="inf" aria-hidden="true">i<span class="bubble">{m.info}</span></span>
           </button>
         {/each}
       </div>
@@ -729,13 +768,23 @@
         <div class="row">
           <button class="btn go" disabled={busy || items.length < 2} onclick={newCup}><Icon name="flag" size={18} />{cup.length ? "Yeni eşleşme çek" : "Eşleşmeleri çek"}</button>
           {#if cup.length && !champion}<button class="btn ghost sm" disabled={busy} onclick={() => void autoCup()}><Icon name="dice" size={14} />Kalanları rastgele oynat</button>{/if}
-          {#if cup.length}<button class="btn ghost sm" onclick={() => copy(cupText())}><Icon name="discord" size={14} />Discord'a kopyala</button>{/if}
+          {#if cup.length}<button class="btn ghost sm" onclick={() => copy(cupText())}><Icon name="copy" size={14} />Yazı olarak kopyala</button>{/if}
+          <label class="cupname">Turnuva adı <input bind:value={cupName} maxlength="50" placeholder="ör. LoL 1v1 Turnuvası" onchange={() => void setJson("fun.cupName", cupName)} /></label>
           {#if items.length < 2}<span class="sub small">Önce listeye en az iki isim ekle.</span>{/if}
         </div>
         {#if cup.length}
           <p class="sub small">Maçın kazananına tıkla; yanlış tıkladıysan aynı isme yeniden tıkla. 🎲: o maçı rastgele bitir. Kişi sayısı 2, 4, 8, 16 değilse ilk turda bazıları <b>bay</b> geçer.</p>
           {#if champion}
-            <div class="result gold champ"><span class="kind"><Icon name="trophy" size={16} />Şampiyon</span><b class="win">{champion}</b></div>
+            <div class="podium">
+              {#if places.second}<div class="step s2"><span class="medal">🥈</span><b>{places.second}</b><span class="place">2.</span></div>{/if}
+              <div class="step s1"><span class="medal">🏆</span><b>{champion}</b><span class="place">Şampiyon</span></div>
+              {#if places.thirds.length}<div class="step s3"><span class="medal">🥉</span><b>{places.thirds.join(" · ")}</b><span class="place">3.</span></div>{/if}
+            </div>
+            <div class="row center">
+              <button class="btn go" onclick={() => void copyCard()}><Icon name="discord" size={18} />Şampiyon kartını Discord'a kopyala</button>
+              <span class="sub small">Görsel panoya gelir: Discord'da Ctrl+V.</span>
+            </div>
+            <canvas bind:this={cardCanvas} hidden></canvas>
           {/if}
           <div class="bracket">
             {#each cup as round, r (r)}
@@ -764,10 +813,12 @@
       </div>
     {:else if mode === "draw"}
       <div class="draw">
-        <div class="seg">
-          <button aria-pressed={drawKind === "pick"} disabled={busy} onclick={() => ((drawKind = "pick"), (result = null))}>Kazanan seç</button>
-          <button aria-pressed={drawKind === "order"} disabled={busy} onclick={() => ((drawKind = "order"), (result = null))}>Sıraya diz</button>
-          <button aria-pressed={drawKind === "teams"} disabled={busy} onclick={() => ((drawKind = "teams"), (result = null))}>Takımlara böl</button>
+        <div class="tabs sub" role="group" aria-label="Kura türü">
+          {#each DRAW_KINDS as d (d.id)}
+            <button class="tab" aria-pressed={drawKind === d.id} disabled={busy} onclick={() => ((drawKind = d.id), (result = null))}>
+              {d.label}<span class="inf" aria-hidden="true">i<span class="bubble">{d.info}</span></span>
+            </button>
+          {/each}
         </div>
         <div class="row">
           {#if drawKind === "pick"}
@@ -925,7 +976,41 @@
 
   .stage { gap: 10px; min-height: 520px; }
   .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .modes button { display: inline-flex; align-items: center; gap: 6px; }
+  /* Sekmeler: koyu bir ray üzerinde; seçili olan altın. Her sekmede "i": üzerine gelince açıklama balonu. */
+  .tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(0, 0, 0, 0.28); border: 1px solid var(--line); }
+  .tab {
+    position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 600; transition: background 0.15s, color 0.15s;
+  }
+  .tab:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .tab[aria-pressed="true"] { color: #1b1608; background: linear-gradient(180deg, var(--gold-glow), var(--gold)); box-shadow: 0 4px 14px rgba(227, 194, 112, 0.22); }
+  .tab:disabled { opacity: 0.6; }
+  .tabs.sub .tab { padding: 6px 11px; font-size: 13px; }
+  .inf {
+    position: relative; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+    border: 1.5px solid currentColor; font: 700 10px/1 var(--f-body); font-style: italic; opacity: 0.55; cursor: help;
+  }
+  .inf:hover { opacity: 1; }
+  .bubble {
+    position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(-4px); z-index: 30; width: max-content; max-width: 280px;
+    padding: 10px 12px; border-radius: 10px; background: #0d0f12; border: 1px solid var(--gold-dim); color: var(--text);
+    font: 500 12.5px/1.45 var(--f-body); font-style: normal; text-align: left; white-space: normal;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.15s;
+  }
+  .bubble::before { content: ""; position: absolute; top: -6px; left: 50%; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: #0d0f12; border-left: 1px solid var(--gold-dim); border-top: 1px solid var(--gold-dim); }
+  .inf:hover .bubble { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .cupname { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-left: auto; }
+  .cupname input { width: 220px; }
+  .podium { display: flex; justify-content: center; align-items: flex-end; gap: 12px; padding: 8px 0 4px; }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px 10px; min-width: 150px; max-width: 260px; border-radius: 14px 14px 6px 6px; text-align: center; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); animation: pop 0.4s ease-out both; }
+  .step b { font-family: var(--f-display); font-size: 17px; overflow-wrap: anywhere; }
+  .step .medal { font-size: 30px; line-height: 1; }
+  .step .place { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .step.s1 { min-height: 170px; justify-content: center; border-color: var(--gold); background: linear-gradient(180deg, rgba(227, 194, 112, 0.22), rgba(227, 194, 112, 0.05)); }
+  .step.s1 b { font-size: 26px; color: var(--gold-glow); }
+  .step.s1 .medal { font-size: 46px; }
+  .step.s2 { min-height: 130px; justify-content: center; animation-delay: 0.1s; }
+  .step.s3 { min-height: 105px; justify-content: center; animation-delay: 0.2s; }
   .hint { margin-top: -2px; }
   .wheelbox { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 24px; align-items: center; padding: 8px 0; }
   .big .wheelbox { grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); }
@@ -1023,7 +1108,6 @@
   .pow { margin-left: 8px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
 
   .cup { display: flex; flex-direction: column; gap: 12px; padding: 6px 0; }
-  .champ { max-width: 420px; }
   .bracket { display: flex; gap: 22px; overflow-x: auto; padding: 4px 2px 10px; }
   .col { display: flex; flex-direction: column; min-width: 170px; flex: 1 0 170px; }
   .rname { font-family: var(--f-display); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 8px; }

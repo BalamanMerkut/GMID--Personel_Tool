@@ -963,4 +963,9 @@ export interface Specs {
   input: { kind: string; name: string }[];
   audio: { kind: string; name: string }[];
   net: { name: string; desc: string; speed: string }[];
+  /** `kind`: "Varsayılan" | "Yazıcı" */
+  printers: { kind: string; name: string }[];
+  cameras: { kind: string; name: string }[];
+  /** Ne zaman okundu (ms); bilgiler saklanır, Yenile ile yeniden okunur. */
+  readAt: number;
 }

@@ -48,7 +48,7 @@ pub fn system_info() -> Vec<(String, String)> {
 }
 
 #[cfg(windows)]
-fn reg_string(key: &str, value: &str) -> Option<String> {
+pub(crate) fn reg_string(key: &str, value: &str) -> Option<String> {
     use windows::core::HSTRING;
     use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
     let mut buf = [0u16; 256];

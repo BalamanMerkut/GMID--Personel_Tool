@@ -4,7 +4,7 @@
   import { on } from "../bus";
   import Icon from "../Icon.svelte";
   import RollingClock from "../components/RollingClock.svelte";
-  import { clock } from "../time";
+  import { clock, clockTenths } from "../time";
   import { notify } from "../toast.svelte";
   import type { Countdown, TimersSnapshot } from "../types";
 
@@ -63,7 +63,7 @@
 <div class="timers">
   <section class="panel sw">
     <h3 class="h2"><Icon name="lap" />Kronometre</h3>
-    <div class="digits tnum" class:running={snap?.stopwatch.running}><RollingClock text={clock(elapsed, true)} fast={2} /></div>
+    <div class="digits tnum" class:running={snap?.stopwatch.running}><RollingClock text={snap?.stopwatch.running ? clockTenths(elapsed) : clock(elapsed, true)} fast={snap?.stopwatch.running ? 1 : 2} /></div>
     <div class="row center">
       <button class="btn" onclick={async () => apply(await api.timers.stopwatchToggle())}>
         <Icon name={snap?.stopwatch.running ? "pause" : "play"} />{snap?.stopwatch.running ? "Duraklat" : elapsed > 0 ? "Devam" : "Başlat"}

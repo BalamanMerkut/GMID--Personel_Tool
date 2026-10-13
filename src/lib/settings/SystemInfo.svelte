@@ -107,7 +107,19 @@
       name: d.name,
       icon: d.kind === "Giriş" ? ("mic" as const) : ("headphones" as const),
     })),
+    ...(specs?.cameras ?? []).map((d) => ({ kind: "Kamera", name: d.name, icon: "camera" as const })),
+    ...(specs?.printers ?? []).map((d) => ({
+      kind: d.kind === "Varsayılan" ? "Yazıcı (varsayılan)" : "Yazıcı",
+      name: d.name,
+      icon: "printer" as const,
+    })),
   ]);
+  /** "bugün", "3 gün önce" */
+  function age(ms: number) {
+    if (!ms) return "";
+    const days = Math.floor((Date.now() - ms) / 86_400_000);
+    return days <= 0 ? "bugün" : days === 1 ? "dün" : `${days} gün önce`;
+  }
 </script>
 
 <section class="panel hero">
@@ -119,7 +131,9 @@
         {specs.os.name.replace("Microsoft ", "")}{specs.os.version ? ` · ${specs.os.version}` : ""}{specs.os.build ? ` (derleme ${specs.os.build})` : ""}
         {#if machine}<span class="dot">·</span>{machine}{/if}
       </span>
-      {#if specs.os.uptimeMin}<span class="sub small tnum">{uptime(specs.os.uptimeMin)} önce açıldı</span>{/if}
+      <span class="sub small tnum">
+        {#if specs.os.uptimeMin}{uptime(specs.os.uptimeMin)} önce açıldı{/if}{#if specs.readAt}<span class="dot">·</span>bilgiler {age(specs.readAt)} okundu (değiştiyse Yenile){/if}
+      </span>
     {:else if busy}
       <b class="name">Aygıtlar okunuyor…</b>
       <span class="sub small">Birkaç saniye sürebilir.</span>

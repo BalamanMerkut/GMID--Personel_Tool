@@ -476,7 +476,19 @@
   .hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); color: var(--muted); font-size: 13px; }
   .hint span { flex: 1; }
   div.hint { text-align: left; }
-  .alarm { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 16px; background: rgba(18, 20, 23, 0.96); border: 1px solid var(--gold); box-shadow: 0 0 30px rgba(227, 194, 112, 0.2); animation: fade 0.25s ease-out; }
+  /* Çalan uyarı göze çarpsın: çerçeve ve ışıltı kırmızı ile GMID sarısı arasında hızlı, yumuşak gidip gelir. */
+  .alarm {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 16px; background: rgba(18, 20, 23, 0.96);
+    border: 2px solid var(--gold); box-shadow: 0 0 30px rgba(227, 194, 112, 0.25);
+    animation: fade 0.25s ease-out, alarmPulse 0.9s ease-in-out infinite alternate;
+  }
+  .alarm .ring { animation: alarmRing 0.9s ease-in-out infinite alternate; }
+  @keyframes alarmPulse {
+    from { border-color: var(--gold); box-shadow: 0 0 26px rgba(227, 194, 112, 0.35); background: rgba(30, 27, 18, 0.96); }
+    to { border-color: #e06a6a; box-shadow: 0 0 34px rgba(224, 106, 106, 0.5); background: rgba(34, 18, 18, 0.96); }
+  }
+  @keyframes alarmRing { from { color: var(--gold); background: rgba(227, 194, 112, 0.16); } to { color: #ff8a8a; background: rgba(224, 106, 106, 0.2); } }
+  @media (prefers-reduced-motion: reduce) { .alarm, .alarm .ring { animation: none; border-color: #e06a6a; } }
   .alarm .ring { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--gold); background: rgba(227, 194, 112, 0.14); flex: none; }
   .atx { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .atx .kind { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }

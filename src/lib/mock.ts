@@ -572,6 +572,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
           { kind: "Giriş", name: "Mikrofon (HyperX Cloud II)" },
         ],
         net: [{ name: "Ethernet", desc: "Realtek Gaming 2.5GbE Family Controller", speed: "1 Gbps" }],
+        printers: [{ kind: "Varsayılan", name: "HP LaserJet M110w" }],
+        cameras: [{ kind: "Kamera", name: "Logitech BRIO" }],
+        readAt: Date.now() - 3 * 86_400_000,
       };
     case "driver_status":
       await wait(500);

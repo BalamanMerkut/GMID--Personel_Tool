@@ -56,6 +56,30 @@ pub fn nvidia_version(windows: &str) -> Option<String> {
     Some(format!("{}.{}", &d[..3], &d[3..]))
 }
 
+/// Kartın şu an kurulu sürücü sürümü (Windows'un aygıt sınıfı kayıtlarından; adı eşleşen ilk kayıt).
+fn live_driver(gpu: &str) -> Option<String> {
+    #[cfg(windows)]
+    {
+        const CLASS: &str =
+            r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+        for i in 0..32 {
+            let key = format!(r"{CLASS}\{i:04}");
+            let Some(desc) = crate::report::reg_string(&key, "DriverDesc") else {
+                continue;
+            };
+            if desc.trim().eq_ignore_ascii_case(gpu.trim()) {
+                return crate::report::reg_string(&key, "DriverVersion");
+            }
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = gpu;
+        None
+    }
+}
+
 /// "566.14" < "571.96"
 pub fn older(installed: &str, latest: &str) -> bool {
     let parse =
@@ -145,7 +169,9 @@ impl Drivers {
 
     /// Kartı ve sürücüyü okur, NVIDIA ise en yeni sürümü sorar.
     pub fn check(&self, app: &AppHandle) -> Status {
-        let specs = app.state::<crate::sysinfo::SysInfo>().get(false);
+        let specs = app
+            .state::<crate::sysinfo::SysInfo>()
+            .get(&app.state::<Db>(), false);
         let mut s = Status {
             checked_at: crate::util::now_ms(),
             ..Default::default()
@@ -165,7 +191,9 @@ impl Drivers {
                     if lower.contains("nvidia") {
                         s.vendor = "nvidia";
                         s.url = NV_PAGE.into();
-                        s.installed = nvidia_version(&g.driver).unwrap_or_else(|| g.driver.clone());
+                        // Sürücü güncellenmiş olabilir (bilgiler saklanıyor): kurulu sürüm kayıt defterinden.
+                        let driver = live_driver(&g.name).unwrap_or_else(|| g.driver.clone());
+                        s.installed = nvidia_version(&driver).unwrap_or(driver);
                         match latest_nvidia(&g.name) {
                             Ok((v, released)) => {
                                 s.newer = older(&s.installed, &v);
@@ -188,7 +216,7 @@ impl Drivers {
                             _ => "",
                         }
                         .into();
-                        s.installed = g.driver.clone();
+                        s.installed = live_driver(&g.name).unwrap_or_else(|| g.driver.clone());
                     }
                 }
             }

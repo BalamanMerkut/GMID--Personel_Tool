@@ -35,8 +35,9 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   - **Çark:** çevir, ibrenin gösterdiği kazanır (ilk çıkan). İstersen çıkan sonraki çevirişte listeden çıkar.
   - **Eleme:** her çevirişte ibrenin gösterdiği elenir (dilimi yumuşakça daralır), **son kalan** kazanır; "Otomatik"
     ile son kalana kadar kendisi çevirir. Elenme sırası yanda.
-  - **Turnuva:** eleme ağacı (sayı 2, 4, 8, 16 değilse ilk turda bay); kazanana tıkla, şampiyona kadar; 🎲 ile maçı
-    rastgele bitir; sonuçları Discord'a kopyala.
+  - **Turnuva:** adını koy (ör. "LoL 1v1 Turnuvası"), eşleşmeler çekilsin (sayı 2, 4, 8, 16 değilse ilk turda bay);
+    maçı kim kazandıysa ona tıkla, şampiyona kadar; 🎲 ile maçı rastgele bitir. Sonunda kürsü (🥇🥈🥉) ve
+    **şampiyon kartı**: görsel panoya gelir, Discord'da Ctrl+V.
   - **Kura:** N kazanan seç, rastgele **sıraya diz** ya da **takımlara böl**; "Seviyeye göre dengele" ile herkese 1–5
     yıldız verip güçleri eşit takımlar kur.
   - **Zar & yazı-tura:** üç kart (yazı-tura, zar, sayı seç); birine tıklayınca ekranın ortasında büyür (Geri / Esc).
@@ -222,8 +223,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   Son bir dakikada ortada geri sayım çıkar (İptal / Şimdi / sağ üstteki × ile gizle: süre işlemeye devam eder).
   Zamanı gelince açık programlar kapatılır.
 - **Sayaç:** kronometre ve geri sayımların rakamları kayarak değişir; salise ve ilerleme çubuğu her karede akar.
-- **Sistem özellikleri** (Kontrol Odası): bilgisayarın özeti ve dört ana parça (işlemci, ekran kartı, bellek, depolama),
-  altında sürücü doluluğu, bellek modülleri, ekranlar (inç, çözünürlük, Hz), fare/klavye/kulaklık, anakart ve ağ;
+- **Sistem özellikleri** (Kontrol Odası; bir kez okunur ve saklanır, değiştiyse Yenile): bilgisayarın özeti ve dört ana parça (işlemci, ekran kartı, bellek, depolama),
+  altında sürücü doluluğu, bellek modülleri, ekranlar (inç, çözünürlük, Hz), fare/klavye/kulaklık, kamera, yazıcı, anakart ve ağ;
   **Discord'a kopyala** ile düzenli bir özet yapıştır.
 
 ### Kontrol Odası (ayarlar merkezi)

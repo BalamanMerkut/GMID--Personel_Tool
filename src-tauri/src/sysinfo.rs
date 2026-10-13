@@ -21,6 +21,11 @@ pub struct Specs {
     pub monitors: Vec<Monitor>,
     pub input: Vec<Device>,
     pub audio: Vec<Device>,
+    /// Yazıcılar (PDF/XPS/OneNote gibi sanal olanlar hariç); `kind` "Varsayılan" ya da "Yazıcı".
+    pub printers: Vec<Device>,
+    pub cameras: Vec<Device>,
+    /// Ne zaman okundu (ms). Bilgiler saklanır; her açılışta yeniden okunmaz (Yenile ile okunur).
+    pub read_at: i64,
     pub net: Vec<Net>,
 }
 
@@ -140,6 +145,20 @@ pub struct SysInfo {
     cache: Mutex<Option<Specs>>,
 }
 
+/// Saklanan son okuma (JSON).
+const STORE_KEY: &str = "sysinfo.cache";
+
+/// Windows açılalı kaç dakika oldu.
+fn uptime_min() -> Option<u64> {
+    #[cfg(windows)]
+    {
+        let ms = unsafe { windows::Win32::System::SystemInformation::GetTickCount64() };
+        Some(ms / 60_000)
+    }
+    #[cfg(not(windows))]
+    None
+}
+
 const SCRIPT: &str = r#"
 $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
@@ -215,6 +234,12 @@ $r.input = @(Get-PnpDevice -PresentOnly -Class Mouse, Keyboard | ForEach-Object 
 $r.audio = @(Get-PnpDevice -PresentOnly -Class AudioEndpoint | Where-Object { $_.Status -eq 'OK' } | ForEach-Object {
   [ordered]@{ kind = $(if ($_.InstanceId -like '*{0.0.0.00000000}*') { 'Çıkış' } else { 'Giriş' }); name = [string]$_.FriendlyName }
 })
+$r.printers = @(Get-CimInstance Win32_Printer | Where-Object { $_.Name -notmatch 'PDF|XPS|OneNote|Fax|Faks|Send To|AnyDesk|Snagit|Adobe' } | ForEach-Object {
+  [ordered]@{ kind = $(if ($_.Default) { 'Varsayılan' } else { 'Yazıcı' }); name = [string]$_.Name }
+})
+$r.cameras = @(Get-PnpDevice -PresentOnly -Class Camera, Image | Where-Object { $_.Status -eq 'OK' } | ForEach-Object {
+  [ordered]@{ kind = 'Kamera'; name = [string]$_.FriendlyName }
+})
 $r.net = @(Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
   [ordered]@{ name = [string]$_.Name; desc = [string]$_.InterfaceDescription; speed = [string]$_.LinkSpeed }
 })
@@ -227,14 +252,33 @@ else { [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json)) }
 "#;
 
 impl SysInfo {
-    /// Önbellekteki ya da (yoksa / `refresh`) yeniden okunan bilgiler.
-    pub fn get(&self, refresh: bool) -> Result<Specs, String> {
-        if !refresh {
-            if let Some(v) = self.cache.lock().unwrap_or_else(|e| e.into_inner()).clone() {
-                return Ok(v);
+    /// Saklanan bilgiler (bellekte, yoksa veritabanında); hiç yoksa ya da `refresh` ise PowerShell ile yeniden
+    /// okur ve saklar. Donanım nadiren değişir: her açılışta okunmaz. Açık kalma süresi her seferinde günceldir.
+    pub fn get(&self, db: &crate::db::Db, refresh: bool) -> Result<Specs, String> {
+        let mut cached = if refresh {
+            None
+        } else {
+            self.cache
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+                .or_else(|| {
+                    db.setting_json::<Specs>(STORE_KEY)
+                        .filter(|s| !s.cpu.is_empty() || !s.gpu.is_empty())
+                })
+        };
+        if cached.is_none() {
+            let mut v = read()?;
+            v.read_at = crate::util::now_ms();
+            if let Ok(j) = serde_json::to_string(&v) {
+                let _ = db.set_setting(STORE_KEY, &j);
             }
+            cached = Some(v);
         }
-        let v = read()?;
+        let mut v = cached.unwrap_or_default();
+        if let Some(min) = uptime_min() {
+            v.os.uptime_min = min;
+        }
         *self.cache.lock().unwrap_or_else(|e| e.into_inner()) = Some(v.clone());
         Ok(v)
     }
@@ -320,6 +364,8 @@ fn normalize(v: serde_json::Value) -> serde_json::Value {
                             | "monitors"
                             | "input"
                             | "audio"
+                            | "printers"
+                            | "cameras"
                             | "net"
                     );
                     let v = match v {
@@ -519,6 +565,17 @@ fn tidy(s: &mut Specs) {
         }
     }
     s.audio = audio;
+    for list in [&mut s.printers, &mut s.cameras] {
+        let mut seen: Vec<Device> = Vec::new();
+        for d in std::mem::take(list) {
+            if !d.name.trim().is_empty() && !seen.iter().any(|x| x.name == d.name) {
+                seen.push(d);
+            }
+        }
+        // Varsayılan yazıcı önce.
+        seen.sort_by_key(|d| d.kind != "Varsayılan");
+        *list = seen;
+    }
     s.volumes.retain(|v| v.size > 0);
     s.volumes.sort_by(|a, b| a.letter.cmp(&b.letter));
     s.disks.retain(|d| d.size > 0);
@@ -661,7 +718,9 @@ mod tests {
       "monitors":[{"name":"LG ULTRAGEAR","maker":"GSM","year":2023,"inches":27.0}],
       "input":[{"kind":"Fare","name":"HID-compliant mouse"},{"kind":"Fare","name":"G502 HERO Gaming Mouse"},{"kind":"Klavye","name":"HID Keyboard Device"},{"kind":"Klavye","name":"HID Keyboard Device"}],
       "audio":[{"kind":"Çıkış","name":"Kulaklık (HyperX Cloud II)"},{"kind":"Çıkış","name":"Kulaklık (HyperX Cloud II)"}],
-      "net":[{"name":"Ethernet","desc":"Realtek Gaming 2.5GbE Family Controller","speed":"1 Gbps"}]}"#;
+      "net":[{"name":"Ethernet","desc":"Realtek Gaming 2.5GbE Family Controller","speed":"1 Gbps"}],
+      "printers":{"kind":"Yazıcı","name":"HP LaserJet M110w"},
+      "cameras":[{"kind":"Kamera","name":"Logitech BRIO"},{"kind":"Kamera","name":"Logitech BRIO"}]}"#;
 
     #[test]
     fn parses_and_tidies() {
@@ -678,6 +737,10 @@ mod tests {
             ["G502 HERO Gaming Mouse", "HID Keyboard Device"]
         );
         assert_eq!(s.audio.len(), 1);
+        // Tek yazıcı PowerShell 5.1'de nesne olarak gelir; listeye çevrilir. Aynı kamera bir kez.
+        assert_eq!(s.printers.len(), 1);
+        assert_eq!(s.printers[0].name, "HP LaserJet M110w");
+        assert_eq!(s.cameras.len(), 1);
         assert_eq!(s.volumes[0].letter, "C:");
         let t = as_text(&s);
         assert!(

@@ -201,3 +201,12 @@ export function roundName(matches: number, index: number): string {
   if (matches === 8) return "Son 16";
   return `${index + 1}. tur`;
 }
+
+/** Kürsü: şampiyon, finalde kaybeden, yarı finalde kaybedenler. */
+export function podium(rounds: Match[][]): { first: string | null; second: string | null; thirds: string[] } {
+  const fin = rounds[rounds.length - 1]?.[0];
+  if (!fin?.winner) return { first: null, second: null, thirds: [] };
+  const loser = (m: Match) => (m.a && m.b && m.winner ? (m.winner === m.a ? m.b : m.a) : null);
+  const semis = rounds.length >= 2 ? rounds[rounds.length - 2] : [];
+  return { first: fin.winner, second: loser(fin), thirds: semis.map(loser).filter((x): x is string => !!x) };
+}

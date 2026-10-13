@@ -215,6 +215,8 @@
       {/if}
     </div>
 
+    <!-- Video alanı sabit; alttaki bölüm (zaman çizelgesi, seçenekler, hazırlananlar) kendi içinde kayar. -->
+    <div class="lower">
     {#if !preview}
       <div class="timeline">
         <div class="bar" role="presentation" onclick={seekBar}>
@@ -275,6 +277,8 @@
       </div>
     {/if}
 
+    </div>
+
     <div class="foot">
       {#if progress !== null}
         <div class="prog"><span class="small">Hazırlanıyor · %{Math.round(progress * 100)}</span><span class="pbar"><i style:width="{progress * 100}%"></i></span></div>
@@ -292,14 +296,16 @@
 </div>
 
 <style>
-  .back { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.72); display: grid; place-items: center; padding: 24px; }
-  .dlg { width: min(980px, 100%); max-height: 100%; overflow: auto; background: var(--night-2); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 12px; }
+  .back { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.72); display: flex; justify-content: center; align-items: flex-start; padding: 3vh 24px; }
+  /* Pencere yukarıdan sabit; video her zaman aynı boyutta, alttaki bölüm uzayıp kısalır ve gerekirse kendi içinde kayar. */
+  .dlg { width: min(980px, 100%); max-height: 94vh; overflow: hidden; background: var(--night-2); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 12px; }
+  .lower { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
   .spread { display: flex; justify-content: space-between; align-items: center; }
   .h2 { margin: 0; }
   .x { border: 0; background: none; color: var(--muted); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; }
   .x:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
-  .stage { background: #000; border-radius: 12px; overflow: hidden; }
-  .stage video { width: 100%; max-height: 52vh; display: block; object-fit: contain; }
+  .stage { flex: none; height: clamp(200px, 46vh, 520px); background: #000; border-radius: 12px; overflow: hidden; }
+  .stage video { width: 100%; height: 100%; display: block; object-fit: contain; }
   .timeline { position: relative; height: 34px; margin-top: 16px; }
   .bub { position: absolute; top: -16px; transform: translateX(-50%); font-size: 11px; font-weight: 700; color: var(--gold-glow); pointer-events: none; white-space: nowrap; }
   .bar { position: absolute; left: 0; right: 0; top: 11px; height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); cursor: pointer; }

@@ -349,7 +349,8 @@ pub async fn driver_status(app: AppHandle, refresh: bool) -> CmdResult<crate::dr
 #[tauri::command]
 pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<crate::sysinfo::Specs> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::sysinfo::SysInfo>().get(refresh)
+        app.state::<crate::sysinfo::SysInfo>()
+            .get(&app.state::<crate::db::Db>(), refresh)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -358,6 +359,8 @@ pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<crate::sysi
 /// Sistem özelliklerini düz yazı olarak (Discord'a yapıştırmak için).
 #[tauri::command]
 pub fn system_info_text(app: AppHandle) -> CmdResult<String> {
-    let s = app.state::<crate::sysinfo::SysInfo>().get(false)?;
+    let s = app
+        .state::<crate::sysinfo::SysInfo>()
+        .get(&app.state::<crate::db::Db>(), false)?;
     Ok(crate::sysinfo::as_text(&s))
 }

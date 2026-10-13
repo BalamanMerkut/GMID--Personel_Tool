@@ -12,6 +12,11 @@ export function clock(ms: number, withCentis = false): string {
   return withCentis ? `${base},${pad(Math.floor((Math.max(0, ms) % 1000) / 10))}` : base;
 }
 
+/** Kronometre çalışırken: 02:03,4 (saniyenin onda biri; salise saniyede onlarca kez değişip titreştiği için). */
+export function clockTenths(ms: number): string {
+  return `${clock(ms)},${Math.floor((Math.max(0, ms) % 1000) / 100)}`;
+}
+
 /** "5 dk", "2 sa 15 dk", "3 gün" */
 export function span(ms: number): string {
   const min = Math.round(Math.abs(ms) / 60000);
