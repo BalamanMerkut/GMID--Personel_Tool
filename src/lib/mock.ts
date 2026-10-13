@@ -312,6 +312,13 @@ let dictRules = [{ from: "GMI", to: "GMID", hits: 4 }];
 let dictLearn = [{ id: 1, from: "videoyu", to: "VDS" }];
 
 // ---- Yazılar ----
+let unState = { running: false, removed: false };
+const mockPrograms = [
+  { id: "HKLM\\...\\Coolapp", name: "Coolapp 2.1 (x64)", version: "2.1.0", publisher: "Acme", location: "C:\\Program Files\\Coolapp", uninstall: "\"C:\\Program Files\\Coolapp\\unins000.exe\"", exe: "C:\\Program Files\\Coolapp\\coolapp.exe", sizeKb: 184_000, date: "20250911" },
+  { id: "HKLM\\...\\7zip", name: "7-Zip 23.01 (x64)", version: "23.01", publisher: "Igor Pavlov", location: "C:\\Program Files\\7-Zip", uninstall: "C:\\Program Files\\7-Zip\\Uninstall.exe", exe: "", sizeKb: 5_600, date: "20240102" },
+  { id: "HKCU\\...\\Discord", name: "Discord", version: "1.0.9170", publisher: "Discord Inc.", location: "C:\\Users\\ali\\AppData\\Local\\Discord", uninstall: "...", exe: "", sizeKb: 410_000, date: "20260301" },
+  { id: "HKLM\\...\\VLC", name: "VLC media player", version: "3.0.21", publisher: "VideoLAN", location: "C:\\Program Files\\VideoLAN\\VLC", uninstall: "...", exe: "", sizeKb: 170_000, date: "20250520" },
+];
 const karaokeReady = new Set<string>();
 const karaokeOnline = new Map<string, { file: string; title: string; url: string; offset: number; score: number }>();
 let karaokeRecs: { path: string; name: string; size: number; modified: number }[] = [];
@@ -774,6 +781,36 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         segments: ["Merhaba, malikâneye hoş geldin.", "Bugün yeni bir oyuna bakıyoruz.", "Önce ayarları açalım.", "Grafikler gerçekten çok güzel."].map((t, i) => lyric(0.5 + i * 3.4, t)) };
       return transcripts[a.id as string];
     }
+    case "uninstall_list":
+      await wait(400);
+      return mockPrograms;
+    case "uninstall_run":
+      unState = { running: true, removed: false };
+      setTimeout(() => (unState = { running: false, removed: true }), 2500);
+      return null;
+    case "uninstall_state":
+      return unState;
+    case "uninstall_scan":
+      await wait(700);
+      return {
+        id: a.id, name: mockPrograms.find((p) => p.id === a.id)?.name ?? "", removed: true,
+        items: [
+          { kind: "dir", path: "C:\\Program Files\\Coolapp", value: null, reason: "Programın kurulum klasörü (kaldırıcı silmemiş)", strong: true, size: 48_000_000 },
+          { kind: "dir", path: "C:\\Users\\ali\\AppData\\Roaming\\Coolapp", value: null, reason: "Adı programla birebir aynı", strong: true, size: 2_400_000 },
+          { kind: "dir", path: "C:\\Users\\ali\\AppData\\Local\\coolapp", value: null, reason: "Adı programın exe adıyla aynı (kontrol et)", strong: false, size: 120_000 },
+          { kind: "file", path: "C:\\Users\\ali\\Desktop\\Coolapp.lnk", value: null, reason: "Programın kısayolu", strong: true, size: 1200 },
+          { kind: "key", path: "HKCU\\Software\\Coolapp", value: null, reason: "Programın ayar anahtarı (adı birebir aynı)", strong: true, size: 0 },
+          { kind: "key", path: "HKLM\\SOFTWARE\\Acme\\Coolapp", value: null, reason: "Yayıncı anahtarında, adı programla birebir aynı", strong: true, size: 0 },
+          { kind: "value", path: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", value: "Coolapp", reason: "Başlangıçta açılma kaydı (programın klasörünü gösteriyor)", strong: true, size: 0 },
+        ],
+        skipped: [
+          { path: "C:\\ProgramData\\Coolapp", reason: "Hâlâ kurulu başka bir programla ilgili (c:\\programdata\\coolapp\\plugin)" },
+          { path: "C:\\Users\\ali\\AppData\\Roaming\\Acme", reason: "Yayıncı klasörü: içinde başka program var" },
+        ],
+      };
+    case "uninstall_clean":
+      await wait(900);
+      return { done: (a.keys as string[]).map((k) => k.split("|")[1]), failed: [], backup: "C:\\Users\\ali\\Documents\\GMID Tool\\Yedekler\\Kaldırıcı 2026-10-13 Coolapp" };
     case "karaoke_status":
       return { ...karaokeOf(a.id as string), busy: null };
     case "karaoke_prepare": {

@@ -69,6 +69,8 @@ export const ROOMS: Room[] = [
         description: "Kulaklık ve hoparlör arasında tek tık geçiş, mikrofon seviyesi kilidi ve oyundan çıkmadan çalışan kısayollar." },
       { id: "install", label: "Format Sonrası Kurulum", icon: "install", phase: null,
         description: "Formattan sonra kurulacak programların listesi: tek tıkla hepsini kur ya da USB'ye bir Format Kiti çıkar: formattan sonra programlar ve GMID'in kendisi, ayarları ve geçmişiyle geri gelir." },
+      { id: "uninstall", label: "Program Kaldırıcı", icon: "trash", phase: null,
+        description: "Programı kendi kaldırıcısıyla kaldır, sonra geride kalan klasör ve kayıt defteri artıklarını katı kurallarla bul ve temizle. Dosyalar Geri Dönüşüm Kutusu'na gider, kayıtlar önce yedeklenir." },
     ],
   },
   {
@@ -154,7 +156,15 @@ export const NAV: NavRoom[] = [
         ],
       },
       { id: "audio", label: "Ses & Mikrofon", icon: "speaker", tabs: [{ id: "audio", label: "Ses & Mikrofon" }] },
-      { id: "install", label: "Format Kurulumu", icon: "install", tabs: [{ id: "install", label: "Format Kurulumu" }] },
+      {
+        id: "programs",
+        label: "Programlar",
+        icon: "install",
+        tabs: [
+          { id: "install", label: "Format Kurulumu" },
+          { id: "uninstall", label: "Kaldırıcı" },
+        ],
+      },
     ],
   },
   { name: null, groups: [{ id: "settings", label: "Kontrol Odası", icon: "gear", tabs: [{ id: "settings", label: "Kontrol Odası" }] }] },

@@ -83,7 +83,7 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 
 ### Faz 6 — Format Sonrası Kurulum
 
-- **Katalog** (Çalışma Odası → Format Sonrası Kurulum): tarayıcılar, oyun platformları, iletişim, araçlar, medya,
+- **Katalog** (Çalışma Odası → Programlar → Format Kurulumu): tarayıcılar, oyun platformları, iletişim, araçlar, medya,
   donanım, oyun bileşenleri… Tıkla, listene girsin. Katalogda yoksa **Tüm depoda ara** (Microsoft'un paket deposu).
   Bilgisayarında kurulu olanlar "Kurulu" diye işaretlenir.
 - **Şimdi kur:** listendeki eksik programlar sırayla ve sessizce kurulur (winget); her biri için ilerleme ve ✅/❌.
@@ -93,6 +93,15 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   formattan önceki haliyle açılır. Kullanıcı adın değişse bile dosya yolları yeni bilgisayara göre düzeltilir.
 - Yedeği uygulamanın içinden de geri yükleyebilirsin: **Kontrol Odası → Veri ve yedekler → Yedekten geri yükle**.
 
+
+### Program Kaldırıcı
+
+- **Programlar → Kaldırıcı:** programı kendi kaldırıcısıyla kaldır; bitince geride kalan klasör ve kayıt defteri artıkları
+  **katı kurallarla** bulunur: ad birebir tutmalı; yalnız Program Files, ProgramData, AppData ve Başlat menüsünün birinci
+  katı (ya da `Yayıncı\Program`); Windows ve Microsoft klasörleri, hâlâ kurulu başka bir programa ait ya da ortak kullanılan
+  her şey ve bağlantılar (junction) asla; kayıt defterinde yalnız `Software\Program` ve `Software\Yayıncı\Program`.
+  Dokunulmayanlar nedeniyle gösterilir. Sen seçip onaylarsın: dosyalar **Geri Dönüşüm Kutusu**'na gider, kayıtlar silinmeden
+  önce `.reg` olarak yedeklenir (Belgeler › GMID Tool › Yedekler).
 ### Faz 6 — Film & Dizi Arşivi
 
 - İzlediğin film ve dizileri **5 kısa soruyla** puanla: hikâye, oyunculuk, yönetmenlik, tempo, keyif. Önce durum:

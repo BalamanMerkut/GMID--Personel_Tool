@@ -57,7 +57,7 @@
   /** Kayıt boyunca mikrofonun en yüksek seviyesi: hiç ses gelmediyse uyarılır. */
   let maxLevel = 0;
   let quietMic = $state(false);
-  let echo = $state(getJson("karaoke.echo", true));
+  let echo = $state(getJson("karaoke.echo2", false));
   let recordings = $state<KaraokeRecording[]>([]);
   let previewKey = $state(0);
 
@@ -272,7 +272,7 @@
     mixing = true;
     void setJson("karaoke.voiceGain2", voiceGain);
     void setJson("karaoke.musicGain", musicGain);
-    void setJson("karaoke.echo", echo);
+    void setJson("karaoke.echo2", echo);
     try {
       await api.karaoke.mix(item.id, mixOpts(result.voice, result.songStart, result.path));
       previewKey++;
@@ -550,7 +550,8 @@
         {/if}
         <p class="sub small">Sesin ve müzik otomatik olarak dengelendi; istersen aşağıdan ince ayar yap ve yenile.</p>
         {#key previewKey}
-          <audio class="pv" controls src={api.fileSrc(result.path)}></audio>
+          <!-- Aynı dosya yeniden karıştırılınca adı değişmez: ?v ile önbellekteki eski hali çalınmaz. -->
+          <audio class="pv" controls src={`${api.fileSrc(result.path)}?v=${previewKey}`}></audio>
         {/key}
         <div class="rset">
           <label>Sesin <b class="tnum">%{Math.round(voiceGain * 100)}</b>

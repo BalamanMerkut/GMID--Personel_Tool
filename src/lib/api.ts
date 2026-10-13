@@ -28,6 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
+  CleanResult, InstalledProgram, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
   Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
@@ -480,6 +481,16 @@ export const api = {
     learn: (id: number, accept: boolean) => call<void>("dictation_learn", { id, accept }),
     /** Son diktelerden birini düzelt: öğrenilecek [eski, yeni] çiftleri. */
     correct: (at: number, text: string) => call<[string, string][]>("dictation_correct", { at, text }),
+  },
+
+  uninstall: {
+    list: () => call<InstalledProgram[]>("uninstall_list"),
+    /** Programın kendi kaldırıcısını açar. */
+    run: (id: string) => call<void>("uninstall_run", { id }),
+    state: (id: string) => call<UninstallState>("uninstall_state", { id }),
+    scan: (id: string) => call<LeftoverScan>("uninstall_scan", { id }),
+    /** `keys`: "tür|yol|değer" */
+    clean: (id: string, keys: string[]) => call<CleanResult>("uninstall_clean", { id, keys }),
   },
 
   karaoke: {

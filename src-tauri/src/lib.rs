@@ -39,6 +39,7 @@ mod timers;
 mod titles;
 mod transcript;
 mod tray;
+mod uninstall;
 mod updater;
 mod util;
 mod window;
@@ -141,6 +142,7 @@ pub fn run() {
             app.manage(drivers::Drivers::default());
             app.manage(presence::Presence::default());
             app.manage(karaoke::Karaoke::default());
+            app.manage(uninstall::Uninstaller::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -317,6 +319,11 @@ pub fn run() {
             commands::videos::bridge_pair,
             commands::videos::bridge_unpair,
             commands::videos::extension_install,
+            commands::uninstall::uninstall_list,
+            commands::uninstall::uninstall_run,
+            commands::uninstall::uninstall_state,
+            commands::uninstall::uninstall_scan,
+            commands::uninstall::uninstall_clean,
             commands::karaoke::karaoke_status,
             commands::karaoke::karaoke_prepare,
             commands::karaoke::karaoke_cancel,

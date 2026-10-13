@@ -1059,3 +1059,45 @@ export interface GmidPlayerState {
   volume: number;
   muted: boolean;
 }
+
+/** Program Kaldırıcı: kurulu program. */
+export interface InstalledProgram {
+  id: string;
+  name: string;
+  version: string;
+  publisher: string;
+  location: string;
+  uninstall: string;
+  exe: string;
+  sizeKb: number;
+  /** "20240131" */
+  date: string;
+}
+
+export interface UninstallState {
+  running: boolean;
+  removed: boolean;
+}
+
+export interface Leftover {
+  kind: "dir" | "file" | "key" | "value";
+  path: string;
+  value: string | null;
+  reason: string;
+  strong: boolean;
+  size: number;
+}
+
+export interface LeftoverScan {
+  id: string;
+  name: string;
+  removed: boolean;
+  items: Leftover[];
+  skipped: { path: string; reason: string }[];
+}
+
+export interface CleanResult {
+  done: string[];
+  failed: [string, string][];
+  backup: string;
+}

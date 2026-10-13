@@ -644,7 +644,7 @@ pub fn mix(root: &Path, id: &str, m: &Mix) -> Result<String, String> {
         }
     };
     // Ses ve müzik aynı ölçüye getirilir (EBU R128): mikrofon kaydı çoğu zaman şarkıdan 15–25 dB kısıktır;
-    // ses müziğin ~4 LU üstüne oturur, kaydırıcılar bunun üzerine çarpan olur.
+    // ses müziğin ~5 LU üstüne oturur, kaydırıcılar bunun üzerine çarpan olur.
     let voice_lufs = loudness(root, &voice, m.latency.clamp(0.0, 1.0), None);
     let music_lufs = loudness(root, &music, m.song_start.max(0.0), Some(600.0));
     let (gv, gm) = level_gains(voice_lufs, music_lufs);
@@ -693,7 +693,7 @@ pub fn mix(root: &Path, id: &str, m: &Mix) -> Result<String, String> {
 
 /// Hedef ses yüksekliği (LUFS): ses müziğin biraz üstünde.
 const VOICE_LUFS: f64 = -16.0;
-const MUSIC_LUFS: f64 = -20.0;
+const MUSIC_LUFS: f64 = -21.0;
 
 /// Ölçülen yüksekliklerden ses ve müzik için kazanç (dB). Ölçülemezse 0.
 fn level_gains(voice: Option<f64>, music: Option<f64>) -> (f64, f64) {
@@ -749,13 +749,14 @@ fn filter_graph(m: &Mix, gv: f64, gm: f64) -> String {
     let vg = m.voice_gain.clamp(0.0, 4.0);
     let mg = m.music_gain.clamp(0.0, 2.0);
     let echo = if m.echo {
-        ",aecho=0.8:0.6:70|140:0.22|0.12"
+        // Çok hafif, kısa: odada söylemiş gibi (eskisi fazla yankılıydı).
+        ",aecho=0.9:0.85:35|55:0.1|0.06"
     } else {
         ""
     };
     format!(
         "[1:a]aresample=44100,aformat=channel_layouts=stereo,atrim=start={lat:.3},asetpts=PTS-STARTPTS,\
-         highpass=f=80,volume={gv:.1}dB,acompressor=threshold=-20dB:ratio=3:attack=8:release=180:makeup=1.5,\
+         highpass=f=80,volume={gv:.1}dB,agate=threshold=0.02:ratio=2:range=0.3:attack=5:release=200,acompressor=threshold=-20dB:ratio=3:attack=8:release=180:makeup=1.5,\
          volume={vg:.2}{echo}[v];[0:a]volume={gm:.1}dB,volume={mg:.2}[m];\
          [m][v]amix=inputs=2:duration=shortest:normalize=0,alimiter=limit=0.95[out]"
     )
@@ -787,7 +788,7 @@ mod tests {
         assert_eq!(parse_lufs(log), Some(-38.2));
         assert_eq!(parse_lufs("Integrated loudness:\n I: -70.0 LUFS"), None);
         // Kısık mikrofon (-38) yükseltilir, yüksek master (-8) kısılır; ses müziğin 4 LU üstünde.
-        assert_eq!(level_gains(Some(-38.0), Some(-8.0)), (22.0, -12.0));
+        assert_eq!(level_gains(Some(-38.0), Some(-8.0)), (22.0, -13.0));
         assert_eq!(level_gains(None, None), (0.0, 0.0));
         assert_eq!(level_gains(Some(-80.0), Some(10.0)).0, 40.0);
     }

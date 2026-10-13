@@ -9,6 +9,7 @@ pub mod servers;
 pub mod sound;
 pub mod tools;
 pub mod transcripts;
+pub mod uninstall;
 pub mod videos;
 
 use crate::{backup, db::Db, paths::DataDir, Launch};

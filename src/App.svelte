@@ -22,6 +22,7 @@
   import Fun from "./lib/screens/Fun.svelte";
   import Ping from "./lib/screens/Ping.svelte";
   import Install from "./lib/screens/Install.svelte";
+  import Uninstall from "./lib/screens/Uninstall.svelte";
   import Deals from "./lib/screens/Deals.svelte";
   import WrappedScreen from "./lib/screens/Wrapped.svelte";
   import SearchPalette from "./lib/components/SearchPalette.svelte";
@@ -195,6 +196,8 @@
           <Deals onnavigate={navigate} />
         {:else if route === "install"}
           <Install />
+        {:else if route === "uninstall"}
+          <Uninstall />
         {:else if route === "gamemode"}
           <GameMode />
         {:else if route === "clips"}
