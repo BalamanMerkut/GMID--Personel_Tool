@@ -94,6 +94,16 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 - Yedeği uygulamanın içinden de geri yükleyebilirsin: **Kontrol Odası → Veri ve yedekler → Yedekten geri yükle**.
 
 
+### Windows Defender uyarısı
+
+GMID henüz dijital imzalı değil; Defender yeni ve imzasız programları bazen yapay zekâ tahminiyle (`…!ml` ile biten
+adlar, ör. `Trojan:Win32/Bearfoos.A!ml`) zararlı sanıp karantinaya alabilir. Bu bir **yanlış alarmdır**:
+- Geri almak için: Windows Güvenliği → Virüs ve tehdit koruması → **Koruma geçmişi** → kayıt → **Eylemler → Geri yükle /
+  Cihazda izin ver**.
+- Microsoft'a bildirmek için: <https://www.microsoft.com/wdsi/filesubmission> → *Software developer* → kurulum dosyası,
+  "Incorrectly detected as malware". Genelde birkaç gün içinde tespit kaldırılır.
+- Kalıcı çözüm kod imzalama sertifikasıdır; alındığında derleme otomatik imzalanacak şekilde ayarlanır.
+
 ### Program Kaldırıcı
 
 - **Programlar → Kaldırıcı:** programı kendi kaldırıcısıyla kaldır; bitince geride kalan klasör ve kayıt defteri artıkları

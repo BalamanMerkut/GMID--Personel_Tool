@@ -72,7 +72,7 @@
         <button class="btn" disabled={installing} onclick={install}>
           <Icon name="download" size={15} />{installing ? "Güncelleniyor…" : `Güncelle (${formatSize(status.latest.size)})`}
         </button>
-        <span class="sub small">GMID kapanır, sessizce kurulur ve yeniden açılır. Verilerin olduğu gibi kalır.</span>
+        <span class="sub small">GMID kapanır, kurulum ilerleme penceresiyle çalışır ve bitince GMID yeniden açılır. Verilerin olduğu gibi kalır.</span>
       </div>
     </div>
   {:else}

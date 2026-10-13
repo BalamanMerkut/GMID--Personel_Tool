@@ -56,19 +56,71 @@ pub fn kill_tree(pid: u32) {
     }
 }
 
-/// Yönetici izniyle (UAC) PowerShell betiği çalıştırır (pencere açmadan), bitmesini bekler; çıkış kodu.
+/// GMID'in PowerShell betiklerinin durduğu klasör (%LOCALAPPDATA%\com.merkutstudios.gmidtool\Betikler).
+/// Betikler gizli ya da şifreli komut olarak verilmez: burada okunabilir `.ps1` dosyaları olarak durur.
+pub fn scripts_dir() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("com.merkutstudios.gmidtool")
+        .join("Betikler")
+}
+
+/// Betiği `Betikler\<ad>.ps1` olarak yazar (UTF-8 BOM'lu: Windows PowerShell 5.1 Türkçe harfleri doğru okusun).
+pub fn write_script(name: &str, body: &str) -> Result<std::path::PathBuf, String> {
+    let dir = scripts_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Betik klasörü açılamadı: {e}"))?;
+    let path = dir.join(format!("{name}.ps1"));
+    let mut bytes = vec![0xEF, 0xBB, 0xBF];
+    bytes.extend_from_slice(body.replace("\r\n", "\n").replace('\n', "\r\n").as_bytes());
+    std::fs::write(&path, bytes).map_err(|e| format!("Betik yazılamadı: {e}"))?;
+    Ok(path)
+}
+
+/// Betik dosyasını çalıştıran PowerShell argümanları (yerel dosya: RemoteSigned yeterli).
+pub fn ps_file_args(path: &std::path::Path) -> Vec<std::ffi::OsString> {
+    let mut v: Vec<std::ffi::OsString> = [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "RemoteSigned",
+        "-File",
+    ]
+    .iter()
+    .map(Into::into)
+    .collect();
+    v.push(path.as_os_str().to_owned());
+    v
+}
+
+/// Betiği dosyaya yazıp PowerShell ile çalıştırır, bitmesini bekler; çıkış kodu.
+pub fn run_ps(name: &str, body: &str) -> Result<u32, String> {
+    let path = write_script(name, body)?;
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(ps_file_args(&path))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    hide_console(&mut cmd);
+    let st = cmd
+        .status()
+        .map_err(|e| format!("PowerShell açılamadı: {e}"))?;
+    Ok(st.code().unwrap_or(-1) as u32)
+}
+
+/// Yönetici izniyle (UAC) betik çalıştırır: betik `Betikler` klasörüne yazılır, Windows izin penceresi
+/// onu çalıştıracak komutu gösterir; bitmesi beklenir, çıkış kodu döner.
 #[cfg(windows)]
-pub fn run_elevated_ps(script: &str) -> Result<u32, String> {
-    use base64::Engine;
+pub fn run_elevated_ps(name: &str, body: &str) -> Result<u32, String> {
     use windows::core::{w, HSTRING};
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject, INFINITE};
     use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
     use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
-    let utf16: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
+    let path = write_script(name, body)?;
     let params = HSTRING::from(format!(
-        "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {encoded}"
+        "-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File \"{}\"",
+        path.display()
     ));
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
@@ -92,6 +144,24 @@ pub fn run_elevated_ps(script: &str) -> Result<u32, String> {
 }
 
 #[cfg(not(windows))]
-pub fn run_elevated_ps(_script: &str) -> Result<u32, String> {
+pub fn run_elevated_ps(_name: &str, _body: &str) -> Result<u32, String> {
     Err("Yalnızca Windows'ta".into())
+}
+
+#[cfg(test)]
+mod script_tests {
+    use super::*;
+
+    #[test]
+    fn scripts_are_readable_files() {
+        let p = write_script("gmid-test-betik", "Write-Output 'Türkçe şğı'\n$x = 1\n").unwrap();
+        let b = std::fs::read(&p).unwrap();
+        assert_eq!(&b[..3], &[0xEF, 0xBB, 0xBF]);
+        let t = String::from_utf8(b[3..].to_vec()).unwrap();
+        assert_eq!(t, "Write-Output 'Türkçe şğı'\r\n$x = 1\r\n");
+        let args = ps_file_args(&p);
+        assert_eq!(args[3], "RemoteSigned");
+        assert_eq!(args[5], p.as_os_str());
+        let _ = std::fs::remove_file(p);
+    }
 }

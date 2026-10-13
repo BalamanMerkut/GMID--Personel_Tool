@@ -501,9 +501,9 @@ impl Uninstaller {
                     && (home.is_empty() || !c.path.to_lowercase().starts_with(&home)))
         });
         let code = if admin {
-            crate::util::run_elevated_ps(&script)?
+            crate::util::run_elevated_ps("kaldirici-temizlik", &script)?
         } else {
-            run_ps(&script)?
+            crate::util::run_ps("kaldirici-temizlik", &script)?
         };
         let text = std::fs::read(&out).map(|b| {
             String::from_utf8_lossy(&b)
@@ -623,26 +623,6 @@ fn clean_script(items: &[Candidate], backup: &Path, out: &Path) -> String {
         ps(&out.to_string_lossy())
     ));
     s
-}
-
-fn run_ps(script: &str) -> Result<u32, String> {
-    use base64::Engine;
-    let utf16: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let mut cmd = std::process::Command::new("powershell");
-    cmd.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-EncodedCommand",
-        &base64::engine::general_purpose::STANDARD.encode(utf16),
-    ])
-    .stdin(std::process::Stdio::null());
-    crate::util::hide_console(&mut cmd);
-    let o = cmd
-        .output()
-        .map_err(|e| format!("PowerShell açılamadı: {e}"))?;
-    Ok(o.status.code().unwrap_or(-1) as u32)
 }
 
 /// Kaldırıcıyı ShellExecute ile açar (kendi yönetici iznini kendisi ister); kapanınca `flag` düşer.

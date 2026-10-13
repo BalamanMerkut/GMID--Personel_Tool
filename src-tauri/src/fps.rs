@@ -659,7 +659,7 @@ fn tail(mut file: std::fs::File, stop: &AtomicBool, record: &mut dyn FnMut(&str)
 
 /// Yönetici izniyle (UAC) PowerShell betiği çalıştırır, bitmesini bekler.
 fn elevate(script: &str) -> Result<(), String> {
-    match crate::util::run_elevated_ps(script)? {
+    match crate::util::run_elevated_ps("fps-izin", script)? {
         0 => Ok(()),
         code => {
             crate::log!("FPS izni betiği {code} koduyla bitti");

@@ -3,7 +3,8 @@
 //! Her derleme GitHub'da `build-<numara>` etiketli bir sürüm olarak yayınlanır (bkz. `.github/workflows/build.yml`):
 //! `GMID-Tool-Kurulum.exe` ve `GMID-Tool-Kurulum.exe.sha256`. Uygulama kendi derleme numarasını derlenirken
 //! (`GMID_BUILD`) öğrenir; açılıştan biraz sonra ve 6 saatte bir en son sürüme bakar. "Güncelle" denince kurulum
-//! dosyası indirilir, SHA-256 ile doğrulanır, uygulama kapanır, kurulum sessizce çalışır ve GMID yeniden açılır.
+//! dosyası GMID'in kendi klasörüne (`Güncellemeler`) indirilir, SHA-256 ile doğrulanır, kurulum ilerleme
+//! penceresiyle açılır (`/P /R /UPDATE`: soru sormaz, bitince GMID'i yeniden açar) ve uygulama kapanır.
 
 use crate::util::now_ms;
 use serde::Serialize;
@@ -178,7 +179,9 @@ impl Updater {
             .latest
             .filter(|_| self.status().available)
             .ok_or("Yeni bir sürüm yok")?;
-        let dest = std::env::temp_dir().join(format!("GMID-Tool-Kurulum-{}.exe", rel.build));
+        let dir = updates_dir(app);
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Klasör açılamadı: {e}"))?;
+        let dest = dir.join(format!("GMID-Tool-Kurulum-{}.exe", rel.build));
         self.set(app, |s| s.progress = Some(0.0));
         let res = download(&rel, &dest, |p| self.set(app, |s| s.progress = Some(p)));
         if let Err(e) = res {
@@ -191,7 +194,7 @@ impl Updater {
         }
         crate::log!("Güncelleme kuruluyor: derleme {}", rel.build);
         launch_installer(&dest)?;
-        // Kurulum, uygulama kapanınca başlar (bkz. launch_installer); kapanışta Oyun Modu vb. geri alınır.
+        // Kurulum açık uygulamayı kendisi kapatır; biz de kapanırız (kapanışta Oyun Modu vb. geri alınır).
         app.exit(0);
         Ok(())
     }
@@ -256,29 +259,31 @@ fn download(rel: &Release, dest: &Path, progress: impl Fn(f32)) -> Result<(), St
     Ok(())
 }
 
-/// `cmd /S /C "…"` ile çalışacak komut: uygulama kapanana dek bekle (görünmez pencerede `timeout` çalışmaz,
-/// `ping` ile beklenir), kurulumu sessizce çalıştır, bitince GMID'i yeniden aç.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn relaunch_script(setup: &Path, exe: &Path) -> String {
-    format!(
-        "ping -n 3 127.0.0.1 >nul & \"{}\" /S & start \"\" \"{}\"",
-        setup.display(),
-        exe.display()
-    )
+/// İndirilen kurulum dosyalarının klasörü (%LOCALAPPDATA%\com.merkutstudios.gmidtool\Güncellemeler).
+fn updates_dir(app: &AppHandle) -> std::path::PathBuf {
+    app.path()
+        .app_local_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("Güncellemeler")
 }
 
+/// Kurulumu görünür biçimde başlatır: ilerleme penceresi açılır, soru sorulmaz (`/P`), eski sürümün üzerine
+/// kurulur (`/UPDATE`, kısayollar yeniden oluşturulmaz) ve bitince GMID yeniden açılır (`/R`).
 #[cfg(windows)]
 fn launch_installer(setup: &Path) -> Result<(), String> {
-    use crate::util::hide_console;
-    use std::os::windows::process::CommandExt;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut cmd = std::process::Command::new("cmd");
-    // Rust'ın tırnaklama kuralları cmd.exe'ninkinden farklı: komut olduğu gibi verilir.
-    cmd.raw_arg(format!("/S /C \"{}\"", relaunch_script(setup, &exe)));
-    hide_console(&mut cmd);
-    cmd.spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Kurulum başlatılamadı: {e}"))
+    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW};
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let file = HSTRING::from(setup.as_os_str());
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+        lpVerb: w!("open"),
+        lpFile: PCWSTR(file.as_ptr()),
+        lpParameters: w!("/P /R /UPDATE"),
+        nShow: SW_SHOWNORMAL.0,
+        ..Default::default()
+    };
+    unsafe { ShellExecuteExW(&mut info) }.map_err(|e| format!("Kurulum başlatılamadı: {e}"))
 }
 
 #[cfg(not(windows))]
@@ -290,6 +295,17 @@ fn launch_installer(_setup: &Path) -> Result<(), String> {
 pub fn start(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
+        // Önceki güncellemelerden kalan kurulum dosyaları silinir.
+        if let Ok(rd) = std::fs::read_dir(updates_dir(&app)) {
+            for e in rd.flatten() {
+                if e.path()
+                    .extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("exe"))
+                {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
         std::thread::sleep(Duration::from_secs(30));
         loop {
             let auto = app
@@ -328,17 +344,5 @@ mod tests {
         // Başka biçimde etiket ya da kurulum dosyası yoksa sürüm sayılmaz.
         let other: Value = serde_json::from_str(r#"{"tag_name":"v1.0","assets":[]}"#).unwrap();
         assert!(parse_release(&other).is_none());
-    }
-
-    #[test]
-    fn relaunch_script_quotes_paths_with_spaces() {
-        let s = relaunch_script(
-            Path::new(r"C:\Users\Ali Veli\AppData\Local\Temp\GMID-Tool-Kurulum-42.exe"),
-            Path::new(r"C:\Users\Ali Veli\AppData\Local\GMID Tool\gmid-tool.exe"),
-        );
-        assert_eq!(
-            s,
-            r#"ping -n 3 127.0.0.1 >nul & "C:\Users\Ali Veli\AppData\Local\Temp\GMID-Tool-Kurulum-42.exe" /S & start "" "C:\Users\Ali Veli\AppData\Local\GMID Tool\gmid-tool.exe""#
-        );
     }
 }

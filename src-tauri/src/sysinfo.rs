@@ -247,8 +247,7 @@ $r.net = @(Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' } | ForE
 # Sonuç dosyaya (konsol çıktısı Windows PowerShell'de bölünebiliyor, Türkçe harfler kod sayfasına takılabiliyor);
 # dosya verilmediyse base64 olarak çıktıya.
 $json = [pscustomobject]$r | ConvertTo-Json -Depth 6 -Compress
-if ($env:GMID_OUT) { [System.IO.File]::WriteAllText($env:GMID_OUT, $json, (New-Object System.Text.UTF8Encoding $false)) }
-else { [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json)) }
+[System.IO.File]::WriteAllText($env:GMID_OUT, $json, (New-Object System.Text.UTF8Encoding $false))
 "#;
 
 impl SysInfo {
@@ -288,23 +287,14 @@ fn read() -> Result<Specs, String> {
     if !cfg!(windows) {
         return Err("Yalnızca Windows'ta".into());
     }
-    use base64::Engine;
-    let b64 = base64::engine::general_purpose::STANDARD;
-    // Betik UTF-16 olarak kodlanıp verilir (tırnaklar ve Türkçe harfler komut satırında bozulmasın).
-    let utf16: Vec<u8> = SCRIPT.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    // Betik Betikler\sistem-bilgisi.ps1 olarak yazılır ve oradan çalışır; sonucu GMID_OUT dosyasına yazar.
+    let script = crate::util::write_script("sistem-bilgisi", SCRIPT)?;
     let out_file = std::env::temp_dir().join(format!("gmid-sysinfo-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&out_file);
     let mut cmd = std::process::Command::new("powershell");
     cmd.env("GMID_OUT", &out_file);
-    cmd.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-EncodedCommand",
-        &b64.encode(utf16),
-    ])
-    .stdin(std::process::Stdio::null());
+    cmd.args(crate::util::ps_file_args(&script))
+        .stdin(std::process::Stdio::null());
     hide_console(&mut cmd);
     let o = cmd
         .output()
@@ -316,16 +306,7 @@ fn read() -> Result<Specs, String> {
                 .trim_start_matches('\u{feff}')
                 .to_string()
         }
-        // Dosya yoksa çıktıdaki base64 (satır sonları ve boşluklar atılarak).
-        Err(_) => {
-            let text: String = String::from_utf8_lossy(&o.stdout)
-                .chars()
-                .filter(|c| !c.is_whitespace())
-                .collect();
-            b64.decode(text)
-                .map(|b| String::from_utf8_lossy(&b).into_owned())
-                .unwrap_or_default()
-        }
+        Err(_) => String::new(),
     };
     let result = parse(&json);
     if let Err(e) = &result {

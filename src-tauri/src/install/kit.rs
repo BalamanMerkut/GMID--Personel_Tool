@@ -200,7 +200,7 @@ Read-Host 'Kapatmak için Enter'
 "#;
 
 /// `Kur.bat`: yalnız ASCII (cmd.exe karakter sayfasından bağımsız).
-pub const BAT: &str = "@echo off\r\ntitle GMID Format Kiti\r\ncd /d \"%~dp0\"\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"%~dp0kurulum.ps1\"\r\n";
+pub const BAT: &str = "@echo off\r\ntitle GMID Format Kiti\r\ncd /d \"%~dp0\"\r\npowershell -NoProfile -ExecutionPolicy RemoteSigned -File \"%~dp0kurulum.ps1\"\r\n";
 
 fn readme(items: &[Item], setup: bool, backup: bool) -> String {
     let mut s = String::from(
