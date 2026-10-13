@@ -20,6 +20,7 @@ pub struct SysInfo {
 
 const SCRIPT: &str = r#"
 $ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 function GB($b) { if ($b) { '{0:N1} GB' -f ($b / 1GB) } else { '' } }
 function Sec($t, $i, $r) { [pscustomobject]@{ title = $t; icon = $i; rows = @($r | Where-Object { $_ -and $_[1] }) } }
 $out = @()
@@ -118,9 +119,11 @@ Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' } | ForEach-Object 
 }
 $out += Sec 'Ağ' 'link' $rows
 
-# Türkçe harfler konsol kod sayfasına takılmasın: UTF-8 baytlar base64 olarak.
+# Sonuç dosyaya (konsol çıktısı Windows PowerShell'de satır satır bölünebiliyor, Türkçe harfler de kod sayfasına
+# takılabiliyor); dosya verilmediyse base64 olarak çıktıya.
 $json = $out | ConvertTo-Json -Depth 5 -Compress
-[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))
+if ($env:GMID_OUT) { [System.IO.File]::WriteAllText($env:GMID_OUT, $json, (New-Object System.Text.UTF8Encoding $false)) }
+else { [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json)) }
 "#;
 
 impl SysInfo {
@@ -145,7 +148,10 @@ fn read() -> Result<Vec<Section>, String> {
     let b64 = base64::engine::general_purpose::STANDARD;
     // Betik UTF-16 olarak kodlanıp verilir (tırnaklar ve Türkçe harfler komut satırında bozulmasın).
     let utf16: Vec<u8> = SCRIPT.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let out_file = std::env::temp_dir().join(format!("gmid-sysinfo-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&out_file);
     let mut cmd = std::process::Command::new("powershell");
+    cmd.env("GMID_OUT", &out_file);
     cmd.args([
         "-NoProfile",
         "-NonInteractive",
@@ -159,11 +165,36 @@ fn read() -> Result<Vec<Section>, String> {
     let o = cmd
         .output()
         .map_err(|e| format!("PowerShell açılamadı: {e}"))?;
-    let out = String::from_utf8_lossy(&o.stdout);
-    let bytes = b64
-        .decode(out.trim())
-        .map_err(|_| "Sistem bilgisi okunamadı".to_string())?;
-    parse(&String::from_utf8_lossy(&bytes))
+    let json = match std::fs::read(&out_file) {
+        Ok(b) => {
+            let _ = std::fs::remove_file(&out_file);
+            String::from_utf8_lossy(&b)
+                .trim_start_matches('\u{feff}')
+                .to_string()
+        }
+        // Dosya yoksa çıktıdaki base64 (satır sonları ve boşluklar atılarak).
+        Err(_) => {
+            let text: String = String::from_utf8_lossy(&o.stdout)
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect();
+            b64.decode(text)
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                .unwrap_or_default()
+        }
+    };
+    let result = parse(&json);
+    if let Err(e) = &result {
+        let err = String::from_utf8_lossy(&o.stderr);
+        crate::log!(
+            "Sistem bilgisi okunamadı ({e}); çıkış {:?}, çıktı {} bayt, hata: {}",
+            o.status.code(),
+            o.stdout.len(),
+            err.trim().chars().take(400).collect::<String>()
+        );
+    }
+    result
+        .map_err(|e| format!("{e}. Ayrıntı günlükte: Hakkında → Sorun bildir ile gönderebilirsin."))
 }
 
 /// PowerShell'in JSON çıktısı (tek bölüm dizi değil nesne olarak, tek satır iç içe dizi olarak gelebilir).
