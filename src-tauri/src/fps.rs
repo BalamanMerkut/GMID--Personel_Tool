@@ -33,7 +33,10 @@ const SHA256: &str = "d74183e7ae630f72cd3690be0373ecbfdc6cbb86578148aab8fa2a7166
 pub const GROUP_SID: &str = "S-1-5-32-559";
 const SESSION: &str = "GMIDPanel";
 /// Yönetici izni olmadan başlatılabilen zamanlanmış görev.
-const TASK: &str = "GMID FPS";
+const TASK: &str = "GMID FPS 2";
+/// Eski sürümlerin kaydettiği görevler (yeniden kurulumda silinir). İlk sürüm arka plan oturumunda (S4U)
+/// çalışıyordu; bazı bilgisayarlarda hiç başlamadı.
+const OLD_TASKS: &[&str] = &["GMID FPS"];
 /// Görev en çok 20 dakika çalışır (Windows durdurur); panel daha uzun açıksa 19. dakikada yeniden başlatılır.
 const TASK_RESTART: Duration = Duration::from_secs(19 * 60);
 /// Kare göndermesine rağmen oyun sayılmayan programlar (panelin kendisi WebView2'dir).
@@ -230,14 +233,27 @@ fn common_args() -> Vec<String> {
     .collect()
 }
 
-/// Görevin komut satırı (PowerShell tek tırnaklı dizesi içinde).
-fn task_arguments() -> String {
-    let mut a = format!("--output_file \"{}\"", task_csv().display());
+/// PresentMon'un hata çıktısı (görev başlamazsa nedenini okumak için).
+fn task_err() -> PathBuf {
+    std::env::temp_dir().join("gmid-fps.err")
+}
+
+/// Görevin komut satırı (PowerShell tek tırnaklı dizesi içinde): pencere açmayan konsol (`conhost --headless`)
+/// içinde cmd, PresentMon'u çalıştırır ve hata çıktısını dosyaya yazar.
+fn task_arguments(exe: &Path) -> String {
+    let mut pm = format!(
+        "\"{}\" --output_file \"{}\"",
+        exe.display(),
+        task_csv().display()
+    );
     for s in common_args() {
-        a.push(' ');
-        a.push_str(&s);
+        pm.push(' ');
+        pm.push_str(&s);
     }
-    a
+    format!(
+        "--headless cmd.exe /d /s /c \"{pm} 2>\"{}\"\"",
+        task_err().display()
+    )
 }
 
 /// Yönetici olarak çalışacak PowerShell betiği: kullanıcıyı gruba ekler, görevi kaydeder. Çıkış kodu 3: ikisi de
@@ -251,10 +267,11 @@ $user = (New-Object Security.Principal.SecurityIdentifier $sid).Translate([Secur
 $group = (New-Object Security.Principal.SecurityIdentifier '{GROUP_SID}').Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]
 Add-LocalGroupMember -SID '{GROUP_SID}' -Member $sid
 if ($user) {{ net localgroup "$group" "$user" /add *> $null }}
+foreach ($old in @({old})) {{ Unregister-ScheduledTask -TaskName $old -Confirm:$false }}
 $ok = $false
 if ($user) {{
-  $a = New-ScheduledTaskAction -Execute '{exe}' -Argument '{args}'
-  $p = New-ScheduledTaskPrincipal -UserId $user -LogonType S4U -RunLevel Highest
+  $a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument '{args}'
+  $p = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
   $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew
   $t = Register-ScheduledTask -TaskName '{TASK}' -Action $a -Principal $p -Settings $s -Force
   if ($t) {{ $ok = $true }}
@@ -265,8 +282,12 @@ if (-not $ok) {{
 }}
 exit 0
 "#,
-        exe = q(&exe.to_string_lossy()),
-        args = q(&task_arguments()),
+        args = q(&task_arguments(exe)),
+        old = OLD_TASKS
+            .iter()
+            .map(|t| format!("'{}'", q(t)))
+            .collect::<Vec<_>>()
+            .join(","),
     )
 }
 
@@ -507,6 +528,7 @@ impl PresentMon {
     fn start_task(&self) -> Result<Arc<AtomicBool>, (State, String)> {
         let csv = task_csv();
         let _ = std::fs::remove_file(&csv);
+        let _ = std::fs::remove_file(task_err());
         if !schtasks(&["/run", "/tn", TASK]) {
             return Err((
                 State::Permission,
@@ -528,14 +550,14 @@ impl PresentMon {
                 if let Ok(f) = std::fs::File::open(&csv) {
                     break f;
                 }
-                if begun.elapsed() > Duration::from_secs(8) {
+                if begun.elapsed() > Duration::from_secs(12) {
+                    let why = task_failure();
+                    crate::log!("PresentMon görevi 12 saniyede çıktı yazmadı: {why}");
                     let mut s = status.lock().unwrap_or_else(|e| e.into_inner());
                     s.state = State::Error;
-                    s.message = Some(
-                        "FPS görevi çalışmadı; Windows oturumunu bir kez kapatıp açarsan doğrudan ölçülür"
-                            .into(),
-                    );
-                    crate::log!("PresentMon görevi 8 saniyede çıktı dosyası yazmadı");
+                    s.message = Some(format!(
+                        "FPS görevi çalışmadı ({why}). Windows oturumunu bir kez kapatıp açarsan doğrudan ölçülür"
+                    ));
                     stop2.store(true, Ordering::Relaxed);
                     return;
                 }
@@ -580,6 +602,35 @@ impl PresentMon {
         if s.state != State::Missing {
             s.state = State::Missing;
         }
+    }
+}
+
+/// Görev neden çıktı vermedi: PresentMon'un hata satırı ya da görevin son sonuç kodu.
+fn task_failure() -> String {
+    if let Ok(t) = std::fs::read_to_string(task_err()) {
+        if let Some(l) = t.lines().map(str::trim).rfind(|l| !l.is_empty()) {
+            return l.chars().take(160).collect();
+        }
+    }
+    let mut cmd = Command::new("powershell");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        &format!("(Get-ScheduledTaskInfo -TaskName '{TASK}').LastTaskResult"),
+    ])
+    .stdin(Stdio::null())
+    .stderr(Stdio::null());
+    hide_console(&mut cmd);
+    match cmd.output().ok().and_then(|o| {
+        String::from_utf8_lossy(&o.stdout)
+            .trim()
+            .parse::<i64>()
+            .ok()
+    }) {
+        // 267009: hâlâ çalışıyor, 267011: hiç çalışmadı.
+        Some(code) => format!("kod 0x{:X}", code as u32),
+        None => "neden okunamadı".into(),
     }
 }
 
@@ -728,10 +779,14 @@ mod tests {
             "S-1-5-21-1-2-3-1001",
             Path::new(r"C:\Users\O'Neil\Documents\GMID Tool\Araclar\PresentMon\PresentMon.exe"),
         );
-        assert!(s.contains(r"-Execute 'C:\Users\O''Neil\Documents"));
-        assert!(s.contains("-LogonType S4U -RunLevel Highest"));
-        assert!(s.contains("--exclude dwm.exe"));
-        assert!(s.contains("Register-ScheduledTask -TaskName 'GMID FPS'"));
+        assert!(
+            s.contains(r#"-Argument '--headless cmd.exe /d /s /c ""C:\Users\O''Neil\Documents"#),
+            "{s}"
+        );
+        assert!(s.contains("-LogonType Interactive -RunLevel Highest"));
+        assert!(s.contains("--exclude dwm.exe 2>\""));
+        assert!(s.contains("Register-ScheduledTask -TaskName 'GMID FPS 2'"));
+        assert!(s.contains("foreach ($old in @('GMID FPS'))"));
     }
 
     #[test]

@@ -98,11 +98,21 @@
     });
   }
 
-  function setStart(t: number) {
+  function setStart(t: number, scrub = false) {
     start = Math.max(0, Math.min(t, end - 0.5));
+    if (scrub) show(start);
   }
-  function setEnd(t: number) {
+  function setEnd(t: number, scrub = false) {
     end = Math.min(duration, Math.max(t, start + 0.5));
+    if (scrub) show(end);
+  }
+  /** Tutamak sürüklenirken video o kareyi gösterir (nereden kestiğin görünsün). */
+  function show(t: number) {
+    if (!video || preview) return;
+    looping = false;
+    video.pause();
+    video.currentTime = t;
+    current = t;
   }
   function lastSeconds(n: number) {
     start = Math.max(0, duration - n);
@@ -211,8 +221,10 @@
           <span class="sel" style:left="{pct(start)}%" style:width="{pct(end) - pct(start)}%"></span>
           <span class="head" style:left="{pct(current)}%"></span>
         </div>
-        <input class="r start" type="range" min="0" max={duration || 1} step="0.1" value={start} oninput={(e) => setStart(Number(e.currentTarget.value))} aria-label="Başlangıç" />
-        <input class="r end" type="range" min="0" max={duration || 1} step="0.1" value={end} oninput={(e) => setEnd(Number(e.currentTarget.value))} aria-label="Bitiş" />
+        <span class="bub tnum" style:left="{pct(start)}%">{fmt(start)}</span>
+        <span class="bub tnum" style:left="{pct(end)}%">{fmt(end)}</span>
+        <input class="r start" type="range" min="0" max={duration || 1} step="0.1" value={start} oninput={(e) => setStart(Number(e.currentTarget.value), true)} aria-label="Başlangıç" />
+        <input class="r end" type="range" min="0" max={duration || 1} step="0.1" value={end} oninput={(e) => setEnd(Number(e.currentTarget.value), true)} aria-label="Bitiş" />
       </div>
       <div class="row times">
         <button class="btn ghost sm" onclick={() => setStart(current)}>[ Başlangıç: şu an</button>
@@ -288,7 +300,8 @@
   .x:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
   .stage { background: #000; border-radius: 12px; overflow: hidden; }
   .stage video { width: 100%; max-height: 52vh; display: block; object-fit: contain; }
-  .timeline { position: relative; height: 34px; }
+  .timeline { position: relative; height: 34px; margin-top: 16px; }
+  .bub { position: absolute; top: -16px; transform: translateX(-50%); font-size: 11px; font-weight: 700; color: var(--gold-glow); pointer-events: none; white-space: nowrap; }
   .bar { position: absolute; left: 0; right: 0; top: 11px; height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); cursor: pointer; }
   .sel { position: absolute; top: 0; bottom: 0; background: rgba(227, 194, 112, 0.45); border-left: 3px solid var(--gold); border-right: 3px solid var(--gold); border-radius: 4px; }
   .head { position: absolute; top: -5px; bottom: -5px; width: 2px; background: #fff; transform: translateX(-1px); pointer-events: none; }
