@@ -67,6 +67,7 @@
   function setMode(m: Mode) {
     if (busy) return;
     mode = m;
+    tool = null;
     result = null;
     lastOut = null;
     auto = false;
@@ -336,13 +337,27 @@
   }
 
   // ---- zar & yazı-tura ----
-  const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+  // Üç araç önce kart olarak görünür; birine tıklayınca ekranın ortasında büyür (Geri / Esc ile döner).
+  type Tool = "coin" | "dice" | "number";
+  let tool = $state<Tool | null>(null);
+  const focused = $derived(mode === "dice" && tool !== null);
+  /** Zar yüzlerindeki noktalar: 3×3 ızgarada hücre numaraları (1 sol üst … 9 sağ alt). */
+  const PIPS: Record<number, number[]> = { 1: [5], 2: [3, 7], 3: [3, 5, 7], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+  const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   let coin = $state<"Yazı" | "Tura" | null>(null);
   let flipping = $state(false);
-  let flips = $state(0);
+  let tally = $state({ Yazı: 0, Tura: 0 });
+  /** Paranın şu anki açısı (derece, X ekseninde); 0 yazı, 180 tura üstte. */
+  let coinAngle = 0;
+  let tossEl: HTMLElement | undefined = $state();
+  let coinEl: HTMLElement | undefined = $state();
+  let shadowEl: HTMLElement | undefined = $state();
+
   let diceCount = $state(2);
-  let dice = $state<number[]>([]);
+  let dice = $state<number[]>([3, 5]);
   let rolling = $state(false);
+  let rolled = $state(false);
   let lo = $state(1);
   let hi = $state(100);
   let number = $state<number | null>(null);
@@ -353,33 +368,67 @@
     void setJson("fun.history", history);
   }
 
+  /** Para havaya atılır: yükselip düşerken X ekseninde döner, yere değince hafifçe seker; gölgesi küçülüp büyür. */
   async function flip() {
-    if (flipping) return;
+    if (flipping || !coinEl || !tossEl || !shadowEl) return;
     flipping = true;
-    const face = randInt(2) === 0 ? "Yazı" : "Tura";
-    // Para yarım turlarla döner: toplam yarım tur çiftse yazı, tekse tura yüzü üstte kalır.
-    let next = flips + 4;
-    if ((next % 2 === 1) !== (face === "Tura")) next++;
-    flips = next;
     coin = null;
-    await wait(matchMedia("(prefers-reduced-motion: reduce)").matches ? 100 : 1250);
+    const face = randInt(2) === 0 ? "Yazı" : "Tura";
+    const from = coinAngle;
+    const turns = 5 + randInt(3);
+    const to = from - (((from % 360) + 360) % 360) + turns * 360 + (face === "Tura" ? 180 : 0);
+    coinAngle = to;
+    const dur = reduceMotion() ? 300 : 1600;
+    beep(2600, 0.12, 0.03, "sine");
+    coinEl.animate([{ transform: `rotateX(${from}deg)` }, { transform: `rotateX(${to}deg)` }], {
+      duration: dur * 0.8,
+      easing: "cubic-bezier(.18,.6,.32,1)",
+      fill: "forwards",
+    });
+    tossEl.animate(
+      [
+        { transform: "translateY(0) scale(1)", easing: "cubic-bezier(.22,.75,.4,1)" },
+        { transform: "translateY(-165px) scale(1.1)", offset: 0.42, easing: "cubic-bezier(.6,0,.8,.3)" },
+        { transform: "translateY(0) scale(1)", offset: 0.8, easing: "cubic-bezier(.2,.7,.4,1)" },
+        { transform: "translateY(-16px) scale(1.01)", offset: 0.89, easing: "cubic-bezier(.6,0,.8,.4)" },
+        { transform: "translateY(0) scale(1)" },
+      ],
+      { duration: dur },
+    );
+    shadowEl.animate(
+      [
+        { transform: "scale(1)", opacity: 0.6 },
+        { transform: "scale(.4)", opacity: 0.18, offset: 0.42 },
+        { transform: "scale(1)", opacity: 0.6, offset: 0.8 },
+        { transform: "scale(.85)", opacity: 0.45, offset: 0.89 },
+        { transform: "scale(1)", opacity: 0.6 },
+      ],
+      { duration: dur },
+    );
+    await wait(dur * 0.8);
+    beep(1900, 0.09, 0.05, "sine");
+    beep(2900, 0.14, 0.03, "sine", 0.05);
+    await wait(dur * 0.2);
     coin = face;
+    tally = { ...tally, [face]: tally[face] + 1 };
     flipping = false;
-    beep(880, 0.18, 0.06);
     log(`🪙 **Yazı-tura:** ${face}`);
   }
 
   async function roll() {
     if (rolling) return;
     rolling = true;
+    rolled = false;
     const n = Math.min(6, Math.max(1, diceCount));
-    for (let i = 0; i < 12; i++) {
+    const steps = reduceMotion() ? 2 : 14;
+    for (let i = 0; i < steps; i++) {
       dice = Array.from({ length: n }, () => randInt(6) + 1);
-      tick();
-      await wait(55 + i * 6);
+      if (i % 2 === 0) tick();
+      await wait(45 + i * 7);
     }
     dice = Array.from({ length: n }, () => randInt(6) + 1);
     rolling = false;
+    rolled = true;
     beep(660, 0.15, 0.06);
     const sum = dice.reduce((a, b) => a + b, 0);
     log(`🎲 **Zar** (${n}): ${dice.join(" + ")}${n > 1 ? ` = **${sum}**` : ""}`);
@@ -391,15 +440,22 @@
     const b = Math.max(lo, hi);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b - a > 1_000_000_000) return notify("Aralık geçersiz", "info");
     numberSpin = true;
-    for (let i = 0; i < 10; i++) {
+    const steps = reduceMotion() ? 2 : 14;
+    for (let i = 0; i < steps; i++) {
       number = a + randInt(b - a + 1);
       tick();
-      await wait(50 + i * 8);
+      await wait(40 + i * 9);
     }
     number = a + randInt(b - a + 1);
     numberSpin = false;
     beep(660, 0.15, 0.06);
     log(`🔢 **Sayı** (${a}–${b}): **${number}**`);
+  }
+
+  function act() {
+    if (tool === "coin") void flip();
+    else if (tool === "dice") void roll();
+    else if (tool === "number") void pickNumber();
   }
 
   // ---- ortak ----
@@ -424,7 +480,9 @@
       e.preventDefault();
       if (mode === "wheel" || mode === "elim") void spin();
       else if (mode === "draw") void runDraw();
-    } else if (e.key === "Escape" && big) big = false;
+      else if (focused) act();
+    } else if (e.key === "Escape" && focused) tool = null;
+    else if (e.key === "Escape" && big) big = false;
   }
 
   const timeOf = (ms: number) => new Date(ms).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
@@ -439,8 +497,8 @@
 
 <svelte:window onkeydown={onkey} />
 
-<div class="fun" class:big>
-  {#if !big}
+<div class="fun" class:big={big || focused}>
+  {#if !big && !focused}
     <aside class="side">
       <section class="panel list">
         <div class="head">
@@ -640,39 +698,72 @@
         {/if}
       </div>
     {:else}
-      <div class="tools">
-        <div class="tool">
-          <h4><Icon name="coin" size={16} />Yazı-tura</h4>
-          <div class="coin" style:transform="rotateY({flips * 180}deg)" class:flipping>
-            <span class="face front">Y</span><span class="face back">T</span>
-          </div>
-          <b class="big-r">{coin ?? (flipping ? "…" : "")}</b>
-          <button class="btn" disabled={flipping} onclick={() => void flip()}>At</button>
+      {#if !tool}
+        <div class="picker">
+          <button class="pick" onclick={() => (tool = "coin")}>
+            <span class="art"><span class="minicoin">1</span></span>
+            <b>Yazı-tura</b>
+            <span class="sub small">İki seçenek arasında karar ver{tally.Yazı + tally.Tura ? ` · Yazı ${tally.Yazı} – Tura ${tally.Tura}` : ""}</span>
+          </button>
+          <button class="pick" onclick={() => (tool = "dice")}>
+            <span class="art">
+              {#each [5, 3] as d, k (k)}<span class="die mini">{#each PIPS[d] as c (c)}<i style:grid-area="{Math.ceil(c / 3)} / {((c - 1) % 3) + 1}"></i>{/each}</span>{/each}
+            </span>
+            <b>Zar</b>
+            <span class="sub small">1–6 zar at, toplamı görün</span>
+          </button>
+          <button class="pick" onclick={() => (tool = "number")}>
+            <span class="art"><span class="mininum tnum">42</span></span>
+            <b>Sayı seç</b>
+            <span class="sub small">İki sayı arasında rastgele bir tane</span>
+          </button>
         </div>
-        <div class="tool">
-          <h4><Icon name="dice" size={16} />Zar</h4>
-          <div class="dice" class:rolling>
-            {#each dice.length ? dice : Array(Math.min(6, Math.max(1, diceCount))).fill(0) as d, i (i)}
-              <span class="die">{d ? FACES[d - 1] : "·"}</span>
-            {/each}
-          </div>
-          <b class="big-r tnum">{dice.length > 1 && !rolling ? `Toplam ${dice.reduce((a, b) => a + b, 0)}` : ""}</b>
-          <div class="row">
-            <label class="num">Zar sayısı <input type="number" min="1" max="6" bind:value={diceCount} /></label>
-            <button class="btn" disabled={rolling} onclick={() => void roll()}>At</button>
-          </div>
+      {:else}
+        <div class="focus">
+          <button class="btn ghost sm back" onclick={() => (tool = null)} title="Geri (Esc)"><Icon name="back" size={15} />Geri</button>
+
+          {#if tool === "coin"}
+            <div class="coinstage">
+              <div class="toss" bind:this={tossEl}>
+                <div class="coin3d" bind:this={coinEl}>
+                  {#each Array(9) as _, k (k)}<span class="rim" style:transform="translateZ({-k}px)"></span>{/each}
+                  <span class="face yazi"><b>1</b><small>YAZI</small></span>
+                  <span class="face tura"><Icon name="castle" size={54} /><small>TURA</small></span>
+                </div>
+              </div>
+              <span class="shadow" bind:this={shadowEl}></span>
+            </div>
+            <b class="verdict" class:show={!!coin}>{coin ? `${coin}!` : flipping ? "" : "Hazır"}</b>
+            <button class="btn go" disabled={flipping} onclick={() => void flip()}><Icon name="coin" size={18} />{flipping ? "Havada…" : "Parayı at"}</button>
+            <span class="sub small tnum">Yazı {tally.Yazı} · Tura {tally.Tura} · Boşluk tuşu da atar</span>
+          {:else if tool === "dice"}
+            <div class="dicestage" class:rolling>
+              {#each dice as d, k (k)}
+                <span class="die" class:landed={rolled} style:animation-delay="{k * 60}ms">
+                  {#each PIPS[d] as c (c)}<i style:grid-area="{Math.ceil(c / 3)} / {((c - 1) % 3) + 1}"></i>{/each}
+                </span>
+              {/each}
+            </div>
+            <b class="verdict show tnum">{rolled && dice.length > 1 ? `Toplam ${dice.reduce((a, b) => a + b, 0)}` : rolled ? `${dice[0]}` : ""}</b>
+            <div class="row center">
+              <span class="sub small">Zar sayısı</span>
+              <div class="seg">
+                {#each [1, 2, 3, 4, 5, 6] as n (n)}
+                  <button aria-pressed={diceCount === n} disabled={rolling} onclick={() => ((diceCount = n), (dice = Array.from({ length: n }, (_, k) => dice[k] ?? 1 + ((k * 2) % 6))), (rolled = false))}>{n}</button>
+                {/each}
+              </div>
+            </div>
+            <button class="btn go" disabled={rolling} onclick={() => void roll()}><Icon name="dice" size={18} />{rolling ? "Dönüyor…" : "Zarları at"}</button>
+          {:else}
+            <b class="bignum tnum" class:spin={numberSpin}>{number ?? "?"}</b>
+            <div class="row center">
+              <label class="num">En az <input type="number" bind:value={lo} /></label>
+              <label class="num">En çok <input type="number" bind:value={hi} /></label>
+            </div>
+            <button class="btn go" disabled={numberSpin} onclick={() => void pickNumber()}><Icon name="sparkle" size={18} />{numberSpin ? "Seçiliyor…" : "Sayı seç"}</button>
+          {/if}
         </div>
-        <div class="tool">
-          <h4><Icon name="sparkle" size={16} />Sayı seç</h4>
-          <b class="numout tnum">{number ?? "?"}</b>
-          <div class="row">
-            <label class="num"><input type="number" bind:value={lo} aria-label="En az" /></label>
-            <span class="sub">–</span>
-            <label class="num"><input type="number" bind:value={hi} aria-label="En çok" /></label>
-            <button class="btn" disabled={numberSpin} onclick={() => void pickNumber()}>Seç</button>
-          </div>
-        </div>
-      </div>
+      {/if}
     {/if}
   </section>
 </div>
@@ -758,28 +849,66 @@
   .team { border-radius: 12px; padding: 10px 12px; border: 1px solid var(--line); border-top: 3px solid var(--c); background: rgba(255, 255, 255, 0.03); animation: pop 0.3s ease-out both; }
   .team ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 3px; }
 
-  .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; padding: 6px 0; }
-  .tool { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); }
-  .tool h4 { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--gold); font-size: 14px; align-self: flex-start; }
-  .big-r { min-height: 26px; font-family: var(--f-display); font-size: 20px; }
-  .coin { position: relative; width: 96px; height: 96px; transform-style: preserve-3d; transition: transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1); }
-  .face {
-    position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; backface-visibility: hidden;
-    font-family: var(--f-display); font-weight: 800; font-size: 34px; color: #2a2008;
-    background: radial-gradient(circle at 35% 30%, var(--gold-glow), var(--gold) 55%, #a8893f); border: 4px solid #c9a95a;
-    box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.15);
+  .picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; padding: 6px 0; }
+  .pick {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px 18px 22px; text-align: center;
+    border-radius: var(--r-lg); border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); color: var(--text);
+    transition: border-color 0.2s, transform 0.2s, background 0.2s;
   }
-  .face.back { transform: rotateY(180deg); }
-  .dice { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; min-height: 64px; }
-  .die { font-size: 58px; line-height: 1; color: var(--text); }
-  .rolling .die { animation: shake 0.12s linear infinite; color: var(--gold-glow); }
-  .numout { font-family: var(--f-display); font-size: 48px; color: var(--gold-glow); min-height: 58px; }
+  .pick:hover { border-color: var(--gold-dim); background: rgba(227, 194, 112, 0.05); transform: translateY(-2px); }
+  .pick b { font-family: var(--f-display); font-size: 17px; }
+  .art { height: 84px; display: flex; align-items: center; gap: 10px; }
+  .minicoin {
+    width: 70px; height: 70px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--f-display); font-weight: 800; font-size: 30px; color: #3a2c08;
+    background: radial-gradient(circle at 35% 28%, #fff1b8, var(--gold) 52%, #9c7d33); box-shadow: inset 0 0 0 4px #c9a95a, 0 6px 14px rgba(0, 0, 0, 0.4);
+  }
+  .mininum { font-family: var(--f-display); font-weight: 800; font-size: 54px; color: var(--gold-glow); }
+
+  .focus { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 480px; padding: 20px 0; }
+  .back { position: absolute; left: 0; top: 0; }
+  .go { padding: 12px 24px; font-size: 16px; }
+  .center { justify-content: center; }
+  .verdict { font-family: var(--f-display); font-size: 34px; min-height: 44px; color: var(--muted); }
+  .verdict.show { color: var(--gold-glow); animation: pop 0.35s ease-out; }
+
+  /* Para: 9 katlı kenar (kalınlık) + iki yüz; sahnede perspektif. */
+  .coinstage { position: relative; width: 220px; height: 370px; display: grid; place-items: end center; perspective: 900px; }
+  .toss { position: absolute; bottom: 40px; left: 50%; margin-left: -80px; width: 160px; height: 160px; transform-style: preserve-3d; }
+  .coin3d { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transform: rotateX(0deg); }
+  .rim { position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(90deg, #6f5a24, #b39243 50%, #6f5a24); }
+  .face {
+    position: absolute; inset: 0; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    backface-visibility: hidden; color: #3a2c08; font-family: var(--f-display);
+    background: radial-gradient(circle at 34% 26%, #fff3c4 0%, #f0d878 28%, var(--gold) 55%, #a8893f 100%);
+    box-shadow: inset 0 0 0 6px #c9a95a, inset 0 0 0 9px rgba(255, 255, 255, 0.25), inset 0 0 0 12px rgba(120, 95, 35, 0.35);
+  }
+  .face b { font-size: 64px; line-height: 1; font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5); }
+  .face small { font-size: 12px; font-weight: 800; letter-spacing: 0.28em; opacity: 0.75; }
+  .face.yazi { transform: translateZ(1px); }
+  .face.tura { transform: translateZ(-9px) rotateX(180deg); }
+  .shadow { position: absolute; bottom: 22px; width: 150px; height: 22px; border-radius: 50%; background: radial-gradient(rgba(0, 0, 0, 0.6), transparent 70%); opacity: 0.6; }
+
+  /* Zar: noktalı yüz, 3×3 ızgara. */
+  .dicestage { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; min-height: 120px; align-items: center; max-width: 560px; }
+  .die {
+    width: 92px; height: 92px; padding: 14px; border-radius: 18px; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center;
+    background: linear-gradient(145deg, #fbf6ea, #ddd3bd); box-shadow: inset 0 -5px 0 rgba(0, 0, 0, 0.12), inset 0 2px 0 rgba(255, 255, 255, 0.8), 0 10px 22px rgba(0, 0, 0, 0.45);
+  }
+  .die i { width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #4a3b1a, #17130a); }
+  .die.mini { width: 54px; height: 54px; padding: 9px; border-radius: 12px; }
+  .die.mini i { width: 9px; height: 9px; }
+  .rolling .die { animation: tumble 0.32s ease-in-out infinite alternate; }
+  .die.landed { animation: land 0.4s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  .bignum { font-family: var(--f-display); font-size: clamp(72px, 12vw, 130px); line-height: 1; color: var(--gold-glow); text-shadow: 0 0 40px rgba(227, 194, 112, 0.25); transition: opacity 0.15s; }
+  .bignum.spin { opacity: 0.55; }
+  @keyframes tumble { 0% { transform: translateY(0) rotate(-14deg); } 50% { transform: translateY(-22px) rotate(10deg) scale(1.04); } 100% { transform: translateY(0) rotate(18deg); } }
+  @keyframes land { from { transform: translateY(-14px) scale(1.08) rotate(-6deg); } }
 
   .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; overflow: hidden; }
   .confetti i { position: absolute; top: -12px; border-radius: 2px; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(var(--spin)); opacity: 0.9; } }
   @keyframes pop { from { opacity: 0; transform: scale(0.94); } }
-  @keyframes shake { 50% { transform: rotate(8deg) translateY(-2px); } }
   @media (max-width: 1100px) { .wheelbox { grid-template-columns: minmax(0, 1fr); } .info { align-items: stretch; } }
   @media (max-width: 900px) { .fun { grid-template-columns: minmax(0, 1fr); } }
 </style>

@@ -36,7 +36,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   - **Eleme:** her çevirişte ibrenin gösterdiği elenir (dilimi yumuşakça daralır), **son kalan** kazanır; "Otomatik"
     ile son kalana kadar kendisi çevirir. Elenme sırası yanda.
   - **Kura:** N kazanan seç, rastgele **sıraya diz** ya da **takımlara böl**.
-  - **Zar & yazı-tura:** 1–6 zar, yazı-tura, aralıktan sayı.
+  - **Zar & yazı-tura:** üç kart (yazı-tura, zar, sayı seç); birine tıklayınca ekranın ortasında büyür (Geri / Esc).
+    Para havaya atılıp dönerek düşer (3B, kalınlıklı, gölgeli), zarlar noktalı yüzlerle yuvarlanır (1–6 zar, toplam).
 - Rastgelelik kriptografik ve eşit. Tık sesi, kutlama, **Büyük göster** (Discord'da ekran paylaşırken), son sonuçlar ve
   **Discord'a kopyala**. Boşluk tuşu çevirir.
 
