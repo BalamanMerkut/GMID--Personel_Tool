@@ -3,6 +3,7 @@
   // Üzerine gelince sessiz önizleme, tıklayınca büyük görünüm, çift tıklayınca varsayılan programda açılır.
   import { onMount, untrack } from "svelte";
   import { api } from "../api";
+  import { dragOut } from "../dragout";
   import { focus, takeFocus } from "../focus.svelte";
   import { on } from "../bus";
   import ClipTrim from "../components/ClipTrim.svelte";
@@ -285,10 +286,11 @@
                 tabindex="0"
                 onmouseenter={() => enter(c)}
                 onmouseleave={leave}
+                use:dragOut={() => c.path}
                 onclick={() => openView(c)}
                 ondblclick={() => act(api.clips.open(c.id))}
                 onkeydown={(e) => e.key === "Enter" && openView(c)}
-                title={`${label(c)} · çift tıkla aç`}
+                title={`${label(c)} · çift tıkla aç · sürükleyip Discord'a ya da bir klasöre bırakabilirsin`}
               >
                 <div class="th">
                   {#if c.thumb && !broken[c.id]}<img src={src(c.thumb)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else if c.kind === "shot" && !broken[c.id]}<img src={src(c.path)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else}<span class="noth"><Icon name="play" size={22} /></span>{/if}

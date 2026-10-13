@@ -20,6 +20,14 @@ pub async fn uninstall_list(app: AppHandle) -> CmdResult<Vec<Program>> {
     blocking(app, |app| app.state::<Uninstaller>().list()).await
 }
 
+/// Program simgeleri (kimlik → PNG data URL).
+#[tauri::command]
+pub async fn uninstall_icons(
+    app: AppHandle,
+) -> CmdResult<std::collections::HashMap<String, String>> {
+    blocking(app, |app| app.state::<Uninstaller>().icons()).await
+}
+
 /// Programın kendi kaldırıcısını açar.
 #[tauri::command]
 pub fn uninstall_run(u: State<'_, Uninstaller>, id: String) -> CmdResult<()> {

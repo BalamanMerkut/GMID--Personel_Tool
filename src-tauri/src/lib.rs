@@ -8,6 +8,7 @@ mod db;
 mod deals;
 mod dictation;
 mod downloader;
+mod dragout;
 mod drivers;
 mod fps;
 mod gamemode;
@@ -218,6 +219,7 @@ pub fn run() {
             commands::take_pending_route,
             commands::app_info,
             commands::open_data_folder,
+            commands::drag_out,
             commands::open_log,
             commands::backup_now,
             commands::import_background,
@@ -320,6 +322,7 @@ pub fn run() {
             commands::videos::bridge_unpair,
             commands::videos::extension_install,
             commands::uninstall::uninstall_list,
+            commands::uninstall::uninstall_icons,
             commands::uninstall::uninstall_run,
             commands::uninstall::uninstall_state,
             commands::uninstall::uninstall_scan,

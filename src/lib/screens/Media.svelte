@@ -3,6 +3,7 @@
   // görünümünde) ve Videolar (büyük kapaklı kartlar). Çalma, ekran değişse de sürer (alttaki mini oynatıcı).
   import { onMount } from "svelte";
   import { api, formatSize, inTauri } from "../api";
+  import { dragOut } from "../dragout";
   import PlaylistEditor from "../components/PlaylistEditor.svelte";
   import { downloads, formatDuration, siteLabel } from "../downloads.svelte";
   import { shuffle } from "../fun";
@@ -403,7 +404,7 @@
             {#each shown as d, i (d.id)}
               {@const on = isOn(d)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <div class="track" class:on role="listitem" onclick={(e) => fromCard(e, () => clickSong(d))}>
+              <div class="track" class:on role="listitem" use:dragOut={() => d.filePath} onclick={(e) => fromCard(e, () => clickSong(d))}>
                 <span class="tn tnum">{#if on}{@render eq(player.playing)}{:else}{i + 1}{/if}</span>
                 <button class="tthumb" title={on ? (player.playing ? "Duraklat" : "Oynat") : "Çal"} onclick={() => clickSong(d)}>
                   {#if thumbOf(d)}<img src={thumbOf(d)} alt="" loading="lazy" onerror={() => thumbFailed(d)} />{:else}<Icon name="headphones" size={16} />{/if}
@@ -426,7 +427,7 @@
             {#each shown as d (d.id)}
               {@const on = isOn(d)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <article class="cover" class:on onclick={(e) => fromCard(e, () => clickSong(d))}>
+              <article class="cover" class:on use:dragOut={() => d.filePath} onclick={(e) => fromCard(e, () => clickSong(d))}>
                 <div class="cimg">
                   {#if thumbOf(d)}<img src={thumbOf(d)} alt="" loading="lazy" onerror={() => thumbFailed(d)} />{:else}<span class="ph"><Icon name="headphones" size={30} /></span>{/if}
                   {#if on}<span class="badge">{@render eq(player.playing)}</span>{/if}
@@ -489,9 +490,10 @@
             class="card"
             class:on={isOn(d)}
             onclick={(e) => fromCard(e, () => play(d, shown))}
+            use:dragOut={() => d.filePath}
             onmouseenter={() => (hovering = d.id)}
             onmouseleave={() => hovering === d.id && (hovering = null)}
-            title="Oynat"
+            title="Oynat · sürükleyip Discord'a ya da bir klasöre bırakabilirsin"
           >
             <div class="cthumb">
               {#if hovering === d.id && previewable(d) && inTauri}

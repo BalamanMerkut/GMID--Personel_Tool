@@ -20,12 +20,15 @@
   let result = $state<CleanResult | null>(null);
   let error = $state("");
   let showSkipped = $state(false);
+  /** Program simgeleri (kimlik → PNG); liste geldikten sonra arka planda dolar. */
+  let icons = $state<Record<string, string>>({});
   let poll: ReturnType<typeof setInterval> | undefined;
 
   async function load() {
     loading = true;
     programs = await api.uninstall.list().catch(() => []);
     loading = false;
+    icons = await api.uninstall.icons().catch(() => icons);
   }
   onMount(() => void load());
   onDestroy(() => clearInterval(poll));
@@ -170,6 +173,7 @@
       <ul class="plist">
         {#each shown as p (p.id)}
           <li>
+            {@render picon(p, 32)}
             <div class="pt">
               <b title={p.name}>{p.name}</b>
               <span class="sub small">{[p.publisher, p.version].filter(Boolean).join(" · ")}</span>
@@ -186,10 +190,18 @@
   </section>
 </div>
 
+{#snippet picon(p: InstalledProgram, size: number)}
+  {#if icons[p.id]}
+    <img class="picon" src={icons[p.id]} alt="" width={size} height={size} />
+  {:else}
+    <span class="picon ph" style:width="{size}px" style:height="{size}px" style:font-size="{size * 0.45}px" aria-hidden="true">{(p.name.trim()[0] ?? "?").toLocaleUpperCase("tr-TR")}</span>
+  {/if}
+{/snippet}
+
 {#if target}
   <div class="back" role="presentation" onclick={(e) => e.target === e.currentTarget && (step === "confirm" || step === "done" || step === "results" || step === "stuck") && close()}>
     <div class="dlg" role="dialog" aria-label="Program kaldır">
-      <h3><Icon name="trash" size={18} />{target.name}</h3>
+      <h3>{@render picon(target, 24)}{target.name}</h3>
 
       {#if step === "confirm"}
         <p>
@@ -285,8 +297,10 @@
   .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .search { flex: 1; min-width: 200px; background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; color: var(--text); }
   .plist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-  .plist li { display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px auto; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; }
+  .plist li { display: grid; grid-template-columns: 32px minmax(0, 1fr) 90px 90px auto; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; }
   .plist li:hover { background: rgba(255, 255, 255, 0.04); }
+  .picon { flex: none; display: block; object-fit: contain; image-rendering: auto; }
+  .picon.ph { display: grid; place-items: center; border-radius: 8px; background: rgba(255, 255, 255, 0.06); color: var(--muted); font-weight: 700; }
   .pt { display: flex; flex-direction: column; min-width: 0; }
   .pt b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pt .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -318,7 +332,7 @@
   .skipped { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   .skipped li { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.025); }
   @media (max-width: 760px) {
-    .plist li { grid-template-columns: minmax(0, 1fr) auto; }
+    .plist li { grid-template-columns: 32px minmax(0, 1fr) auto; }
     .sz, .dt { display: none; }
   }
 </style>

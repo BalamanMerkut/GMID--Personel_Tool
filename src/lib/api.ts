@@ -72,6 +72,9 @@ export const api = {
   openDataFolder: (sub?: string): Promise<void> =>
     inTauri ? invoke("open_data_folder", { sub: sub ?? null }) : Promise.resolve(),
 
+  /** Dosyaları uygulamadan dışarı sürükler (fare basılıyken çağrılır); bırakılan yere kopyalanır. */
+  dragOut: (paths: string[]): Promise<void> => (inTauri ? invoke("drag_out", { paths }) : Promise.resolve()),
+
   /** Günlük dosyasını (gmid.log) açar. */
   openLog: (): Promise<void> => (inTauri ? invoke("open_log") : Promise.resolve()),
 
@@ -485,6 +488,8 @@ export const api = {
 
   uninstall: {
     list: () => call<InstalledProgram[]>("uninstall_list"),
+    /** Program simgeleri: kimlik → PNG (data URL). */
+    icons: () => call<Record<string, string>>("uninstall_icons"),
     /** Programın kendi kaldırıcısını açar. */
     run: (id: string) => call<void>("uninstall_run", { id }),
     state: (id: string) => call<UninstallState>("uninstall_state", { id }),

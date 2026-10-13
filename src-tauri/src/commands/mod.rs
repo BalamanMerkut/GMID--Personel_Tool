@@ -69,6 +69,12 @@ pub fn app_info(app: AppHandle, dir: State<'_, DataDir>) -> AppInfo {
     }
 }
 
+/// Dosyaları uygulamadan dışarı sürükler (Masaüstü, klasör, Discord…); yalnız kopyalanır.
+#[tauri::command]
+pub fn drag_out(window: tauri::WebviewWindow, paths: Vec<String>) -> CmdResult<()> {
+    crate::dragout::start(&window, paths)
+}
+
 #[tauri::command]
 pub fn open_data_folder(
     app: AppHandle,

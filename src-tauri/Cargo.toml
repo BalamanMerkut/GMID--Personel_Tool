@@ -37,6 +37,7 @@ ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dy
 rustfft = "6"
 flate2 = "1"
 tar = { version = "0.4", default-features = false }
+png = "0.17"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
@@ -56,6 +57,7 @@ windows = { version = "0.62", features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_System_Ole",
     "Win32_System_Performance",
     "Win32_System_Power",
     "Win32_System_Registry",
@@ -64,6 +66,7 @@ windows = { version = "0.62", features = [
     "Win32_UI_Accessibility",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_WindowsAndMessaging",
 ] }

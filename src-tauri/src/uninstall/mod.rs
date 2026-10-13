@@ -4,6 +4,7 @@
 //! `.reg` dosyasına yedeklenir (çift tıklayınca geri yüklenir). Yalnız son taramada bulunan ve kullanıcının
 //! seçtiği öğeler silinebilir.
 
+pub mod icon;
 pub mod reg;
 pub mod rules;
 
@@ -44,6 +45,9 @@ pub struct Program {
     pub size_kb: u64,
     /// "20240131"
     pub date: String,
+    /// Kayıttaki ham `DisplayIcon` ("C:\x\app.exe,0").
+    #[serde(skip)]
+    pub icon: String,
 }
 
 impl Program {
@@ -114,6 +118,7 @@ pub fn list() -> Vec<Program> {
                 location: get("InstallLocation"),
                 uninstall,
                 exe: icon_path(&get("DisplayIcon")),
+                icon: get("DisplayIcon"),
                 size_kb: get("EstimatedSize").parse().unwrap_or(0),
                 date: get("InstallDate"),
                 name,
@@ -194,6 +199,8 @@ pub struct Uninstaller {
     programs: Mutex<Vec<Program>>,
     running: Mutex<Option<(String, Arc<AtomicBool>)>>,
     last_scan: Mutex<Option<Scan>>,
+    /// Simge önbelleği: "kimlik|DisplayIcon" → PNG data URL (yoksa None).
+    icons: Mutex<std::collections::HashMap<String, Option<String>>>,
 }
 
 impl Uninstaller {
@@ -201,6 +208,43 @@ impl Uninstaller {
         let l = list();
         *self.programs.lock().unwrap_or_else(|e| e.into_inner()) = l.clone();
         l
+    }
+
+    /// Program simgeleri (kimlik → PNG data URL). Her simge bir kez çıkarılır, sonra bellekten gelir.
+    pub fn icons(&self) -> std::collections::HashMap<String, String> {
+        use base64::Engine;
+        let programs = self
+            .programs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let mut out = std::collections::HashMap::new();
+        for p in programs {
+            let key = format!("{}|{}", p.id, p.icon);
+            let cached = self
+                .icons
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&key)
+                .cloned();
+            let v = cached.unwrap_or_else(|| {
+                let v = icon::png_for(&p).map(|b| {
+                    format!(
+                        "data:image/png;base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(b)
+                    )
+                });
+                self.icons
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(key, v.clone());
+                v
+            });
+            if let Some(v) = v {
+                out.insert(p.id, v);
+            }
+        }
+        out
     }
 
     fn find(&self, id: &str) -> Result<Program, String> {

@@ -1534,6 +1534,7 @@ dependencies = [
  "chrono",
  "flate2",
  "ort",
+ "png 0.17.16",
  "rusqlite",
  "rustfft",
  "serde",

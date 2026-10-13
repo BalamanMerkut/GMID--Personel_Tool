@@ -784,6 +784,12 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "uninstall_list":
       await wait(400);
       return mockPrograms;
+    case "uninstall_icons": {
+      await wait(300);
+      const tile = (bg: string, t: string) =>
+        "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" rx="14" fill="${bg}"/><text x="32" y="43" font-size="30" font-family="sans-serif" font-weight="700" fill="#fff" text-anchor="middle">${t}</text></svg>`);
+      return { [mockPrograms[0].id]: tile("#e0533d", "C"), [mockPrograms[1].id]: tile("#222", "7z"), [mockPrograms[2].id]: tile("#5865f2", "D") };
+    }
     case "uninstall_run":
       unState = { running: true, removed: false };
       setTimeout(() => (unState = { running: false, removed: true }), 2500);
