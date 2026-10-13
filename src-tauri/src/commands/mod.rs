@@ -105,6 +105,33 @@ pub async fn football_standings(
     .map_err(|e| e.to_string())?
 }
 
+/// Futbol: takım sayfası (kadro, son maçlar, fikstür).
+#[tauri::command]
+pub async fn football_team(
+    app: AppHandle,
+    league: String,
+    id: String,
+) -> CmdResult<crate::football::TeamPage> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri::Manager::state::<crate::football::Football>(&app).team(&league, &id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Futbol: gol ve asist krallığı.
+#[tauri::command]
+pub async fn football_leaders(
+    app: AppHandle,
+    league: String,
+) -> CmdResult<crate::football::Leaders> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri::Manager::state::<crate::football::Football>(&app).leaders(&league)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Dosyaları uygulamadan dışarı sürükler (Masaüstü, klasör, Discord…); yalnız kopyalanır.
 #[tauri::command]
 pub fn drag_out(window: tauri::WebviewWindow, paths: Vec<String>) -> CmdResult<()> {

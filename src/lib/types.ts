@@ -1160,3 +1160,36 @@ export interface FootballGroup {
   name: string;
   rows: FootballRow[];
 }
+
+export interface FootballPlayer {
+  id: string;
+  name: string;
+  jersey: string;
+  /** G kaleci · D defans · M orta saha · F forvet */
+  pos: "G" | "D" | "M" | "F" | "";
+  age: number | null;
+  nation: string;
+  photo: string;
+}
+
+export interface FootballTeamPage {
+  team: FootballTeam;
+  league: string;
+  standing: string;
+  venue: string;
+  players: FootballPlayer[];
+  results: FootballMatch[];
+  fixtures: FootballMatch[];
+}
+
+export interface FootballLeader {
+  name: string;
+  photo: string;
+  team: FootballTeam;
+  value: number;
+}
+
+export interface FootballLeaders {
+  goals: FootballLeader[];
+  assists: FootballLeader[];
+}

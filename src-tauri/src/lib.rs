@@ -225,6 +225,8 @@ pub fn run() {
             commands::football_leagues,
             commands::football_matches,
             commands::football_standings,
+            commands::football_team,
+            commands::football_leaders,
             commands::open_log,
             commands::backup_now,
             commands::import_background,

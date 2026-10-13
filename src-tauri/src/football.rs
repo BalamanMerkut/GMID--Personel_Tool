@@ -167,6 +167,33 @@ fn event_kind(d: &Value) -> Option<&'static str> {
     }
 }
 
+/// Skor: "2", 2 ya da (takım fikstüründe) {"value": 2.0, "displayValue": "2"}.
+fn score_of(v: &Value) -> Option<u32> {
+    let t = if v.is_object() {
+        let d = text(&v["displayValue"]);
+        if d.is_empty() {
+            text(&v["value"])
+        } else {
+            d
+        }
+    } else {
+        text(v)
+    };
+    t.split('.').next()?.trim().parse().ok()
+}
+
+/// Olayın dakikası: "23'" ya da (yazı yoksa) saniyeden ("value": 1380 → "23'").
+fn minute_of(clock: &Value) -> String {
+    let d = text(&clock["displayClock"]);
+    if !d.is_empty() {
+        return d;
+    }
+    match clock["value"].as_f64() {
+        Some(sec) if sec > 0.0 => format!("{}'", (sec / 60.0).ceil() as u32),
+        _ => String::new(),
+    }
+}
+
 /// Bir maç: ESPN `events[]` öğesinden.
 pub fn parse_match(league: &str, ev: &Value) -> Option<Match> {
     let comp = &ev["competitions"][0];
@@ -184,7 +211,7 @@ pub fn parse_match(league: &str, ev: &Value) -> Option<Match> {
         score: if state == "pre" {
             None
         } else {
-            text(&c["score"]).parse().ok()
+            score_of(&c["score"])
         },
         winner: c["winner"].as_bool().unwrap_or(false),
     };
@@ -198,7 +225,7 @@ pub fn parse_match(league: &str, ev: &Value) -> Option<Match> {
                     let tid = text(&d["team"]["id"]);
                     Some(Event {
                         kind: kind.into(),
-                        minute: text(&d["clock"]["displayClock"]),
+                        minute: minute_of(&d["clock"]),
                         player: text(&d["athletesInvolved"][0]["displayName"]),
                         side: if tid == home.team.id { "home" } else { "away" }.into(),
                     })
@@ -303,8 +330,154 @@ pub fn parse_standings(v: &Value) -> Vec<Group> {
     }
 }
 
+/// Kadrodaki oyuncu.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Player {
+    pub id: String,
+    pub name: String,
+    pub jersey: String,
+    /// G (kaleci) | D (defans) | M (orta saha) | F (forvet) | "" (bilinmiyor)
+    pub pos: String,
+    pub age: Option<u32>,
+    pub nation: String,
+    pub photo: String,
+}
+
+/// Takım sayfası: bilgi, kadro, son ve gelecek maçlar.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamPage {
+    pub team: Team,
+    pub league: String,
+    /// "1st in Turkish Super Lig" gibi; yoksa boş.
+    pub standing: String,
+    pub venue: String,
+    pub players: Vec<Player>,
+    pub results: Vec<Match>,
+    pub fixtures: Vec<Match>,
+}
+
+/// Krallık listesinde bir oyuncu (gol, asist).
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Leader {
+    pub name: String,
+    pub photo: String,
+    pub team: Team,
+    pub value: u32,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Leaders {
+    pub goals: Vec<Leader>,
+    pub assists: Vec<Leader>,
+}
+
+/// Mevki kısaltması: ESPN'in adı ya da kısaltmasından (G/D/M/F).
+pub fn position(v: &Value) -> String {
+    let a = text(&v["abbreviation"]).to_uppercase();
+    let n = text(&v["name"]).to_lowercase();
+    let hit = |w: &[&str]| w.iter().any(|x| n.contains(x));
+    if a.starts_with('G') || hit(&["goal"]) {
+        "G"
+    } else if a.starts_with('D') || hit(&["defen", "back"]) {
+        "D"
+    } else if a.starts_with('M') || hit(&["midfield"]) {
+        "M"
+    } else if a.starts_with('F') || a == "ST" || hit(&["forward", "striker", "wing"]) {
+        "F"
+    } else {
+        ""
+    }
+    .into()
+}
+
+fn player(v: &Value) -> Player {
+    Player {
+        id: text(&v["id"]),
+        name: text(&v["displayName"]),
+        jersey: text(&v["jersey"]),
+        pos: position(&v["position"]),
+        age: v["age"].as_u64().map(|a| a as u32),
+        nation: {
+            let c = text(&v["citizenship"]);
+            if c.is_empty() {
+                text(&v["birthPlace"]["country"])
+            } else {
+                c
+            }
+        },
+        photo: text(&v["headshot"]["href"]),
+    }
+}
+
+/// Kadro: düz liste ya da mevkilere göre gruplu (`[{ position, items: [...] }]`).
+pub fn parse_roster(v: &Value) -> Vec<Player> {
+    let mut out = Vec::new();
+    for a in v["athletes"].as_array().into_iter().flatten() {
+        if let Some(items) = a["items"].as_array() {
+            out.extend(items.iter().map(player));
+        } else {
+            out.push(player(a));
+        }
+    }
+    out.retain(|p| !p.name.is_empty());
+    let order = |p: &str| match p {
+        "G" => 0,
+        "D" => 1,
+        "M" => 2,
+        "F" => 3,
+        _ => 4,
+    };
+    out.sort_by_key(|p| (order(&p.pos), p.jersey.parse::<u32>().unwrap_or(999)));
+    out
+}
+
+/// Takımın maçları (fikstür uçları): bitenler yeniden eskiye, gelecekler yakından uzağa.
+pub fn split_schedule(league: &str, v: &Value) -> (Vec<Match>, Vec<Match>) {
+    let all = parse_scoreboard(league, v);
+    let (mut done, mut next): (Vec<Match>, Vec<Match>) =
+        all.into_iter().partition(|m| m.state == "post");
+    done.sort_by(|a, b| b.date.cmp(&a.date));
+    next.sort_by(|a, b| a.date.cmp(&b.date));
+    (done, next)
+}
+
+/// Krallık listesi: `categories[]` içinden adı tutan kategori; oyuncu ve takım çoğu zaman `$ref` bağlantısıdır.
+pub fn leader_refs(v: &Value, want: &str) -> Vec<(u32, String, String)> {
+    let cats = v["categories"].as_array().cloned().unwrap_or_default();
+    let cat = cats.iter().find(|c| {
+        let n = format!("{} {}", text(&c["name"]), text(&c["displayName"])).to_lowercase();
+        n.contains(want)
+    });
+    cat.and_then(|c| c["leaders"].as_array())
+        .map(|l| {
+            l.iter()
+                .take(10)
+                .map(|x| {
+                    (
+                        x["value"].as_f64().unwrap_or(0.0) as u32,
+                        text(&x["athlete"]["$ref"]),
+                        text(&x["team"]["$ref"]),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `$ref` bağlantısı yalnız ESPN'in çekirdek servisine gidebilir (https'e çevrilir).
+pub fn safe_ref(r: &str) -> Option<String> {
+    let r = r.replacen("http://", "https://", 1);
+    r.starts_with("https://sports.core.api.espn.com/")
+        .then_some(r)
+}
+
 const SITE: &str = "https://site.api.espn.com/apis/site/v2/sports/soccer";
 const V2: &str = "https://site.api.espn.com/apis/v2/sports/soccer";
+const CORE: &str = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
 /// Bugün/yakın günler ve canlı maçlar.
 const SHORT: Duration = Duration::from_secs(30);
 /// Geçmiş ve ileri günler, puan durumu.
@@ -440,6 +613,129 @@ impl Football {
         };
         Ok(parse_standings(&v))
     }
+
+    fn get_cached(&self, url: &str, ttl: Duration) -> Result<Value, String> {
+        if let Some(v) = self.cached(url) {
+            return Ok(v);
+        }
+        let v = fetch(url)?;
+        self.store(url, ttl, &v);
+        Ok(v)
+    }
+
+    /// Takım sayfası: kadro, son maçlar ve fikstür aynı anda istenir; gelmeyen bölüm boş kalır.
+    pub fn team(&self, league: &str, id: &str) -> Result<TeamPage, String> {
+        if !known(league) || id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+            return Err("Bilinmeyen takım".into());
+        }
+        let base = format!("{SITE}/{league}/teams/{id}");
+        let urls = [
+            base.clone(),
+            format!("{base}/roster"),
+            format!("{base}/schedule"),
+            format!("{base}/schedule?fixture=true"),
+        ];
+        let got: Vec<Result<Value, String>> = std::thread::scope(|s| {
+            let hs: Vec<_> = urls
+                .iter()
+                .map(|u| s.spawn(move || self.get_cached(u, LONG)))
+                .collect();
+            hs.into_iter()
+                .map(|h| {
+                    h.join()
+                        .unwrap_or_else(|_| Err("İstek yarıda kaldı".into()))
+                })
+                .collect()
+        });
+        if got.iter().all(|r| r.is_err()) {
+            return Err(got
+                .into_iter()
+                .find_map(|r| r.err())
+                .unwrap_or_else(|| "Takım bilgisi alınamadı".into()));
+        }
+        let empty = Value::Null;
+        let val = |i: usize| got[i].as_ref().unwrap_or(&empty);
+        let info = &val(0)["team"];
+        let (mut results, mut fixtures) = split_schedule(league, val(2));
+        let (r2, f2) = split_schedule(league, val(3));
+        for m in r2 {
+            if !results.iter().any(|x| x.id == m.id) {
+                results.push(m);
+            }
+        }
+        for m in f2 {
+            if !fixtures.iter().any(|x| x.id == m.id) {
+                fixtures.push(m);
+            }
+        }
+        results.sort_by(|a, b| b.date.cmp(&a.date));
+        fixtures.sort_by(|a, b| a.date.cmp(&b.date));
+        results.truncate(10);
+        fixtures.truncate(8);
+        let mut t = team(info);
+        if t.id.is_empty() {
+            t.id = id.to_string();
+        }
+        Ok(TeamPage {
+            team: t,
+            league: league.into(),
+            standing: text(&info["standingSummary"]),
+            venue: text(&info["venue"]["fullName"]),
+            players: parse_roster(val(1)),
+            results,
+            fixtures,
+        })
+    }
+
+    /// Gol ve asist krallığı (ilk 10). Oyuncu ve takım bilgileri ayrı bağlantılardan aynı anda alınır.
+    pub fn leaders(&self, league: &str) -> Result<Leaders, String> {
+        if !known(league) {
+            return Err("Bilinmeyen lig".into());
+        }
+        let url = format!("{CORE}/{league}/leaders");
+        let v = self.get_cached(&url, LONG)?;
+        let lists = [leader_refs(&v, "goal"), leader_refs(&v, "assist")];
+        let refs: Vec<String> = lists
+            .iter()
+            .flatten()
+            .flat_map(|(_, a, t)| [a.clone(), t.clone()])
+            .filter_map(|r| safe_ref(&r))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let resolved: HashMap<String, Value> = std::thread::scope(|s| {
+            let hs: Vec<_> = refs
+                .iter()
+                .map(|r| s.spawn(move || (r.clone(), self.get_cached(r, LONG * 6))))
+                .collect();
+            hs.into_iter()
+                .filter_map(|h| h.join().ok())
+                .filter_map(|(r, v)| v.ok().map(|v| (r, v)))
+                .collect()
+        });
+        let build = |list: &[(u32, String, String)]| -> Vec<Leader> {
+            list.iter()
+                .filter_map(|(value, a, t)| {
+                    let ath = resolved.get(&safe_ref(a)?)?;
+                    let tm = safe_ref(t)
+                        .and_then(|t| resolved.get(&t))
+                        .map(team)
+                        .unwrap_or_default();
+                    Some(Leader {
+                        name: text(&ath["displayName"]),
+                        photo: text(&ath["headshot"]["href"]),
+                        team: tm,
+                        value: *value,
+                    })
+                })
+                .filter(|l| !l.name.is_empty())
+                .collect()
+        };
+        Ok(Leaders {
+            goals: build(&lists[0]),
+            assists: build(&lists[1]),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -558,5 +854,93 @@ mod tests {
             .unwrap()
             .is_empty());
         assert!(f.standings("x").is_err());
+    }
+
+    #[test]
+    fn minutes_and_object_scores() {
+        assert_eq!(minute_of(&json!({ "value": 1380.0 })), "23'");
+        assert_eq!(
+            minute_of(&json!({ "value": 1380.0, "displayClock": "23'" })),
+            "23'"
+        );
+        assert_eq!(minute_of(&json!({})), "");
+        assert_eq!(
+            score_of(&json!({ "value": 2.0, "displayValue": "2" })),
+            Some(2)
+        );
+        assert_eq!(score_of(&json!({ "value": 3.0 })), Some(3));
+        assert_eq!(score_of(&json!("1")), Some(1));
+        assert_eq!(score_of(&json!(null)), None);
+    }
+
+    #[test]
+    fn roster_flat_and_grouped() {
+        let flat = json!({ "athletes": [
+            { "id": "9", "displayName": "M. Icardi", "jersey": "9", "age": 32, "citizenship": "Argentina",
+              "position": { "name": "Forward", "abbreviation": "F" }, "headshot": { "href": "https://x/9.png" } },
+            { "id": "1", "displayName": "F. Muslera", "jersey": "1", "position": { "name": "Goalkeeper", "abbreviation": "G" } },
+            { "id": "4", "displayName": "D. Sanchez", "jersey": "6", "position": { "name": "Center Back" } }
+        ]});
+        let r = parse_roster(&flat);
+        let names: Vec<_> = r
+            .iter()
+            .map(|p| (p.pos.as_str(), p.name.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [("G", "F. Muslera"), ("D", "D. Sanchez"), ("F", "M. Icardi")]
+        );
+        assert_eq!(r[2].age, Some(32));
+        assert_eq!(r[2].nation, "Argentina");
+        assert_eq!(r[2].photo, "https://x/9.png");
+        let grouped = json!({ "athletes": [
+            { "position": "Midfielders", "items": [ { "id": "8", "displayName": "L. Torreira", "jersey": "34", "position": { "abbreviation": "M" } } ] }
+        ]});
+        assert_eq!(parse_roster(&grouped)[0].pos, "M");
+        assert!(parse_roster(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn schedule_is_split() {
+        let ev = |id: &str, date: &str, state: &str| {
+            json!({ "id": id, "date": date, "competitions": [{
+            "status": { "type": { "name": "", "state": state } },
+            "competitors": [
+              { "homeAway": "home", "score": { "value": 1.0, "displayValue": "1" }, "team": { "id": "1", "displayName": "A" } },
+              { "homeAway": "away", "score": { "value": 0.0, "displayValue": "0" }, "team": { "id": "2", "displayName": "B" } } ] }] })
+        };
+        let v = json!({ "events": [ev("a", "2026-09-01T18:00Z", "post"), ev("b", "2026-10-01T18:00Z", "post"), ev("c", "2026-11-01T18:00Z", "pre")] });
+        let (done, next) = split_schedule("tur.1", &v);
+        assert_eq!(
+            done.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            ["b", "a"]
+        );
+        assert_eq!(done[0].home.score, Some(1));
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].home.score, None);
+    }
+
+    #[test]
+    fn leaders_and_refs() {
+        let v = json!({ "categories": [
+            { "name": "goalsLeaders", "displayName": "Goals", "leaders": [
+                { "value": 9.0, "athlete": { "$ref": "http://sports.core.api.espn.com/v2/sports/soccer/leagues/tur.1/seasons/2025/athletes/1" },
+                  "team": { "$ref": "http://sports.core.api.espn.com/v2/sports/soccer/leagues/tur.1/seasons/2025/teams/2" } } ] },
+            { "name": "assistsLeaders", "displayName": "Assists", "leaders": [] }
+        ]});
+        let g = leader_refs(&v, "goal");
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].0, 9);
+        assert!(leader_refs(&v, "assist").is_empty());
+        assert_eq!(
+            safe_ref(&g[0].1).as_deref(),
+            Some("https://sports.core.api.espn.com/v2/sports/soccer/leagues/tur.1/seasons/2025/athletes/1")
+        );
+        // Başka bir adrese asla gidilmez.
+        assert_eq!(safe_ref("https://evil.example/x"), None);
+        assert_eq!(safe_ref("file:///C:/x"), None);
+        let f = Football::default();
+        assert!(f.team("tur.1", "../1").is_err());
+        assert!(f.leaders("x").is_err());
     }
 }

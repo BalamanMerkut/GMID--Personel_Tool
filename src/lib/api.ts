@@ -29,7 +29,9 @@ function browserStore(): Record<string, string> {
 
 import type {
   FootballGroup,
+  FootballLeaders,
   FootballMatch,
+  FootballTeamPage,
   CleanResult, InstalledProgram,
   ProgramList, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
@@ -80,6 +82,8 @@ export const api = {
     /** Günler: "YYYYMMDD". */
     matches: (leagues: string[], days: string[]) => call<FootballMatch[]>("football_matches", { leagues, days }),
     standings: (league: string) => call<FootballGroup[]>("football_standings", { league }),
+    team: (league: string, id: string) => call<FootballTeamPage>("football_team", { league, id }),
+    leaders: (league: string) => call<FootballLeaders>("football_leaders", { league }),
   },
 
   /** Dosyaları uygulamadan dışarı sürükler (fare basılıyken çağrılır); bırakılan yere kopyalanır. */

@@ -810,6 +810,35 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       const want = a.leagues as string[];
       return all.filter((m) => want.includes(m.league));
     }
+    case "football_team": {
+      await wait(300);
+      const t = (id: string, name: string) => ({ id, name, short: name, logo: "" });
+      const side = (team: ReturnType<typeof t>, score: number | null, winner = false) => ({ team, score, winner });
+      const pl = (id: string, name: string, jersey: string, pos: string, age: number, nation: string) => ({ id, name, jersey, pos, age, nation, photo: "" });
+      return {
+        team: t("1", "Galatasaray"), league: a.league, standing: "1st in Turkish Super Lig", venue: "RAMS Park",
+        players: [pl("1", "Uğurcan Çakır", "1", "G", 29, "Turkey"), pl("2", "Günay Güvenç", "19", "G", 34, "Turkey"), pl("3", "Davinson Sánchez", "6", "D", 29, "Colombia"),
+          pl("4", "Abdülkerim Bardakcı", "42", "D", 31, "Turkey"), pl("5", "Wilfried Singo", "90", "D", 24, "Côte d'Ivoire"), pl("6", "Lucas Torreira", "34", "M", 29, "Uruguay"),
+          pl("7", "Gabriel Sara", "8", "M", 26, "Brazil"), pl("8", "Barış Alper Yılmaz", "53", "F", 25, "Turkey"), pl("9", "Victor Osimhen", "45", "F", 26, "Nigeria"), pl("10", "Mauro Icardi", "9", "F", 32, "Argentina")],
+        results: [
+          { id: "r1", league: a.league, date: "2026-10-05T17:00Z", state: "post", status: "MS", home: side(t("1", "Galatasaray"), 3, true), away: side(t("2", "Konyaspor"), 1), events: [] },
+          { id: "r2", league: a.league, date: "2026-09-28T17:00Z", state: "post", status: "MS", home: side(t("3", "Fenerbahçe"), 1), away: side(t("1", "Galatasaray"), 1), events: [] },
+          { id: "r3", league: a.league, date: "2026-09-21T17:00Z", state: "post", status: "MS", home: side(t("1", "Galatasaray"), 0), away: side(t("4", "Beşiktaş"), 2, true), events: [] },
+        ],
+        fixtures: [
+          { id: "f1", league: a.league, date: "2026-10-19T17:00Z", state: "pre", status: "", home: side(t("5", "Trabzonspor"), null), away: side(t("1", "Galatasaray"), null), events: [] },
+          { id: "f2", league: "uefa.champions", date: "2026-10-22T19:00Z", state: "pre", status: "", home: side(t("1", "Galatasaray"), null), away: side(t("6", "Bayern Munich"), null), events: [] },
+        ],
+      };
+    }
+    case "football_leaders": {
+      await wait(300);
+      const L = (name: string, team: string, value: number) => ({ name, photo: "", team: { id: team, name: team, short: team, logo: "" }, value });
+      return {
+        goals: [L("Victor Osimhen", "Galatasaray", 9), L("Edin Dzeko", "Fenerbahçe", 7), L("Ciro Immobile", "Beşiktaş", 6), L("Paul Onuachu", "Trabzonspor", 5), L("Romulo", "Göztepe", 5)],
+        assists: [L("Dušan Tadić", "Fenerbahçe", 6), L("Gabriel Sara", "Galatasaray", 5), L("Rafa Silva", "Beşiktaş", 4)],
+      };
+    }
     case "football_standings": {
       await wait(300);
       const names = ["Galatasaray", "Fenerbahçe", "Samsunspor", "Beşiktaş", "Göztepe", "Trabzonspor", "Başakşehir", "Kocaelispor", "Gaziantep FK", "Alanyaspor", "Rizespor", "Konyaspor", "Kasımpaşa", "Antalyaspor", "Eyüpspor", "Kayserispor", "Gençlerbirliği", "Karagümrük"];
