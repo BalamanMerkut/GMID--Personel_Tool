@@ -1008,6 +1008,10 @@ kullanmaya başlarsın, eksikleri yaşarken görürsün. Zor modüller (video in
   GMID Discord'una duyuru (bot), katılacaklar "Varım/Yokum" der, saati gelince katılanlara GMID hatırlatıcısı ve
   oyun içi panelde geri sayım; kaç kişi olduğuna göre Çark & Çekiliş'teki dengeli takımlar tek tıkla. Ortak takvim
   ve katılım listesi sunucuda tutulacağı için VDS ile birlikte.
+- ⏸ **Disk temizliği (2026-10-13: kullanıcı "şimdilik kalsın" dedi):** yapılırsa kurallar: yalnız Windows'un geçici
+  klasörleri (`%TEMP%`, `Windows\Temp`, Windows Update indirme önbelleği, küçük resim önbelleği, hata dökümleri) ya da
+  Windows'un Disk Temizleme altyapısı; yalnız 7 günden eski ve kullanılmayan dosyalar; önce liste ve boyut, onaysız
+  silme yok; İndirilenler, oyun klasörleri, klipler ve belgelere asla dokunulmaz.
 - 💡 PlayStation Store ve Microsoft Store **indirimleri** için anahtarsız resmî kaynak yok; şimdilik yalnız ücretsizleri
   geliyor. Güvenilir bir kaynak bulunursa Fırsatlar'a eklenir.
 
