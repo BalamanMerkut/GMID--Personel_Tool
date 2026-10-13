@@ -291,6 +291,36 @@ impl Downloader {
         running.values().map(|r| r.live.clone()).collect()
     }
 
+    /// Çözümlemeyi önbelleğe koyar. Sitenin verdiği asıl adres (ör. `…&t=10s` ya da `youtu.be/…` yerine
+    /// `youtube.com/watch?v=…`) farklıysa onunla da: eklenti "İndir"de bu adresi gönderir, video ikinci kez
+    /// çözümlenmesin (birkaç saniyelik bekleme).
+    fn remember_probe(
+        &self,
+        key: &str,
+        url: &str,
+        whole_list: bool,
+        ctx: &Context,
+        parsed: &Parsed,
+    ) {
+        let canonical = match parsed {
+            Parsed::Video(p) => p.url.as_str(),
+            Parsed::Playlist(p) => p.url.as_str(),
+        };
+        let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        probes.push((now, key.to_string(), parsed.clone()));
+        if !canonical.is_empty() && canonical != url {
+            let alt = format!(
+                "{whole_list}|{canonical}|{}",
+                ctx.referer.as_deref().unwrap_or("")
+            );
+            probes.push((now, alt, parsed.clone()));
+        }
+        while probes.len() > 40 {
+            probes.remove(0);
+        }
+    }
+
     fn cached_probe(&self, key: &str) -> Option<Parsed> {
         let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
         probes.retain(|(t, _, _)| t.elapsed() < PROBE_CACHE);
@@ -368,11 +398,7 @@ impl Downloader {
                 p.title = t.trim().chars().take(200).collect();
             }
         }
-        let mut probes = self.probes.lock().unwrap_or_else(|e| e.into_inner());
-        probes.push((Instant::now(), key, parsed.clone()));
-        if probes.len() > 30 {
-            probes.remove(0);
-        }
+        self.remember_probe(&key, url, whole_list, ctx, &parsed);
         Ok(parsed)
     }
 
@@ -1156,6 +1182,26 @@ fn wait_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probe_is_cached_under_canonical_url_too() {
+        let json = br#"{"id":"abc123","title":"Deneme","uploader":"GMID","extractor_key":"Youtube",
+            "webpage_url":"https://www.youtube.com/watch?v=abc123","duration":100,
+            "formats":[{"format_id":"18","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":360,"tbr":500,"protocol":"https"}]}"#;
+        let typed = "https://youtu.be/abc123?t=10";
+        let parsed = ytdlp::parse_any(json, typed).unwrap();
+        let d = Downloader::default();
+        let ctx = Context::default();
+        d.remember_probe(&format!("false|{typed}|"), typed, false, &ctx, &parsed);
+        // Eklentinin "İndir"de gönderdiği asıl adres de önbellekte: ikinci yt-dlp çalışmaz.
+        assert!(d
+            .cached_probe("false|https://www.youtube.com/watch?v=abc123|")
+            .is_some());
+        assert!(d.cached_probe(&format!("false|{typed}|")).is_some());
+        assert!(d
+            .cached_probe("true|https://www.youtube.com/watch?v=abc123|")
+            .is_none());
+    }
 
     #[test]
     fn partials_are_removed_but_finished_files_kept() {

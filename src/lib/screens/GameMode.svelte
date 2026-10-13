@@ -22,6 +22,10 @@
   let fps = $state<FpsStatus | null>(null);
   let fpsBusy = $state(false);
   let borderless = $state<string[]>([]);
+  /** Panel açılınca: auto (oyuna göre) | interactive (fare hemen panelde) | glance (fare oyunda kalır). */
+  let panelMode = $state(getJson<string>("panel.mode", "auto"));
+  /** Fare oyundayken panele geçiren tuş. */
+  let panelGrab = $state(getJson<string>("panel.grab", "middle"));
 
   async function setBorderless(exe: string, on: boolean) {
     if (!exe) return;
@@ -163,6 +167,27 @@
       (anti-cheat güvenli). Panelin oyunun üstünde görünmesi için oyun <b>kenarlıksız</b> ya da <b>pencereli</b>
       olmalı: “Tam ekran (özel)” modunda Windows hiçbir pencereyi oyunun üstünde göstermez ve oyun odak gidince küçülür.
     </p>
+    <div class="line">
+      <div>
+        <b>Panel açılınca fare</b>
+        <span class="sub small">
+          Fare oyunda kalırsa panele geçmek için seçtiğin tuşa bas. Odak gidince küçülen (özel tam ekran) oyunlarda fare
+          kendiliğinden oyunda kalır.
+        </span>
+      </div>
+      <div class="row">
+        <select value={panelMode} onchange={(e) => void setJson("panel.mode", (panelMode = e.currentTarget.value))} aria-label="Panel açılınca">
+          <option value="auto">Kendiliğinden (önerilen)</option>
+          <option value="interactive">Hemen panele geçsin</option>
+          <option value="glance">Oyunda kalsın</option>
+        </select>
+        <select value={panelGrab} onchange={(e) => void setJson("panel.grab", (panelGrab = e.currentTarget.value))} aria-label="Panele geçiren tuş">
+          <option value="middle">Orta tuşla panele geç</option>
+          <option value="left">Sol tıkla panele geç</option>
+          <option value="off">Yalnız düğmeyle</option>
+        </select>
+      </div>
+    </div>
     <div class="line col">
       <div>
         <b>Kenarlıksız tam ekran</b>

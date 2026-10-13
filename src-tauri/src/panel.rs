@@ -6,7 +6,8 @@
 //! - **Etkileşim** (Shift+Tab gibi): panel odağı alır, oyun fareyi bırakır; kenarlıksız/pencereli oyunlar arkada
 //!   görünür kalır. Kendiliğinden kip, oyun özel tam ekranda değilse bunu seçer.
 //! - **Bakış**: panel odak almaz, oyun önde kalır (özel tam ekranda odak gidince oyunlar küçülür). Fare, oyunun
-//!   menüsü açıkken (imleç görünürken) tıklayabilir; "Fareyi serbest bırak" ile etkileşime geçilir.
+//!   menüsü açıkken (imleç görünürken) tıklayabilir. Fare oyunda kilitli olduğundan panele geçmek için farenin
+//!   **orta tuşu** (ayardan sol tık) kullanılır: panel açıkken tuş izlenir (kanca yok, yalnız tuş durumu okunur).
 //!
 //! Etkileşim kipinde oyun yine de küçülürse (bazı oyunlar odak gidince kendini küçültür) hemen geri getirilir,
 //! panel bakış kipine geçer ve bu oyun hatırlanır: bir dahaki sefere doğrudan bakış kipinde açılır.
@@ -14,7 +15,7 @@
 //! küçültmesin diye.
 
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -23,6 +24,8 @@ pub const PANEL: &str = "panel";
 const GLANCE_KEY: &str = "panel.glanceExes";
 /// auto | interactive | glance
 const MODE_KEY: &str = "panel.mode";
+/// Bakış kipinde fareyi panele geçiren tuş: middle | left | off
+const GRAB_KEY: &str = "panel.grab";
 
 /// Ekran dikdörtgeni (fiziksel piksel): x, y, genişlik, yükseklik.
 type Rect = (i32, i32, u32, u32);
@@ -34,6 +37,8 @@ pub struct Panel {
     previous: Mutex<Option<isize>>,
     /// Panel odak aldıysa (etkileşim kipi ya da not yazmak için).
     focused: AtomicBool,
+    /// Her açılışta artar: eski açılışın tuş izleyicisi kendini bitirsin.
+    opened: AtomicU32,
 }
 
 /// Arayüze: hangi kipte açıldı ve neden.
@@ -50,6 +55,8 @@ pub struct OpenInfo {
     pub exe: Option<String>,
     /// Bu oyun kenarlıksız tam ekran listesinde.
     pub borderless: bool,
+    /// Bakış kipinde fareyi panele geçiren tuş: middle | left | off
+    pub grab: String,
 }
 
 fn window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
@@ -102,6 +109,7 @@ pub fn show(app: &AppHandle) {
     let state = app.state::<Panel>();
     *state.previous.lock().unwrap_or_else(|e| e.into_inner()) = prev;
     state.focused.store(false, Ordering::Relaxed);
+    let opened = state.opened.fetch_add(1, Ordering::Relaxed) + 1;
 
     let exclusive = exclusive_fullscreen();
     let exe = prev.and_then(pid_of).and_then(exe_name);
@@ -124,10 +132,14 @@ pub fn show(app: &AppHandle) {
         minimizes: remembered,
         exe: exe.clone(),
         borderless,
+        grab: grab_setting(app),
     };
     if exclusive {
         // Özel tam ekranda panel görünmez: kullanıcıya bir kez nedenini ve çaresini söyle.
         explain_fullscreen(app, exe.as_deref());
+    }
+    if !interactive {
+        watch_grab(app, opened);
     }
 
     let app2 = app.clone();
@@ -164,6 +176,7 @@ pub fn show(app: &AppHandle) {
                     app.state::<Panel>().focused.store(false, Ordering::Relaxed);
                     restore_focus(prev);
                     explain_fullscreen(&app, exe.as_deref());
+                    watch_grab(&app, opened);
                     let _ = tauri::Emitter::emit_to(
                         &app,
                         PANEL,
@@ -174,6 +187,7 @@ pub fn show(app: &AppHandle) {
                             minimizes: true,
                             exe: exe.clone(),
                             borderless: true,
+                            grab: grab_setting(&app),
                         },
                     );
                 }
@@ -297,7 +311,8 @@ fn pid_of(_h: isize) -> Option<u32> {
     None
 }
 
-/// Klavye ve fare odağı (etkileşim kipi, ya da bakış kipinde not yazmak için).
+/// Klavye ve fare odağı (etkileşim kipi, ya da bakış kipinde not yazmak için). Panel öne geçer ve oyunun fareyi
+/// pencereye kilitlemesi (ClipCursor) kaldırılır: imleç panelde serbest dolaşır.
 pub fn take_focus(app: &AppHandle) {
     let Some(w) = app.get_webview_window(PANEL) else {
         return;
@@ -307,7 +322,102 @@ pub fn take_focus(app: &AppHandle) {
     }
     set_activatable(&w, true);
     let _ = w.set_focus();
+    force_foreground(&w);
 }
+
+/// Bakış kipinde fareyi panele geçiren tuş (Windows sanal tuş kodu); kapalıysa None.
+fn grab_setting(app: &AppHandle) -> String {
+    app.state::<crate::db::Db>()
+        .setting_json(GRAB_KEY)
+        .unwrap_or_else(|| "middle".into())
+}
+
+fn grab_button(app: &AppHandle) -> Option<i32> {
+    match grab_setting(app).as_str() {
+        "left" => Some(0x01), // VK_LBUTTON
+        "off" => None,
+        _ => Some(0x04), // VK_MBUTTON
+    }
+}
+
+/// Bakış kipinde panel açıkken seçilen fare tuşunu izler: basılınca panel fareyi alır. Kanca kurulmaz; yalnız
+/// tuşun durumu 25 ms'de bir okunur ve panel kapanınca (ya da odak alınca) izleme biter.
+fn watch_grab(app: &AppHandle, opened: u32) {
+    let Some(vk) = grab_button(app) else {
+        return;
+    };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let state = app.state::<Panel>();
+        // Açılış anında basılıysa bırakılmasını bekle (yanlışlıkla hemen geçmesin).
+        let mut was = button_down(vk);
+        for _ in 0..(20 * 60 * 40) {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            if state.opened.load(Ordering::Relaxed) != opened
+                || state.focused.load(Ordering::Relaxed)
+                || !app
+                    .get_webview_window(PANEL)
+                    .is_some_and(|w| w.is_visible().unwrap_or(false))
+            {
+                return;
+            }
+            let down = button_down(vk);
+            if down && !was {
+                interact(&app);
+                let _ = tauri::Emitter::emit_to(&app, PANEL, "panel-grabbed", ());
+                return;
+            }
+            was = down;
+        }
+    });
+}
+
+#[cfg(windows)]
+fn button_down(vk: i32) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 }
+}
+
+#[cfg(not(windows))]
+fn button_down(_vk: i32) -> bool {
+    false
+}
+
+/// Panel gerçekten öne geçsin (Windows arka plandan öne geçmeyi bazen engeller) ve imleç kilidi kalksın.
+#[cfg(windows)]
+fn force_foreground(w: &WebviewWindow) {
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, ClipCursor, GetForegroundWindow, GetWindowThreadProcessId,
+        SetForegroundWindow,
+    };
+    let Ok(hwnd) = w.hwnd() else {
+        return;
+    };
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg != hwnd {
+            let theirs = GetWindowThreadProcessId(fg, None);
+            let mine = GetCurrentThreadId();
+            let attach = theirs != 0 && theirs != mine;
+            if attach {
+                let _ = AttachThreadInput(mine, theirs, true);
+            }
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = SetFocus(Some(hwnd));
+            if attach {
+                let _ = AttachThreadInput(mine, theirs, false);
+            }
+        }
+        // Oyun imleci kendi penceresine kilitlediyse kaldır.
+        let _ = ClipCursor(None);
+    }
+}
+
+#[cfg(not(windows))]
+fn force_foreground(_w: &WebviewWindow) {}
 
 /// Bakış kipinden etkileşime: "Fareyi serbest bırak".
 pub fn interact(app: &AppHandle) {

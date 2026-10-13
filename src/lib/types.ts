@@ -874,6 +874,8 @@ export interface PanelOpen {
   exe: string | null;
   /** Oyun kenarlıksız tam ekran listesinde. */
   borderless: boolean;
+  /** Bakış kipinde fareyi panele geçiren tuş. */
+  grab?: "middle" | "left" | "off";
 }
 
 export interface FpsStatus {

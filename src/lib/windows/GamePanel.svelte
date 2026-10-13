@@ -46,6 +46,9 @@
     exe: params.has("exclusive") ? "hl.exe" : null,
     borderless: false,
   });
+  const grabHint = $derived(
+    openInfo.grab === "left" ? "sol tıkla." : openInfo.grab === "off" ? "aşağıdaki düğmeyi kullan:" : "farenin orta tuşuna (tekerleğe) bas.",
+  );
   let fpsBusy = $state(false);
   /** Zamanı gelen uyarılar (oyundayken pencere yerine panelde). */
   let alarmReminders: Reminder[] = $state([]);
@@ -303,6 +306,8 @@
         startPerf();
       }),
       on("panel-close", () => stopPerf()),
+      // Orta tuşa (ya da seçilen tuşa) basılınca panel fareyi aldı.
+      on("panel-grabbed", () => (openInfo = { ...openInfo, mode: "interactive" })),
       on("panel-alarm", () => {
         alarmAuto = true;
         void loadAlarms();
@@ -413,7 +418,7 @@
     {#if openInfo.mode === "glance"}
       <div class="hint">
         <Icon name="info" size={16} />
-        <span>Oyun önde, fare oyunda. Panelde bir şeye tıklamak için:</span>
+        <span>Oyun önde, fare oyunda. Fareyi panele almak için {grabHint}</span>
         <button class="btn sm" onclick={() => (api.panel.interact(), (openInfo = { ...openInfo, mode: "interactive" }))}>
           <Icon name="arrow" size={14} />Fareyi serbest bırak
         </button>

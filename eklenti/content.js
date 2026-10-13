@@ -48,6 +48,13 @@
   const panel = root.querySelector(".panel");
   const body = root.querySelector(".body");
   root.querySelector(".x").addEventListener("click", () => (panel.hidden = true));
+  // Panelin dışında bir yere tıklayınca ya da Esc ile kapanır (× düğmesine gerek kalmadan).
+  document.addEventListener("pointerdown", (e) => {
+    if (!panel.hidden && !e.composedPath().includes(host)) panel.hidden = true;
+  }, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !panel.hidden) panel.hidden = true;
+  }, true);
 
   const send = (msg) => new Promise((resolve, reject) =>
     chrome.runtime.sendMessage(msg, (r) => {

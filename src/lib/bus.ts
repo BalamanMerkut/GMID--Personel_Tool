@@ -35,6 +35,7 @@ export type AppEvent =
   | "update"
   | "deals"
   | "panel-close"
+  | "panel-grabbed"
   | "community"
   | "alarm-changed"
   | "panel-alarm"
