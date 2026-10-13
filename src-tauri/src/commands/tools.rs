@@ -104,6 +104,7 @@ fn reminders_changed(app: &AppHandle) {
     app.state::<Scheduler>().poke();
     let _ = app.emit("reminders-changed", ());
     let _ = app.emit_to(overlay::ALERTS, "alerts-changed", ());
+    crate::alarm::changed(app);
 }
 
 #[tauri::command]
@@ -157,6 +158,7 @@ fn timers_changed(app: &AppHandle) {
     app.state::<Scheduler>().poke();
     let _ = app.emit("timers-changed", ());
     let _ = app.emit_to(overlay::ALERTS, "alerts-changed", ());
+    crate::alarm::changed(app);
 }
 
 #[tauri::command]
@@ -261,4 +263,71 @@ pub fn alerts_fit(app: AppHandle, height: f64) {
 #[tauri::command]
 pub fn alerts_close(app: AppHandle) {
     overlay::close_alerts(&app);
+}
+
+/// Uyarı melodisini susturur (pencere açık kalır).
+#[tauri::command]
+pub fn alarm_mute(app: AppHandle) {
+    crate::alarm::stop(&app);
+}
+
+/// Uyarı penceresini kapatır (uyarılar yerinde kalır; sağ altta ya da Hatırlatıcılar'da görünür).
+#[tauri::command]
+pub fn alarm_hide(app: AppHandle) {
+    crate::alarm::stop(&app);
+    if let Some(w) = app.get_webview_window(crate::alarm::ALARM) {
+        let _ = w.hide();
+    }
+}
+
+/// Ayarlardan: melodiyi bir kez dinlet (5 sn).
+#[tauri::command]
+pub fn alarm_preview(app: AppHandle) {
+    crate::alarm::play(&app);
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        crate::alarm::stop(&app);
+    });
+}
+
+/// Zamanlı kapatma.
+#[tauri::command]
+pub fn power_status(app: AppHandle) -> Option<crate::power::Plan> {
+    app.state::<crate::power::Power>().status()
+}
+
+#[tauri::command]
+pub fn power_schedule(
+    app: AppHandle,
+    action: String,
+    minutes: f64,
+) -> CmdResult<crate::power::Plan> {
+    crate::power::schedule(&app, &action, minutes)
+}
+
+#[tauri::command]
+pub fn power_cancel(app: AppHandle) {
+    crate::power::cancel(&app);
+}
+
+#[tauri::command]
+pub fn power_now(app: AppHandle) -> CmdResult<()> {
+    crate::power::now(&app)
+}
+
+/// Sistem özellikleri (önbellekten; `refresh` ile yeniden okur).
+#[tauri::command]
+pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<Vec<crate::sysinfo::Section>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::sysinfo::SysInfo>().get(refresh)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Sistem özelliklerini düz yazı olarak (Discord'a yapıştırmak için).
+#[tauri::command]
+pub fn system_info_text(app: AppHandle) -> CmdResult<String> {
+    let s = app.state::<crate::sysinfo::SysInfo>().get(false)?;
+    Ok(crate::sysinfo::as_text(&s))
 }

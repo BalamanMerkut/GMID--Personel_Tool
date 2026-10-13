@@ -1,3 +1,4 @@
+mod alarm;
 mod audio;
 mod backup;
 mod borderless;
@@ -20,6 +21,7 @@ mod panel;
 mod paths;
 mod perf;
 mod playlists;
+mod power;
 mod reminders;
 mod report;
 mod restore;
@@ -27,6 +29,7 @@ mod reviews;
 mod scheduler;
 mod search;
 mod servers;
+mod sysinfo;
 mod timers;
 mod titles;
 mod transcript;
@@ -123,6 +126,9 @@ pub fn run() {
             app.manage(servers::Servers::default());
             app.manage(servers::watch::Watcher::default());
             app.manage(borderless::Borderless::default());
+            app.manage(alarm::Alarm::default());
+            app.manage(power::Power::default());
+            app.manage(sysinfo::SysInfo::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -323,6 +329,15 @@ pub fn run() {
             commands::games::panel_hide,
             commands::games::panel_focus,
             commands::games::panel_interact,
+            commands::tools::alarm_mute,
+            commands::tools::alarm_hide,
+            commands::tools::alarm_preview,
+            commands::tools::power_status,
+            commands::tools::power_schedule,
+            commands::tools::power_cancel,
+            commands::tools::power_now,
+            commands::tools::system_info,
+            commands::tools::system_info_text,
             commands::games::borderless_list,
             commands::games::borderless_set,
             commands::games::panel_perf,

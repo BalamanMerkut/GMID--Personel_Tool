@@ -9,6 +9,7 @@
     "osd",
     "dikte",
     "alerts",
+    "alarm",
     "panel"
   ],
   "permissions": [

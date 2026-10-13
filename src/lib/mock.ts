@@ -21,6 +21,7 @@ const inputs: Device[] = [
 ];
 let lock: number | null = 1;
 let fpsReady = false;
+let powerPlan: { action: "shutdown" | "restart" | "sleep"; at: number } | null = new URLSearchParams(location.search).has("power") ? { action: "shutdown", at: Date.now() + 42_000 } : null;
 let borderlessList = ["cod2mp_s.exe"];
 
 const hotkeys: HotkeyStatus[] = [
@@ -537,6 +538,38 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         games: suggestions.slice(0, 1),
         words: dictLearn,
       };
+    case "system_info":
+      await wait(700);
+      return [
+        { title: "Sistem", icon: "monitor", rows: [["Windows", "Windows 11 Pro 24H2 (derleme 26100)"], ["Bilgisayar", "ASUS System Product Name"], ["Açık kalma süresi", "1 gün 4 saat 12 dk"]] },
+        { title: "İşlemci", icon: "bolt", rows: [["AMD Ryzen 7 7800X3D 8-Core Processor", "8 çekirdek / 16 iş parçacığı · 4,20 GHz"]] },
+        { title: "Ekran kartı", icon: "monitor", rows: [["NVIDIA GeForce RTX 4070", "12,0 GB bellek · sürücü 32.0.15.6614 · 2560×1440 @ 165 Hz"]] },
+        { title: "Bellek (RAM)", icon: "lap", rows: [["Toplam", "32,0 GB · 2 modül · 6000 MT/s"], ["DIMM_A2", "16,0 GB · 6000 · G.Skill F5-6000J3038F16G"], ["DIMM_B2", "16,0 GB · 6000 · G.Skill F5-6000J3038F16G"]] },
+        { title: "Anakart", icon: "server", rows: [["Model", "ASUSTeK COMPUTER INC. TUF GAMING B650-PLUS WIFI"], ["BIOS", "3024 (2025-02-14)"]] },
+        { title: "Diskler", icon: "folder", rows: [["Samsung SSD 990 PRO 2TB", "1.863,0 GB · SSD · NVMe"], ["Sürücü C:", "412,3 GB boş / 1.862,4 GB"]] },
+        { title: "Monitörler", icon: "monitor", rows: [["LG ULTRAGEAR", "Üretici kodu GSM · 2023"]] },
+        { title: "Fare ve klavye", icon: "keyboard", rows: [["Fare", "G502 HERO Gaming Mouse"], ["Klavye", "HyperX Alloy Origins"]] },
+        { title: "Ses aygıtları", icon: "headphones", rows: [["Çıkış", "Kulaklık (HyperX Cloud II)"], ["Giriş", "Mikrofon (HyperX Cloud II)"]] },
+        { title: "Ağ", icon: "link", rows: [["Ethernet", "Realtek Gaming 2.5GbE Family Controller · 1 Gbps"]] },
+      ];
+    case "system_info_text":
+      return "🖥️ Sistem özellikleri (GMID Tool)\n…";
+    case "power_status":
+      return powerPlan;
+    case "power_schedule":
+      powerPlan = { action: a.action as "shutdown", at: Date.now() + Number(a.minutes) * 60_000 };
+      emit("power-changed", powerPlan);
+      return powerPlan;
+    case "power_cancel":
+      powerPlan = null;
+      emit("power-changed", null);
+      return;
+    case "power_now":
+      return;
+    case "alarm_mute":
+    case "alarm_hide":
+    case "alarm_preview":
+      return;
     case "alerts_fit":
     case "alerts_close":
       return;
@@ -758,6 +791,8 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         vramUsed: 7.1e9, vramTotal: 12e9, gpuName: "NVIDIA GeForce RTX 4070", fps: fpsReady ? 140 + Math.random() * 20 : null,
         fpsApp: fpsReady ? "VALORANT-Win64-Shipping.exe" : null, rtss: false, fpsSource: fpsReady ? "presentmon" : null,
         fpsState: fpsReady ? "running" : "missing", fpsNote: null,
+        cpuTemp: 58 + Math.random() * 6, cpuMhz: 4700 + Math.random() * 300, disk: Math.random() * 12,
+        netRx: 2_400_000 + Math.random() * 600_000, netTx: 90_000 + Math.random() * 30_000,
       };
     case "panel_hide":
     case "panel_focus":

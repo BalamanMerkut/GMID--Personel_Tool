@@ -34,6 +34,8 @@ async function root(): Promise<{ component: Component<any>; props: Record<string
       return { component: (await import("./lib/windows/DictationPill.svelte")).default, props: {} };
     case "panel":
       return { component: (await import("./lib/windows/GamePanel.svelte")).default, props: {} };
+    case "alarm":
+      return { component: (await import("./lib/windows/Alarm.svelte")).default, props: {} };
     case "alerts":
       return { component: (await import("./lib/windows/Alerts.svelte")).default, props: {} };
     case "quicknote":

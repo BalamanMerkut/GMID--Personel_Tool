@@ -33,7 +33,10 @@ export type AppEvent =
   | "update"
   | "deals"
   | "panel-close"
-  | "community";
+  | "community"
+  | "alarm-changed"
+  | "panel-alarm"
+  | "power-changed";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

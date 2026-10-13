@@ -852,6 +852,15 @@ export interface PerfSample {
   fpsState: "missing" | "permission" | "ready" | "running" | "error";
   /** FPS neden yok (görünür açıklama). */
   fpsNote: string | null;
+  /** ACPI sıcaklığı (°C, yaklaşık; her bilgisayarda yok). */
+  cpuTemp: number | null;
+  /** İşlemcinin şu anki saat hızı (MHz). */
+  cpuMhz: number | null;
+  /** Disk etkinliği (%). */
+  disk: number | null;
+  /** Ağ indirme / yükleme (bayt/sn). */
+  netRx: number | null;
+  netTx: number | null;
 }
 
 /** Oyun İçi Panel hangi kipte açıldı. */
@@ -889,4 +898,18 @@ export interface AppVolume {
 export interface ServerWatch {
   online: boolean;
   minPlayers: number | null;
+}
+
+/** Zamanlı kapatma. */
+export interface PowerPlan {
+  action: "shutdown" | "restart" | "sleep";
+  /** Ne zaman (ms). */
+  at: number;
+}
+
+/** Sistem özellikleri bölümü: [ad, değer] satırları. */
+export interface SysSection {
+  title: string;
+  icon: string;
+  rows: [string, string][];
 }

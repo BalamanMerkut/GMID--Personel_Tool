@@ -357,6 +357,37 @@ fn set_activatable(w: &WebviewWindow, on: bool) {
 #[cfg(not(windows))]
 fn set_activatable(_w: &WebviewWindow, _on: bool) {}
 
+/// Öndeki pencere bulunduğu ekranı tamamen kaplıyor mu (oyun ya da tam ekran video). Masaüstü, görev çubuğu
+/// ve GMID'in kendi pencereleri sayılmaz.
+#[cfg(windows)]
+pub fn foreground_fullscreen() -> bool {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetWindowRect};
+    let (Some(h), Some((x, y, w, ht))) = foreground() else {
+        return false;
+    };
+    if pid_of(h) == Some(std::process::id()) {
+        return false;
+    }
+    let hwnd = HWND(h as *mut _);
+    let mut name = [0u16; 64];
+    let n = unsafe { GetClassNameW(hwnd, &mut name) } as usize;
+    let class = String::from_utf16_lossy(&name[..n.min(name.len())]);
+    if matches!(class.as_str(), "Progman" | "WorkerW" | "Shell_TrayWnd") {
+        return false;
+    }
+    let mut r = RECT::default();
+    if unsafe { GetWindowRect(hwnd, &mut r) }.is_err() {
+        return false;
+    }
+    r.left <= x && r.top <= y && r.right >= x + w as i32 && r.bottom >= y + ht as i32
+}
+
+#[cfg(not(windows))]
+pub fn foreground_fullscreen() -> bool {
+    false
+}
+
 #[cfg(windows)]
 fn foreground() -> (Option<isize>, Option<Rect>) {
     use windows::Win32::Graphics::Gdi::{

@@ -34,6 +34,15 @@ pub struct Sample {
     pub fps_state: crate::fps::State,
     /// FPS neden yok (arayüzde görünür).
     pub fps_note: Option<String>,
+    /// ACPI sıcaklık bölgesi (°C, yaklaşık; her bilgisayarda yok).
+    pub cpu_temp: Option<f32>,
+    /// İşlemcinin şu anki saat hızı (MHz).
+    pub cpu_mhz: Option<f32>,
+    /// Disk etkinliği (%).
+    pub disk: Option<f32>,
+    /// Ağ: indirme / yükleme (bayt/sn).
+    pub net_rx: Option<f64>,
+    pub net_tx: Option<f64>,
 }
 
 #[derive(Default)]
@@ -45,7 +54,7 @@ pub struct Perf {
     /// nvidia-smi bulunamadıysa bir daha denenmez.
     no_nvidia: std::sync::atomic::AtomicBool,
     #[cfg(windows)]
-    pdh: Mutex<Option<win::GpuQuery>>,
+    pdh: Mutex<Option<win::Pdh>>,
 }
 
 /// `nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,name --format=csv,noheader,nounits`
@@ -203,12 +212,21 @@ impl Perf {
             }
         }
         #[cfg(windows)]
-        if s.gpu.is_none() {
+        {
             let mut q = self.pdh.lock().unwrap_or_else(|e| e.into_inner());
             if q.is_none() {
-                *q = win::GpuQuery::open();
+                *q = win::Pdh::open();
             }
-            s.gpu = q.as_mut().and_then(|q| q.utilization());
+            if let Some(x) = q.as_mut().map(|q| q.sample()) {
+                if s.gpu.is_none() {
+                    s.gpu = x.gpu;
+                }
+                s.cpu_temp = x.temp;
+                s.cpu_mhz = x.mhz;
+                s.disk = x.disk;
+                s.net_rx = x.rx;
+                s.net_tx = x.tx;
+            }
         }
         s
     }
@@ -293,59 +311,75 @@ mod win {
         }
     }
 
-    /// Windows'un "GPU Engine(*engtype_3D)" sayacı: bütün süreçlerin 3D motoru kullanımı toplamı.
-    pub struct GpuQuery {
+    /// Windows performans sayaçları (PDH): ekran kartı 3D kullanımı, ACPI sıcaklığı, işlemci saat hızı, disk ve
+    /// ağ. Bulunamayan sayaç atlanır.
+    pub struct Pdh {
         query: PDH_HQUERY,
-        counter: PDH_HCOUNTER,
+        gpu: Option<PDH_HCOUNTER>,
+        temp: Option<PDH_HCOUNTER>,
+        perf: Option<PDH_HCOUNTER>,
+        idle: Option<PDH_HCOUNTER>,
+        rx: Option<PDH_HCOUNTER>,
+        tx: Option<PDH_HCOUNTER>,
+        /// İşlemcinin temel saat hızı (MHz, kayıt defterinden).
+        base_mhz: Option<f64>,
     }
 
     // PDH tutamaçları iş parçacıkları arasında taşınabilir (Mutex içinde tek erişim).
-    unsafe impl Send for GpuQuery {}
+    unsafe impl Send for Pdh {}
 
-    impl GpuQuery {
+    #[derive(Default, Clone, Copy)]
+    pub struct Extra {
+        pub gpu: Option<f32>,
+        pub temp: Option<f32>,
+        pub mhz: Option<f32>,
+        pub disk: Option<f32>,
+        pub rx: Option<f64>,
+        pub tx: Option<f64>,
+    }
+
+    impl Pdh {
         pub fn open() -> Option<Self> {
             unsafe {
                 let mut query = PDH_HQUERY::default();
                 if windows::Win32::System::Performance::PdhOpenQueryW(None, 0, &mut query) != 0 {
                     return None;
                 }
-                let mut counter = PDH_HCOUNTER::default();
-                if PdhAddEnglishCounterW(
+                let add = |path: windows::core::PCWSTR| {
+                    let mut c = PDH_HCOUNTER::default();
+                    (PdhAddEnglishCounterW(query, path, 0, &mut c) == 0).then_some(c)
+                };
+                let me = Self {
+                    gpu: add(w!("\\GPU Engine(*engtype_3D)\\Utilization Percentage")),
+                    temp: add(w!("\\Thermal Zone Information(*)\\Temperature")),
+                    perf: add(w!(
+                        "\\Processor Information(_Total)\\% Processor Performance"
+                    )),
+                    idle: add(w!("\\PhysicalDisk(_Total)\\% Idle Time")),
+                    rx: add(w!("\\Network Interface(*)\\Bytes Received/sec")),
+                    tx: add(w!("\\Network Interface(*)\\Bytes Sent/sec")),
+                    base_mhz: base_mhz(),
                     query,
-                    w!("\\GPU Engine(*engtype_3D)\\Utilization Percentage"),
-                    0,
-                    &mut counter,
-                ) != 0
-                {
-                    let _ = PdhCloseQuery(query);
-                    return None;
-                }
+                };
                 let _ = PdhCollectQueryData(query);
-                Some(Self { query, counter })
+                Some(me)
             }
         }
 
-        pub fn utilization(&mut self) -> Option<f32> {
+        fn values(&self, c: Option<PDH_HCOUNTER>) -> Option<Vec<f64>> {
+            let c = c?;
             unsafe {
-                if PdhCollectQueryData(self.query) != 0 {
-                    return None;
-                }
                 let mut size = 0u32;
                 let mut count = 0u32;
-                let _ = PdhGetFormattedCounterArrayW(
-                    self.counter,
-                    PDH_FMT_DOUBLE,
-                    &mut size,
-                    &mut count,
-                    None,
-                );
+                let _ =
+                    PdhGetFormattedCounterArrayW(c, PDH_FMT_DOUBLE, &mut size, &mut count, None);
                 if size == 0 {
                     return None;
                 }
                 let mut buf = vec![0u8; size as usize];
                 let items = buf.as_mut_ptr() as *mut PDH_FMT_COUNTERVALUE_ITEM_W;
                 if PdhGetFormattedCounterArrayW(
-                    self.counter,
+                    c,
                     PDH_FMT_DOUBLE,
                     &mut size,
                     &mut count,
@@ -354,20 +388,72 @@ mod win {
                 {
                     return None;
                 }
-                let total: f64 = (0..count as usize)
-                    .map(|i| (*items.add(i)).FmtValue.Anonymous.doubleValue)
-                    .sum();
-                Some(total.clamp(0.0, 100.0) as f32)
+                Some(
+                    (0..count as usize)
+                        .map(|i| (*items.add(i)).FmtValue.Anonymous.doubleValue)
+                        .collect(),
+                )
+            }
+        }
+
+        pub fn sample(&mut self) -> Extra {
+            if unsafe { PdhCollectQueryData(self.query) } != 0 {
+                return Extra::default();
+            }
+            let sum = |v: Vec<f64>| v.iter().sum::<f64>();
+            Extra {
+                gpu: self
+                    .values(self.gpu)
+                    .map(|v| sum(v).clamp(0.0, 100.0) as f32),
+                // Kelvin → °C; en sıcak bölge. Uydurma sabit değerler (bazı anakartlar hep 27,8 der) ayıklanır.
+                temp: self
+                    .values(self.temp)
+                    .and_then(|v| v.into_iter().map(|k| k - 273.15).reduce(f64::max))
+                    .filter(|c| (30.0..115.0).contains(c))
+                    .map(|c| c as f32),
+                mhz: self
+                    .values(self.perf)
+                    .and_then(|v| v.first().copied())
+                    .zip(self.base_mhz)
+                    .map(|(p, base)| (p / 100.0 * base) as f32)
+                    .filter(|m| *m > 100.0),
+                disk: self
+                    .values(self.idle)
+                    .and_then(|v| v.first().copied())
+                    .map(|idle| (100.0 - idle).clamp(0.0, 100.0) as f32),
+                rx: self.values(self.rx).map(sum),
+                tx: self.values(self.tx).map(sum),
             }
         }
     }
 
-    impl Drop for GpuQuery {
+    impl Drop for Pdh {
         fn drop(&mut self) {
             unsafe {
                 let _ = PdhCloseQuery(self.query);
             }
         }
+    }
+
+    /// İşlemcinin temel saat hızı: HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0 → ~MHz.
+    fn base_mhz() -> Option<f64> {
+        use windows::Win32::System::Registry::{
+            RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD,
+        };
+        let mut v = 0u32;
+        let mut size = 4u32;
+        let r = unsafe {
+            RegGetValueW(
+                HKEY_LOCAL_MACHINE,
+                w!("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0"),
+                w!("~MHz"),
+                RRF_RT_REG_DWORD,
+                None,
+                Some(&mut v as *mut u32 as *mut _),
+                Some(&mut size),
+            )
+        };
+        (r.is_ok() && v > 0).then_some(v as f64)
     }
 }
 

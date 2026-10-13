@@ -5,6 +5,7 @@
   import { api } from "../api";
   import { on } from "../bus";
   import AppMixer from "../components/AppMixer.svelte";
+  import PowerWarn from "../components/PowerWarn.svelte";
   import Icon from "../Icon.svelte";
   import { clock, playtime } from "../time";
   import type { AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
@@ -31,6 +32,25 @@
     borderless: false,
   });
   let fpsBusy = $state(false);
+  /** Zamanı gelen uyarılar (oyundayken pencere yerine panelde). */
+  let alarmReminders: Reminder[] = $state([]);
+  let alarmTimers: Countdown[] = $state([]);
+  /** Panel uyarı için kendiliğinden açıldı: uyarılar bitince kapanır, oyuna dönülür. */
+  let alarmAuto = $state(false);
+
+  async function loadAlarms() {
+    const a = await api.overlay.alerts().catch(() => null);
+    alarmReminders = a?.reminders ?? [];
+    alarmTimers = a?.timers ?? [];
+    if (alarmAuto && !alarmReminders.length && !alarmTimers.length) {
+      alarmAuto = false;
+      close();
+    }
+  }
+  async function alarmAct(p: Promise<unknown>) {
+    await p.catch(() => {});
+    await loadAlarms();
+  }
   let perfTimer: ReturnType<typeof setInterval> | undefined;
 
   // Ölçüm yalnız panel açıkken (saniyede bir).
@@ -122,6 +142,9 @@
     flash(`${min} dakikalık sayaç başladı`);
   }
 
+  /** Bayt/sn → "2,4 MB/s". */
+  const rate = (b: number) => (b >= 1e6 ? `${(b / 1e6).toFixed(1).replace(".", ",")} MB/s` : `${Math.round(b / 1e3)} KB/s`);
+
   /** FPS yoksa nedeni (panelde görünür). */
   const fpsWhy = $derived.by(() => {
     if (!perf || perf.fps != null) return null;
@@ -176,6 +199,7 @@
 
   onMount(() => {
     void refresh();
+    void loadAlarms();
     startPerf();
     const stops = [
       on<PanelOpen | null>("panel-open", (info) => {
@@ -184,6 +208,11 @@
         startPerf();
       }),
       on("panel-close", () => stopPerf()),
+      on("panel-alarm", () => {
+        alarmAuto = true;
+        void loadAlarms();
+      }),
+      on("alarm-changed", () => void loadAlarms()),
       on<GameModeStatus>("gamemode", (s) => (gm = s)),
       on("audio-changed", async () => (audio = await api.audio.state().catch(() => audio))),
     ];
@@ -224,16 +253,42 @@
           <span class:dim={perf.fps == null} title={perf.fps != null ? `${perf.fpsSource === "rtss" ? "RivaTuner" : "PresentMon"} · ${perf.fpsApp ?? ""}` : (fpsWhy ?? "Ölçülüyor…")}>
             <b>{perf.fps != null ? Math.round(perf.fps) : "—"}</b><i>FPS</i>
           </span>
-          <span><b>{perf.cpu != null ? `%${Math.round(perf.cpu)}` : "—"}</b><i>CPU</i></span>
+          <span title={perf.cpuTemp != null ? "Sıcaklık ACPI sensöründen (yaklaşık)" : ""}>
+            <b>{perf.cpu != null ? `%${Math.round(perf.cpu)}` : "—"}</b><i>CPU{perf.cpuMhz != null ? ` · ${(perf.cpuMhz / 1000).toFixed(1).replace(".", ",")} GHz` : ""}{perf.cpuTemp != null ? ` · ${Math.round(perf.cpuTemp)}°C` : ""}</i>
+          </span>
           <span>
             <b>{perf.gpu != null ? `%${Math.round(perf.gpu)}` : "—"}</b><i>GPU{perf.gpuTemp != null ? ` · ${Math.round(perf.gpuTemp)}°C` : ""}</i>
           </span>
-          {#if perf.ramUsed && perf.ramTotal}<span><b>{(perf.ramUsed / 1e9).toFixed(1).replace(".", ",")}</b><i>/ {Math.round(perf.ramTotal / 1e9)} GB RAM</i></span>{/if}
+          {#if perf.ramUsed && perf.ramTotal}<span title="Kullanılan / toplam bellek"><b>{(perf.ramUsed / 1e9).toFixed(1).replace(".", ",")}</b><i>/ {Math.round(perf.ramTotal / 1e9)} GB RAM</i></span>{/if}
+          {#if perf.vramUsed && perf.vramTotal}<span title="Ekran kartı belleği"><b>{(perf.vramUsed / 1e9).toFixed(1).replace(".", ",")}</b><i>/ {Math.round(perf.vramTotal / 1e9)} GB VRAM</i></span>{/if}
+          {#if perf.disk != null}<span title="Disk etkinliği"><b>%{Math.round(perf.disk)}</b><i>DİSK</i></span>{/if}
+          {#if perf.netRx != null}<span title="Ağ: indirme / yükleme"><b>{rate(perf.netRx)}</b><i>↓ · ↑ {rate(perf.netTx ?? 0)}</i></span>{/if}
         </div>
       {/if}
       <span class="clock tnum">{timeStr}</span>
       <button class="x" onclick={close} title="Kapat (Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
     </header>
+
+    <PowerWarn />
+    {#each alarmReminders as r (r.id)}
+      <div class="alarm">
+        <span class="ring"><Icon name="bell" size={20} /></span>
+        <div class="atx"><span class="kind">Hatırlatıcı</span><b>{r.title}</b>{#if r.note}<span class="sub small">{r.note}</span>{/if}</div>
+        <button class="dev" onclick={() => alarmAct(api.reminders.snooze(r.id, 10))}>10 dk ertele</button>
+        <button class="dev" onclick={() => alarmAct(api.reminders.snooze(r.id, 30))}>30 dk</button>
+        <button class="dev on" onclick={() => alarmAct(api.reminders.complete(r.id))}>Kapat</button>
+        <button class="dev" onclick={() => api.alarm.mute()} title="Melodiyi sustur"><Icon name="mute" size={14} /></button>
+      </div>
+    {/each}
+    {#each alarmTimers as t (t.id)}
+      <div class="alarm">
+        <span class="ring"><Icon name="timer" size={20} /></span>
+        <div class="atx"><span class="kind">Süre doldu</span><b>{t.label}</b></div>
+        <button class="dev" onclick={() => alarmAct(api.timers.toggle(t.id))}>Yeniden başlat</button>
+        <button class="dev on" onclick={() => alarmAct(api.timers.remove(t.id))}>Kapat</button>
+        <button class="dev" onclick={() => api.alarm.mute()} title="Melodiyi sustur"><Icon name="mute" size={14} /></button>
+      </div>
+    {/each}
 
     {#if fpsWhy}
       <div class="hint fpsbar">
@@ -389,6 +444,11 @@
   .hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); color: var(--muted); font-size: 13px; }
   .hint span { flex: 1; }
   div.hint { text-align: left; }
+  .alarm { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 16px; background: rgba(18, 20, 23, 0.96); border: 1px solid var(--gold); box-shadow: 0 0 30px rgba(227, 194, 112, 0.2); animation: fade 0.25s ease-out; }
+  .alarm .ring { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--gold); background: rgba(227, 194, 112, 0.14); flex: none; }
+  .atx { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .atx .kind { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }
+  .atx b { font-size: 17px; }
   .hint.warn { border-color: rgba(227, 194, 112, 0.45); }
   .hint.warn > :global(svg), .fpsbar > :global(svg) { color: var(--gold); flex: none; }
   .hint .ok { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--good); font-weight: 600; }

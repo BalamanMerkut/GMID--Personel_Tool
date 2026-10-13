@@ -17,6 +17,7 @@
   import { community, joinDiscord } from "../community.svelte";
   import { welcome } from "../welcome.svelte";
   import ServersList from "../settings/ServersList.svelte";
+  import SystemInfo from "../settings/SystemInfo.svelte";
   import { getJson, save, setJson, settings } from "../settings.svelte";
   import { notify } from "../toast.svelte";
 
@@ -51,6 +52,7 @@
     { id: "indirici", label: "Video İndirici", icon: "download", keys: "video indirme yt-dlp ffmpeg deno araç güncelle eklenti chrome opera aynı anda klasör" },
     { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü discord" },
     { id: "sunucular", label: "Sunucular", icon: "server", keys: "sunucu topluluk liste adres github" },
+    { id: "sistem", label: "Sistem özellikleri", icon: "monitor", keys: "sistem özellik donanım işlemci cpu ekran kartı gpu ram bellek anakart disk ssd monitör fare klavye ses ağ windows sürüm" },
     { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun geri yükle format zip" },
     { id: "hakkinda", label: "Hakkında", icon: "info", keys: "sürüm hakkında merkut gmid güncelle güncelleme yeni sürüm sorun bildir hata rapor discord" },
   ];
@@ -104,6 +106,10 @@
   let osd = $state(getJson("ui.osd", true));
   let reminderSound = $state(getJson("reminders.sound", true));
   let reminderToast = $state(getJson("reminders.toast", true));
+  let reminderPopup = $state(getJson("reminders.popup", true));
+  let reminderMusic = $state(getJson("reminders.music", true));
+  let reminderVolume = $state(getJson("reminders.volume", 40));
+  let reminderInGame = $state(getJson("reminders.inGame", true));
   let videosNotify = $state(getJson("videos.notify", true));
   let gamesTrack = $state(getJson("games.track", true));
   let gamesAsk = $state(getJson("games.ask", true));
@@ -120,7 +126,7 @@
     }, 150);
   }
 
-  function toggle(key: string, v: boolean, set: (v: boolean) => void) {
+  function toggle<T>(key: string, v: T, set: (v: T) => void) {
     set(v);
     void setJson(key, v);
   }
@@ -226,6 +232,32 @@
         <h3 class="h2"><Icon name="bell" />Hatırlatıcılar ve sayaçlar</h3>
         <div class="line">
           <div>
+            <b>Ekranın ortasında aç</b>
+            <span class="sub small">Zamanı gelince ortada bir pencere: Ertele (5 dk, 10 dk, 1 saat) ya da Kapat. Kapalıysa sağ altta küçük kart.</span>
+          </div>
+          <Switch label="Açılır pencere" checked={reminderPopup} onchange={(v) => toggle("reminders.popup", v, (x) => (reminderPopup = x))} />
+        </div>
+        <div class="line">
+          <div>
+            <b>Oyundaysan oyun panelinde göster</b>
+            <span class="sub small">Oyun açıkken pencere yerine Oyun İçi Panel açılır, uyarı en üstte; alt-tab yapmadan kapatırsın, panel kapanınca oyuna dönersin.</span>
+          </div>
+          <Switch label="Oyunda panel" checked={reminderInGame} onchange={(v) => toggle("reminders.inGame", v, (x) => (reminderInGame = x))} />
+        </div>
+        <div class="line">
+          <div>
+            <b>Sakin melodi</b>
+            <span class="sub small">Kısık bir müzik kutusu ezgisi; kapatınca ya da en geç 90 saniyede susar.</span>
+          </div>
+          <div class="vol">
+            <input type="range" min="5" max="100" step="5" value={reminderVolume} disabled={!reminderMusic} aria-label="Melodi sesi"
+              onchange={(e) => toggle("reminders.volume", Number(e.currentTarget.value), (x) => (reminderVolume = x))} />
+            <button class="btn ghost sm" disabled={!reminderMusic} onclick={() => api.alarm.preview()}><Icon name="play" size={13} />Dinle</button>
+            <Switch label="Melodi" checked={reminderMusic} onchange={(v) => toggle("reminders.music", v, (x) => (reminderMusic = x))} />
+          </div>
+        </div>
+        <div class="line">
+          <div>
             <b>Windows bildirimi gönder</b>
             <span class="sub small">Sağ alttaki karta ek olarak; bildirim merkezinde de kalır.</span>
           </div>
@@ -233,8 +265,8 @@
         </div>
         <div class="line">
           <div>
-            <b>Uyarıda ses çal</b>
-            <span class="sub small">Windows'un bildirim sesi.</span>
+            <b>Sağ alt kartta ses çal</b>
+            <span class="sub small">Açılır pencere kapalıyken: Windows'un bildirim sesi.</span>
           </div>
           <Switch label="Uyarıda ses" checked={reminderSound} onchange={(v) => toggle("reminders.sound", v, (x) => (reminderSound = x))} />
         </div>
@@ -293,6 +325,8 @@
       <ServersList />
     {:else if tab === "veri"}
       <Data {info} {refreshInfo} />
+    {:else if tab === "sistem"}
+      <SystemInfo />
     {:else if tab === "hakkinda"}
       <section class="panel about">
         <img class="gmid" src={gmidLogo} alt="GMID" />
@@ -314,6 +348,8 @@
 </div>
 
 <style>
+  .vol { display: flex; align-items: center; gap: 10px; }
+  .vol input { width: 120px; }
   .cc { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; max-width: 1300px; margin: 0 auto; align-items: start; }
   .tabs { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; }
   .search { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin-bottom: 8px; border-radius: 10px; background: var(--coal-2); border: 1px solid var(--line); color: var(--dim); }

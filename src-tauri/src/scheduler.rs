@@ -28,7 +28,7 @@ pub fn start(app: AppHandle) {
         // Uygulama kapanmadan önce "Tamam" denmemiş uyarılar varsa yeniden göster.
         let pending = reminders::pending_alerts(&app.state::<Db>()).unwrap_or_default();
         if !pending.is_empty() {
-            overlay::raise_alerts(&app);
+            crate::alarm::raise(&app);
         }
         run(app)
     });
@@ -49,7 +49,7 @@ fn run(app: AppHandle) {
             let _ = app.emit("timers-changed", ());
         }
         if !due.is_empty() || !finished.is_empty() {
-            overlay::raise_alerts(&app);
+            crate::alarm::raise(&app);
             for r in &due {
                 overlay::system_notification(
                     &app,

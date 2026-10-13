@@ -84,7 +84,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   arka plan durur, seçtiğin uygulamalar (ör. tarayıcı) kapanır. İstersen kütüphanendeki bir oyun açılınca kendiliğinden
   açılır, son oyun kapanınca kapanır. Kapanınca (uygulama kapanırken de) her şey eski haline döner.
 - **Oyun İçi Panel** (**Ctrl+Shift+G**): oyunun bulunduğu ekranın üstünde yarı saydam panel — üstte FPS, işlemci,
-  ekran kartı (yük ve sıcaklık) ve RAM (FPS için bir kez **FPS ölçümünü aç** — panelde ya da Oyun Modu'nda; bir kez
+  ekran kartı (yük, sıcaklık, VRAM), RAM, işlemci saat hızı, disk etkinliği, ağ indirme/yükleme ve (bilgisayar
+  veriyorsa) ACPI sıcaklığı (FPS için bir kez **FPS ölçümünü aç** — panelde ya da Oyun Modu'nda; bir kez
   Windows izni ister, oturumu kapatıp açmak gerekmez; RivaTuner/RTSS açıksa ona da gerek yok). FPS yoksa nedeni
   panelde yazar. Kenarlıksız/pencereli oyunlarda Steam'deki Shift+Tab gibi fare serbest kalır, oyun arkada görünür.
   **Özel tam ekranda** Windows hiçbir pencereyi oyunun üstünde göstermez: oyunu **Pencereli** moda al, GMID onu
@@ -181,6 +182,17 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   Whisper'a ipucu olarak da verilir. Öğrenme: dikteden sonra yazıyı yapıştırıldığı yerde (Discord, tarayıcı, Word…)
   düzeltirsen GMID gönderilmeden önceki halini okuyup karşılaştırır ve sağ altta **"Bunu böyle mi yazayım?"** diye
   sorar; "Son dikteler"de ✎ ile de düzeltebilirsin. Yazı hiçbir yere kaydedilmez, şifre alanlarına bakılmaz.
+
+### Hatırlatıcı, sayaç ve zamanlı kapatma
+
+- Zamanı gelen hatırlatıcı ya da biten sayaç **ekranın ortasında** açılır, kısık ve sakin bir müzik kutusu melodisiyle:
+  **Ertele** (5 dk, 10 dk, 1 saat) ya da **Kapat** (Enter: kapat, Esc: 10 dk ertele). Oyundaysan pencere yerine
+  **Oyun İçi Panel** açılır, uyarı en üstte: alt-tab yapmadan kapatırsın, panel kapanınca oyuna dönersin. Kontrol
+  Odası → Bildirimler: açılır pencere, oyunda panel, melodi ve ses düzeyi (Dinle).
+- **Bilgisayarı zamanla kapat** (Sayaç ekranı): Kapat / Yeniden başlat / Uyut — 10 dk, 30 dk, 1 saat… ya da elle.
+  Son bir dakikada ortada geri sayım çıkar (İptal / Şimdi). Zamanı gelince açık programlar kapatılır.
+- **Sistem özellikleri** (Kontrol Odası): işlemci, ekran kartı, RAM modülleri, anakart, diskler, monitörler, fare ve
+  klavye adları, ses ve ağ aygıtları; **Kopyala** ile Discord'a yapıştır.
 
 ### Kontrol Odası (ayarlar merkezi)
 

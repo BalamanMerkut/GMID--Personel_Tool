@@ -28,7 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
-  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, SysSection, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
 
@@ -496,10 +496,34 @@ export const api = {
     fitAlerts: (height: number) => call<void>("alerts_fit", { height }),
     closeAlerts: () => call<void>("alerts_close"),
   },
+
+  system: {
+    /** Sistem özellikleri (önbellekten; `refresh` ile yeniden okur). */
+    info: (refresh = false) => call<SysSection[]>("system_info", { refresh }),
+    /** Discord'a yapıştırmak için düz yazı. */
+    text: () => call<string>("system_info_text"),
+  },
+
+  power: {
+    status: () => call<PowerPlan | null>("power_status"),
+    schedule: (action: PowerPlan["action"], minutes: number) => call<PowerPlan>("power_schedule", { action, minutes }),
+    cancel: () => call<void>("power_cancel"),
+    /** Planı beklemeden uygula. */
+    now: () => call<void>("power_now"),
+  },
+
+  alarm: {
+    /** Uyarı melodisini sustur. */
+    mute: () => call<void>("alarm_mute"),
+    /** Uyarı penceresini kapat (uyarılar yerinde kalır). */
+    hide: () => call<void>("alarm_hide"),
+    /** Melodiyi 5 sn dinlet. */
+    preview: () => call<void>("alarm_preview"),
+  },
 };
 
 /** Bu pencerenin görevi: ana pencere, gösterge, uyarılar, hızlı not ya da yapışkan not. */
-export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" | "sticky" | "dikte" | "panel"; id?: string } {
+export function currentView(): { kind: "main" | "osd" | "alerts" | "alarm" | "quicknote" | "sticky" | "dikte" | "panel"; id?: string } {
   let label = "main";
   if (inTauri) {
     const meta = (window as unknown as { __TAURI_INTERNALS__: { metadata?: { currentWindow?: { label?: string } } } })
@@ -509,7 +533,7 @@ export function currentView(): { kind: "main" | "osd" | "alerts" | "quicknote" |
     label = new URLSearchParams(location.search).get("view") ?? "main";
   }
   if (label.startsWith("sticky-")) return { kind: "sticky", id: label.slice(7) };
-  if (label === "osd" || label === "alerts" || label === "quicknote" || label === "dikte" || label === "panel") return { kind: label };
+  if (label === "osd" || label === "alerts" || label === "alarm" || label === "quicknote" || label === "dikte" || label === "panel") return { kind: label };
   return { kind: "main" };
 }
 
