@@ -84,7 +84,7 @@
 
   const ROOMS: [IconName, string, string][] = [
     ["server", "Oyun Salonu", "GMID sunucuları, kütüphanen, oturumların, fırsatlar ve kliplerin."],
-    ["film", "Eğlence Salonu", "Oyun ve film arşivin, medya oynatıcı, video indirici."],
+    ["film", "Eğlence Salonu", "Oyun ve film arşivin, çark & çekiliş, medya oynatıcı, video indirici."],
     ["note", "Çalışma Odası", "Notlar, hatırlatıcılar, sayaç ve ses ayarları."],
   ];
 </script>

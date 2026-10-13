@@ -310,6 +310,12 @@ pub fn power_cancel(app: AppHandle) {
     crate::power::cancel(&app);
 }
 
+/// Son dakika uyarısını kapatır (süre işlemeye devam eder).
+#[tauri::command]
+pub fn power_dismiss(app: AppHandle) {
+    crate::power::dismiss(&app);
+}
+
 #[tauri::command]
 pub fn power_now(app: AppHandle) -> CmdResult<()> {
     crate::power::now(&app)

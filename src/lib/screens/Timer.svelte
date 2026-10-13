@@ -3,6 +3,7 @@
   import { api } from "../api";
   import { on } from "../bus";
   import Icon from "../Icon.svelte";
+  import RollingClock from "../components/RollingClock.svelte";
   import { clock } from "../time";
   import { notify } from "../toast.svelte";
   import type { Countdown, TimersSnapshot } from "../types";
@@ -29,12 +30,13 @@
   onMount(() => {
     void refresh();
     const stop = on("timers-changed", refresh);
-    // Sadece çalışan bir sayaç varken ve bu ekran açıkken güncelle.
-    const tick = setInterval(() => {
+    // Sadece çalışan bir sayaç varken ve bu ekran açıkken, her karede güncelle (salise ve çubuk akıcı aksın).
+    let raf = requestAnimationFrame(function frame() {
       if (snap && (snap.stopwatch.running || snap.countdowns.some((c) => c.endsAt))) now = Date.now() + offset;
-    }, 100);
+      raf = requestAnimationFrame(frame);
+    });
     return () => {
-      clearInterval(tick);
+      cancelAnimationFrame(raf);
       void stop.then((f) => f());
     };
   });
@@ -61,7 +63,7 @@
 <div class="timers">
   <section class="panel sw">
     <h3 class="h2"><Icon name="lap" />Kronometre</h3>
-    <div class="digits tnum" class:running={snap?.stopwatch.running}>{clock(elapsed, true)}</div>
+    <div class="digits tnum" class:running={snap?.stopwatch.running}><RollingClock text={clock(elapsed, true)} fast={2} /></div>
     <div class="row center">
       <button class="btn" onclick={async () => apply(await api.timers.stopwatchToggle())}>
         <Icon name={snap?.stopwatch.running ? "pause" : "play"} />{snap?.stopwatch.running ? "Duraklat" : elapsed > 0 ? "Devam" : "Başlat"}
@@ -102,7 +104,7 @@
             <b>{c.label}</b>
             <span class="sub small">{c.finished ? "Bitti" : c.endsAt ? "Çalışıyor" : "Duraklatıldı"}</span>
           </div>
-          <div class="cd-time tnum">{c.finished ? "00:00" : clock(left + 999)}</div>
+          <div class="cd-time tnum"><RollingClock text={c.finished ? "00:00" : clock(left + 999)} dir={-1} /></div>
           <div class="bar"><i style:width="{c.finished ? 100 : 100 - (left / c.totalMs) * 100}%"></i></div>
           <div class="row">
             <button class="btn ghost sm" onclick={async () => apply(await api.timers.toggle(c.id))}>

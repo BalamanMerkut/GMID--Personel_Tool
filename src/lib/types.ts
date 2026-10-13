@@ -905,6 +905,8 @@ export interface PowerPlan {
   action: "shutdown" | "restart" | "sleep";
   /** Ne zaman (ms). */
   at: number;
+  /** Son dakika uyarısı kapatıldı (süre işlemeye devam eder). */
+  hidden: boolean;
 }
 
 /** Sistem özellikleri (Windows'un kendi kayıtlarından; boyutlar bayt). */

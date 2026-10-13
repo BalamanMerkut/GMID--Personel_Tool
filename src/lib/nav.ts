@@ -46,6 +46,8 @@ export const ROOMS: Room[] = [
         description: "Oyunlarını 5 kısa soruyla puanla, yorum ve not yaz. Sağdaki filtre kutusuyla türe, etikete ve puana göre bul." },
       { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: null,
         description: "Film ve dizileri aynı sade kartla puanla; afiş, özet, yönetmen ve oyuncular Vikipedi'den kendiliğinden gelir." },
+      { id: "fun", label: "Çark & Çekiliş", icon: "wheel", phase: null,
+        description: "İsimleri, filmleri ya da oyunları yaz; çarkı çevir (ilk çıkan) ya da eleme yap (son kalan). Kura çek, takımlara böl, zar at, yazı-tura." },
       { id: "media", label: "Medya Oynatıcı", icon: "headphones", phase: null,
         description: "İndirdiğin müzikler ve videolar: senkron şarkı sözleriyle çal, liste görünümü, filmlerde altyazı. Başka ekrana geçince altta çalmaya devam eder." },
       { id: "videos", label: "Video İndirici", icon: "download", phase: null,

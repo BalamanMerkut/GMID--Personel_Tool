@@ -21,7 +21,7 @@ const inputs: Device[] = [
 ];
 let lock: number | null = 1;
 let fpsReady = false;
-let powerPlan: { action: "shutdown" | "restart" | "sleep"; at: number } | null = new URLSearchParams(location.search).has("power") ? { action: "shutdown", at: Date.now() + 42_000 } : null;
+let powerPlan: { action: "shutdown" | "restart" | "sleep"; at: number; hidden: boolean } | null = new URLSearchParams(location.search).has("power") ? { action: "shutdown", at: Date.now() + 42_000, hidden: false } : null;
 let borderlessList = ["cod2mp_s.exe"];
 
 const hotkeys: HotkeyStatus[] = [
@@ -578,7 +578,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "power_status":
       return powerPlan;
     case "power_schedule":
-      powerPlan = { action: a.action as "shutdown", at: Date.now() + Number(a.minutes) * 60_000 };
+      powerPlan = { action: a.action as "shutdown", at: Date.now() + Number(a.minutes) * 60_000, hidden: false };
       emit("power-changed", powerPlan);
       return powerPlan;
     case "power_cancel":
@@ -586,6 +586,11 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       emit("power-changed", null);
       return;
     case "power_now":
+      return;
+    case "power_dismiss":
+      if (powerPlan) powerPlan = { ...powerPlan, hidden: true };
+      emit("power-changed", powerPlan);
+      emit("alarm-changed", null);
       return;
     case "alarm_mute":
     case "alarm_hide":

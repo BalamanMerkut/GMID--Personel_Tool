@@ -28,6 +28,18 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 
 ## Neler var?
 
+### Çark & Çekiliş (Eğlence Salonu)
+
+- Bir liste yaz (isimler, filmler, oyunlar; tek tek, toplu yapıştır ya da **İzlenecek filmler / İstediğim oyunlar /
+  Kurulu oyunlar** ile tek tıkla doldur), listeyi kaydet ("Film gecesi"), sonra:
+  - **Çark:** çevir, ibrenin gösterdiği kazanır (ilk çıkan). İstersen çıkan sonraki çevirişte listeden çıkar.
+  - **Eleme:** her çevirişte ibrenin gösterdiği elenir (dilimi yumuşakça daralır), **son kalan** kazanır; "Otomatik"
+    ile son kalana kadar kendisi çevirir. Elenme sırası yanda.
+  - **Kura:** N kazanan seç, rastgele **sıraya diz** ya da **takımlara böl**.
+  - **Zar & yazı-tura:** 1–6 zar, yazı-tura, aralıktan sayı.
+- Rastgelelik kriptografik ve eşit. Tık sesi, kutlama, **Büyük göster** (Discord'da ekran paylaşırken), son sonuçlar ve
+  **Discord'a kopyala**. Boşluk tuşu çevirir.
+
 ### Faz 3b — Oyun (1. bölüm: Kütüphanem, Oturum Geçmişi)
 
 - **Oyunları tara:** Steam, Epic, Riot (League of Legends, VALORANT), Xbox uygulaması ve Minecraft (Java ve Bedrock) oyunları
@@ -146,7 +158,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 - **Eklenti her sitede:** yt-dlp'nin tanıdığı 1800+ site sayfa adresinden; tanınmayan sitelerde oynatıcının
   yüklediği video (mp4, m3u8, mpd) yakalanır ve sayfa bilgisiyle indirilir; adı/türü gizlenmiş yayın listeleri de
   (içeriğinden) tanınır. Videonun üstüne gelince sağ üstte
-  **GMID ile indir** düğmesi; videoya sağ tık → **GMID Tool ile indir** → kalite.
+  **GMID ile indir** düğmesi; videoya sağ tık → **GMID Tool ile indir** → kalite. Akış sayfalarında (X, Instagram,
+  YouTube ana sayfa, **TikTok Sana Özel/Takip/Keşfet**) üstünde durulan videonun kendi bağlantısı bulunur.
 - **Medya Oynatıcı (ayrı ekran):** indirilen müzikler ve videolar; Müzik / Videolar / site / çalma listesi süzgeci,
   "Hepsini çal". Oynatıcıyı küçültünce (Esc) başka ekranlarda altta çalmaya devam eder, video köşede küçük oynar.
 - **Dublaj ve altyazı:** sitede birden çok ses dili ya da altyazı varsa indirirken seçilir (varsayılan: Türkçe
@@ -192,7 +205,9 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   **Oyun İçi Panel** açılır, uyarı en üstte: alt-tab yapmadan kapatırsın, panel kapanınca oyuna dönersin. Kontrol
   Odası → Bildirimler: açılır pencere, oyunda panel, melodi ve ses düzeyi (Dinle).
 - **Bilgisayarı zamanla kapat** (Kontrol Odası → Genel; yanlış tıklamaya karşı onay sorar): Kapat / Yeniden başlat / Uyut — 10 dk, 30 dk, 1 saat… ya da elle.
-  Son bir dakikada ortada geri sayım çıkar (İptal / Şimdi). Zamanı gelince açık programlar kapatılır.
+  Son bir dakikada ortada geri sayım çıkar (İptal / Şimdi / sağ üstteki × ile gizle: süre işlemeye devam eder).
+  Zamanı gelince açık programlar kapatılır.
+- **Sayaç:** kronometre ve geri sayımların rakamları kayarak değişir; salise ve ilerleme çubuğu her karede akar.
 - **Sistem özellikleri** (Kontrol Odası): bilgisayarın özeti ve dört ana parça (işlemci, ekran kartı, bellek, depolama),
   altında sürücü doluluğu, bellek modülleri, ekranlar (inç, çözünürlük, Hz), fare/klavye/kulaklık, anakart ve ağ;
   **Discord'a kopyala** ile düzenli bir özet yapıştır.

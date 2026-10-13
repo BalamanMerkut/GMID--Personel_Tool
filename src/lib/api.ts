@@ -508,6 +508,8 @@ export const api = {
     status: () => call<PowerPlan | null>("power_status"),
     schedule: (action: PowerPlan["action"], minutes: number) => call<PowerPlan>("power_schedule", { action, minutes }),
     cancel: () => call<void>("power_cancel"),
+    /** Son dakika uyarısını kapat; süre işler, zamanı gelince yine uygulanır. */
+    dismiss: () => call<void>("power_dismiss"),
     /** Planı beklemeden uygula. */
     now: () => call<void>("power_now"),
   },

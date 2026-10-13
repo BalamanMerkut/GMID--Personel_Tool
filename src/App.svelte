@@ -19,6 +19,7 @@
   import Clips from "./lib/screens/Clips.svelte";
   import GameMode from "./lib/screens/GameMode.svelte";
   import Films from "./lib/screens/Films.svelte";
+  import Fun from "./lib/screens/Fun.svelte";
   import Install from "./lib/screens/Install.svelte";
   import Deals from "./lib/screens/Deals.svelte";
   import WrappedScreen from "./lib/screens/Wrapped.svelte";
@@ -174,6 +175,8 @@
           <Library />
         {:else if route === "films"}
           <Films />
+        {:else if route === "fun"}
+          <Fun />
         {:else if route === "wrapped"}
           <WrappedScreen />
         {:else if route === "deals"}

@@ -42,7 +42,10 @@
     const a = await api.overlay.alerts().catch(() => null);
     alarmReminders = a?.reminders ?? [];
     alarmTimers = a?.timers ?? [];
-    if (alarmAuto && !alarmReminders.length && !alarmTimers.length) {
+    // Zamanlı kapatma uyarısı da paneli açık tutar (kapatılana ya da iptal edilene kadar).
+    const plan = await api.power.status().catch(() => null);
+    const powerSoon = !!plan && !plan.hidden && plan.at - Date.now() < 66_000;
+    if (alarmAuto && !alarmReminders.length && !alarmTimers.length && !powerSoon) {
       alarmAuto = false;
       close();
     }

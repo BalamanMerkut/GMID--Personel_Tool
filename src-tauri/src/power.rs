@@ -17,6 +17,8 @@ pub struct Plan {
     pub action: String,
     /// Ne zaman (ms).
     pub at: i64,
+    /// Son dakika uyarısı kapatıldı (süre işlemeye devam eder).
+    pub hidden: bool,
 }
 
 #[derive(Default)]
@@ -50,6 +52,7 @@ pub fn schedule(app: &AppHandle, action: &str, minutes: f64) -> Result<Plan, Str
     let plan = Plan {
         action: action.into(),
         at,
+        hidden: false,
     };
     let state = app.state::<Power>();
     *state.plan.lock().unwrap_or_else(|e| e.into_inner()) = Some(plan.clone());
@@ -80,6 +83,27 @@ pub fn cancel(app: &AppHandle) {
     }
     let _ = app.emit("power-changed", ());
     crate::alarm::changed(app);
+}
+
+/// Son dakika uyarısını kapatır; plan iptal olmaz, süre dolunca yine uygulanır.
+pub fn dismiss(app: &AppHandle) {
+    let state = app.state::<Power>();
+    let plan = {
+        let mut guard = state.plan.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(p) = guard.as_mut() else {
+            return;
+        };
+        p.hidden = true;
+        p.clone()
+    };
+    let _ = app.emit("power-changed", &plan);
+    crate::alarm::changed(app);
+    let secs = ((plan.at - crate::util::now_ms()) / 1000).max(0);
+    crate::overlay::show_osd(
+        app,
+        "power",
+        format!("Bilgisayar {secs} sn sonra {}", label(&plan.action)),
+    );
 }
 
 /// Planı beklemeden uygular.

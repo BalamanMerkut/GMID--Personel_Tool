@@ -336,6 +336,7 @@ pub fn run() {
             commands::tools::power_schedule,
             commands::tools::power_cancel,
             commands::tools::power_now,
+            commands::tools::power_dismiss,
             commands::tools::system_info,
             commands::tools::system_info_text,
             commands::games::borderless_list,

@@ -8,7 +8,10 @@ const PORTS = [47913, 47914, 47915, 47916, 47917];
 // Giriş isteyen bu sitelerde sayfa bağlantısıyla indirirken o sitenin çerezleri geçici olarak verilir.
 const COOKIE_SITES = ["instagram.com", "x.com", "twitter.com", "facebook.com"];
 // Bu sitelerin kendi oynatıcı parçalarını yakalamaya gerek yok: yt-dlp sayfa adresinden indirir.
-const SKIP_MEDIA_HOSTS = ["googlevideo.com", "youtube.com", "ytimg.com", "twimg.com", "cdninstagram.com", "fbcdn.net", "tiktokcdn.com"];
+const SKIP_MEDIA_HOSTS = ["googlevideo.com", "youtube.com", "ytimg.com", "twimg.com", "cdninstagram.com", "fbcdn.net",
+  "tiktok.com", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "tiktokv.com", "tiktokv.us", "tiktokv.eu", "ibytedtos.com", "byteoversea.com"];
+// Bu sitelerde oynatıcının dosyası tek başına inmez (imzalı, çereze bağlı): yalnızca gönderi bağlantısıyla.
+const PAGE_ONLY = ["tiktok.com"];
 const QUALITIES = [
   ["auto", "En iyi (1080p'ye kadar)"],
   ["720", "720p"],
@@ -220,8 +223,9 @@ async function smartProbe({ tabId, pageUrl, frameUrl: senderFrame, title, wholeL
       fail(e);
     }
   }
+  const pageOnly = PAGE_ONLY.some((h) => hostOf(pageUrl) === h || hostOf(pageUrl).endsWith("." + h));
   // Üstünde durulan videonun kendi dosyası görünüyorsa (blob değilse) önce o.
-  if (src && /^https?:/.test(src) && !wholeList) {
+  if (src && /^https?:/.test(src) && !wholeList && !pageOnly) {
     const context = { referer: senderFrame || pageUrl, userAgent: navigator.userAgent, title };
     try {
       const p = await api("/v1/probe", { url: src, context });
@@ -254,6 +258,9 @@ async function smartProbe({ tabId, pageUrl, frameUrl: senderFrame, title, wholeL
         tries.push(e.message);
       }
     }
+  }
+  if (pageOnly && !hint) {
+    throw new Error("TikTok akışında bu videonun bağlantısı bulunamadı. Videoya tıklayıp kendi sayfasında aç, sonra tekrar dene.");
   }
   throw new Error(tries.length && !candidates(tabId).length
     ? "Bu sayfada indirilebilir video bulunamadı. Videoyu birkaç saniye oynatıp tekrar dene."
@@ -291,8 +298,15 @@ async function handle(msg, sender) {
       await chrome.storage.local.set({ token: j.token });
       return { ok: true };
     }
-    case "smart-probe":
-      return smartProbe({ ...(await tabInfo(msg, sender)), wholeList: msg.wholeList, src: msg.src, hint: msg.hint });
+    case "smart-probe": {
+      const info = await tabInfo(msg, sender);
+      let hint = msg.hint;
+      // Eklenti penceresinden: akış sayfasında ekranda oynayan videonun kendi bağlantısı (TikTok, X…).
+      if (!hint && !sender.tab && info.tabId != null) {
+        hint = await chrome.tabs.sendMessage(info.tabId, { type: "hint-visible" }, { frameId: 0 }).catch(() => null);
+      }
+      return smartProbe({ ...info, wholeList: msg.wholeList, src: msg.src, hint });
+    }
     case "found-sub": {
       if (!sender.tab || !/^https?:/.test(msg.url || "")) return null;
       const list = subs.get(sender.tab.id) || [];

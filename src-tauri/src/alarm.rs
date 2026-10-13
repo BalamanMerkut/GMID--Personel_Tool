@@ -31,7 +31,9 @@ fn pending(app: &AppHandle) -> bool {
         || app
             .state::<crate::power::Power>()
             .status()
-            .is_some_and(|p| p.at - crate::util::now_ms() <= (crate::power::WARN_SECS + 5) * 1000)
+            .is_some_and(|p| {
+                !p.hidden && p.at - crate::util::now_ms() <= (crate::power::WARN_SECS + 5) * 1000
+            })
 }
 
 /// Zamanlı kapatmaya bir dakika kala: geri sayım (İptal / Şimdi). Melodi çalmaz.

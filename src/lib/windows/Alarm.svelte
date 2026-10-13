@@ -18,7 +18,7 @@
     reminders = a?.reminders ?? [];
     timers = a?.timers ?? [];
     const plan = await api.power.status().catch(() => null);
-    const powerSoon = !!plan && plan.at - Date.now() < 66_000;
+    const powerSoon = !!plan && !plan.hidden && plan.at - Date.now() < 66_000;
     if (a && !reminders.length && !timers.length && !powerSoon) void api.alarm.hide();
   }
 

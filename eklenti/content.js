@@ -83,10 +83,44 @@
       return abs(item?.querySelector('a#thumbnail, a[href*="/watch"], a[href*="/shorts/"]'))
         || abs(document.querySelector('ytd-video-preview a[href*="/watch"], #video-preview a[href*="/watch"]'));
     }
+    if (/(^|\.)tiktok\.com$/.test(host)) return tiktokLink(v);
     if (/(^|\.)facebook\.com$/.test(host)) {
       const art = v.closest('[role="article"]');
       return abs(art?.querySelector('a[href*="/videos/"], a[href*="/reel/"], a[href*="/watch"]'));
     }
+    return null;
+  }
+
+  // TikTok: akışta (Sana Özel, Takip, Keşfet) adres çubuğunda akışın adresi durur. Videonun kimliği
+  // oynatıcının kutusunda ("xgwrapper-0-7412…"), bazen de karttaki bağlantıda yazar; kullanıcı adı
+  // karttaki profil bağlantısından. yt-dlp'nin tanıdığı biçim: tiktok.com/@kullanici/video/KİMLİK.
+  function tiktokLink(v) {
+    const page = location.pathname.match(/^\/@([^/]+)\/(video|photo)\/(\d{8,})/);
+    let id = null;
+    let user = null;
+    let node = v;
+    for (let i = 0; node && i < 14 && !(id && user); i++, node = node.parentElement) {
+      if (!id) {
+        const own = (node.id || "").match(/(\d{15,22})/);
+        const a = node.querySelector?.('a[href*="/video/"]');
+        const fromLink = a?.getAttribute("href")?.match(/\/@([^/?#]+)\/video\/(\d{8,})/);
+        if (own) id = own[1];
+        else if (fromLink) {
+          id = fromLink[2];
+          user = user || fromLink[1];
+        }
+      }
+      if (!user && id) {
+        const prof = node.querySelector?.('a[href^="/@"]:not([href*="/video/"])');
+        const m = prof?.getAttribute("href")?.match(/^\/@([^/?#]+)/);
+        if (m) user = m[1];
+      }
+      // Bir sonraki videonun kartına taşmayalım.
+      if (node.matches?.('article, [data-e2e="recommend-list-item-container"]')) break;
+    }
+    if (id) return `https://www.tiktok.com/@${user || "_"}/video/${id}`;
+    // Video sayfası ya da açılan pencere: adres zaten videonun.
+    if (page) return location.href.split(/[?#]/)[0];
     return null;
   }
 
@@ -224,5 +258,16 @@
       void load(false, null, linkHint(lastTarget));
     }
     if (msg.type === "hint") reply(linkHint(lastTarget));
+    if (msg.type === "hint-visible") {
+      // Ekranda en çok görünen video; oynayan önce.
+      const seen = (v) => {
+        const r = v.getBoundingClientRect();
+        const w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
+        const h = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+        return w * h * (v.paused ? 1 : 4);
+      };
+      const best = [...videos].sort((a, b) => seen(b) - seen(a))[0];
+      reply(best && seen(best) > 0 ? linkHint(best) : null);
+    }
   });
 })();
