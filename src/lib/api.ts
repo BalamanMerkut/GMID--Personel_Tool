@@ -28,6 +28,7 @@ function browserStore(): Record<string, string> {
 }
 
 import type {
+  KaraokeMix, KaraokeRecording, KaraokeStatus,
   Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot,
 } from "./types";
@@ -481,6 +482,18 @@ export const api = {
     correct: (at: number, text: string) => call<[string, string][]>("dictation_correct", { at, text }),
   },
 
+  karaoke: {
+    status: (id: string) => call<KaraokeStatus>("karaoke_status", { id }),
+    prepare: (id: string) => call<KaraokeStatus>("karaoke_prepare", { id }),
+    cancel: () => call<void>("karaoke_cancel"),
+    /** Mikrofon kaydını (base64) saklar; yolunu döner. */
+    voice: (data: string, ext: string) => call<string>("karaoke_voice", { data, ext }),
+    mix: (id: string, mix: KaraokeMix) => call<string>("karaoke_mix", { id, mix }),
+    recordings: () => call<KaraokeRecording[]>("karaoke_recordings"),
+    reveal: (path: string) => call<void>("karaoke_reveal", { path }),
+    remove: (path: string) => call<void>("karaoke_delete", { path }),
+  },
+
   transcripts: {
     get: (id: string) => call<Transcript | null>("transcript_get", { id }),
     /** `mode`: "auto" (önce sitenin altyazısı) | "subtitles" | "whisper"; `lang`: "orig" | "tr" | "en" */
@@ -514,7 +527,8 @@ export const api = {
   media: {
     /** Şimdi çalan (Spotify, YouTube…); yoksa null. */
     now: () => call<NowPlaying | null>("media_now"),
-    control: (action: "toggle" | "next" | "prev") => call<void>("media_control", { action }),
+    /** "toggle" | "next" | "prev" | "shuffle" | "repeat" | "seek:<saniye>" */
+    control: (action: string) => call<void>("media_control", { action }),
   },
 
   net: {

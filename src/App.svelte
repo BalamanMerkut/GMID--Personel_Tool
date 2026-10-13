@@ -5,7 +5,7 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import Splash from "./lib/components/Splash.svelte";
   import Toast from "./lib/components/Toast.svelte";
-  import { findScreen, roomOf, SCREENS } from "./lib/nav";
+  import { findScreen, groupOf, roomOf, SCREENS } from "./lib/nav";
   import Audio from "./lib/screens/Audio.svelte";
   import Home from "./lib/screens/Home.svelte";
   import Placeholder from "./lib/screens/Placeholder.svelte";
@@ -53,6 +53,8 @@
 
   const quality = $derived(effectiveQuality(settings.quality));
   const screen = $derived(findScreen(route) ?? SCREENS[0]);
+  /** Yan menüdeki girişi birden çok ekransa üstte sekmeler. */
+  const group = $derived(groupOf(route));
   const dl = $derived(activeSummary());
 
   /** Ayarlar ekranında açık bölüm ("settings/kisayollar" gibi adreslerle de seçilir). */
@@ -146,8 +148,15 @@
       <header class="topbar">
         <div class="titles">
           <span class="crumb">{roomOf(route) ?? "GMID Tool"}</span>
-          <h1>{screen.label}</h1>
+          <h1>{group && group.tabs.length > 1 ? group.label : screen.label}</h1>
         </div>
+        {#if group && group.tabs.length > 1}
+          <nav class="subtabs" aria-label="{group.label} sekmeleri">
+            {#each group.tabs as t (t.id)}
+              <button aria-current={route === t.id ? "page" : undefined} onclick={() => navigate(t.id)}>{t.label}</button>
+            {/each}
+          </nav>
+        {/if}
         <button class="find" onclick={() => (searchOpen = true)} title="Her şeyde ara (Ctrl+K)">
           <Icon name="search" size={15} /><span>Ara</span><kbd>Ctrl K</kbd>
         </button>
@@ -253,6 +262,11 @@
     background: rgba(18, 20, 23, 0.55);
   }
   .titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  /* Bir girişin ekranları: başlığın yanında sekme rayı. */
+  .subtabs { display: inline-flex; gap: 3px; padding: 4px; border-radius: 13px; background: rgba(0, 0, 0, 0.28); border: 1px solid var(--line); min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .subtabs button { border: 0; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+  .subtabs button:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .subtabs button[aria-current="page"] { color: #1b1608; background: linear-gradient(180deg, var(--gold-glow), var(--gold)); box-shadow: 0 4px 14px rgba(227, 194, 112, 0.2); }
   .find {
     display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: none;
     border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); color: var(--muted);

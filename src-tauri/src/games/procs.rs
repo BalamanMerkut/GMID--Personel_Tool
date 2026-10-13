@@ -65,6 +65,50 @@ pub fn list() -> Vec<Proc> {
     out
 }
 
+/// Süreç → üst süreç eşlemesi.
+#[cfg(windows)]
+pub fn parents() -> std::collections::HashMap<u32, u32> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    let mut out = std::collections::HashMap::new();
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return out;
+        };
+        let mut e = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut ok = Process32FirstW(snap, &mut e).is_ok();
+        while ok {
+            out.insert(e.th32ProcessID, e.th32ParentProcessID);
+            ok = Process32NextW(snap, &mut e).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+    out
+}
+
+/// `pid`, `ancestor`ın alt süreci mi (en çok 6 kuşak).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn descends_from(
+    parents: &std::collections::HashMap<u32, u32>,
+    mut pid: u32,
+    ancestor: u32,
+) -> bool {
+    for _ in 0..6 {
+        match parents.get(&pid) {
+            Some(&p) if p == ancestor => return true,
+            Some(&p) if p != 0 && p != pid => pid = p,
+            _ => return false,
+        }
+    }
+    false
+}
+
 /// Geliştirme ortamı (Linux): /proc'tan.
 #[cfg(not(windows))]
 pub fn list() -> Vec<Proc> {
@@ -205,4 +249,17 @@ pub fn exe_of(pid: u32) -> Option<String> {
 #[cfg(not(windows))]
 pub fn exe_of(pid: u32) -> Option<String> {
     list().into_iter().find(|p| p.pid == pid).map(|p| p.name)
+}
+
+#[cfg(test)]
+mod tree_tests {
+    #[test]
+    fn descendants() {
+        // gmid (10) → webview tarayıcı (20) → ses süreci (30); başka (40 → 1)
+        let p = [(20, 10), (30, 20), (40, 1), (10, 1)].into_iter().collect();
+        assert!(super::descends_from(&p, 30, 10));
+        assert!(super::descends_from(&p, 20, 10));
+        assert!(!super::descends_from(&p, 40, 10));
+        assert!(!super::descends_from(&p, 99, 10));
+    }
 }

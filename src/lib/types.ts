@@ -384,7 +384,8 @@ export interface WhisperStatus {
 
 export interface TranscriptProgress {
   id: string;
-  stage: "lyrics" | "subtitles" | "audio" | "whisper";
+  /** lang: dil bulunuyor; load: model yükleniyor; whisper: dinliyor (progress 0..1). */
+  stage: "lyrics" | "subtitles" | "audio" | "lang" | "load" | "whisper";
   progress: number;
 }
 
@@ -917,6 +918,14 @@ export interface NowPlaying {
   playing: boolean;
   /** Kapak (data: URL). */
   thumb: string | null;
+  /** Ham uygulama kimliği (ses karıştırıcısıyla eşlemek için). */
+  source: string;
+  /** Program desteklemiyorsa null. */
+  shuffle: boolean | null;
+  repeat: "none" | "track" | "list" | null;
+  /** Saniye; bilinmiyorsa null. */
+  position: number | null;
+  duration: number | null;
 }
 
 /** Bağlantı testi: bir hedefin ping sonuçları. */
@@ -978,4 +987,54 @@ export interface Specs {
   cameras: { kind: string; name: string }[];
   /** Ne zaman okundu (ms); bilgiler saklanır, Yenile ile yeniden okunur. */
   readAt: number;
+}
+
+/** Karaoke: şarkının ayrılmış müziği/vokali. */
+export interface KaraokeStatus {
+  ready: boolean;
+  music: string | null;
+  vocals: string | null;
+  /** İlk kullanımda inecek (MB); 0: hazır. */
+  downloadMb: number;
+  /** Şu an hazırlanan şarkı. */
+  busy: string | null;
+}
+
+export interface KaraokeProgress {
+  id: string;
+  stage: "runtime" | "model" | "decode" | "separate" | "save";
+  progress: number;
+  gpu: boolean;
+}
+
+export interface KaraokeMix {
+  voice: string;
+  songStart: number;
+  latency: number;
+  voiceGain: number;
+  musicGain: number;
+  echo: boolean;
+  output: string | null;
+  title: string;
+}
+
+export interface KaraokeRecording {
+  path: string;
+  name: string;
+  size: number;
+  modified: number;
+}
+
+/** GMID'in kendi oynatıcısının durumu (oyun içi paneldeki "Şimdi çalan" için, pencereler arası). */
+export interface GmidPlayerState {
+  title: string;
+  artist: string;
+  thumb: string | null;
+  playing: boolean;
+  shuffle: boolean;
+  repeat: "none" | "track" | "list";
+  position: number;
+  duration: number;
+  volume: number;
+  muted: boolean;
 }

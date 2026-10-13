@@ -119,16 +119,11 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   (oyun, Discord, Spotify, tarayıcı ayrı ayrı; Ses & Mikrofon ekranında da var),
   mikrofon (seviye, sessize alma, kilit), Oyun Modu, sayaç (5/15/30 dk mola), o oyuna not (Notlar'da da görünür), son
   klip (Discord'a sığdır), yaklaşan hatırlatıcılar, **Şimdi çalan** (Spotify, tarayıcıda YouTube, VLC… Windows'un
-  medya tuşlarına bağlanan her program: kapak, ad, önceki / oynat-duraklat / sonraki). Esc ya da aynı tuşla kapanır,
+  medya tuşlarına bağlanan her program: kapak, ad, ilerleme çubuğu (tıkla → oraya git), karıştır, önceki /
+  oynat-duraklat / sonraki, tekrar, o programın ses seviyesi; GMID'in kendi oynatıcısında hepsi doğrudan). Esc ya da aynı tuşla kapanır,
   oyuna geri dönersin. Oyuna hiçbir şey eklenmez; çerçevesiz ya da pencereli oyunlarda görünür.
-- **Discord'da durum:** oyundayken Discord profilinde "Valorant oynuyor · Game Mansion In Discord", geçen süre ve
-  **GMID'e katıl** düğmesi. Sunucu gerekmez (Discord'un bu bilgisayardaki yerel bağlantısı). Bir kez kurulum:
-  [Discord Developer Portal](https://discord.com/developers/applications) → New Application → ad "GMID Tool" →
-  **Application ID**'yi kopyala → Kontrol Odası → Oyunlar → **Discord'da durum** kutusuna yapıştır. İstersen
-  Rich Presence → Art Assets'e GMID logosunu **gmid** adıyla yükle (profilde büyük resim olur).
-
-### Faz 3b — Oyun (3. bölüm: Kliplerim)
-
+- **Discord'da durum** (oyundayken profilde "X oynuyor · GMID'e katıl"): kodu hazır; GMID'in Discord botu (VDS) açılınca
+  kendiliğinden gelecek.
 - NVIDIA (Alt+F10), Xbox Game Bar, AMD, OBS, Steam (F12) ve Medal kayıtları **kendiliğinden bulunur**; dosyalar
   taşınmaz, yerinde kalır. Başka bir klasöre kaydediyorsan Kontrol Odası → Oyunlar'dan ekle.
 - Her klip **hangi oyunda çekildiyse** onun altında görünür (o an açık oyun, Steam'in kendi bilgisi ya da klasör adı);
@@ -188,6 +183,13 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   ada / sanatçıya / süreye / en çok dinlenene göre sıralama; **Liste / Kapak** görünümü. Şarkıya tıklamak oynatıcıyı
   öne getirmez, altta çalar. **Videolar:** büyük kapaklı kartlar, üstünde süre ve kalite; site ve liste süzgeci.
   Oynatıcıyı küçültünce (Esc) başka ekranlarda altta çalmaya devam eder, video köşede küçük oynar.
+- **Karaoke** (oynatıcıda **Karaoke** düğmesi): şarkıcının sesi yapay zekâyla (Meta'nın **Demucs** modeli) müzikten
+  ayrılır; yalnız müzik çalar, sözler ortada kelime kelime altınla dolar (önceki/sonraki satırlar, girişte geri sayım),
+  istersen **Orijinal ses** kaydırıcısıyla şarkıcıyı hafifçe duyarsın. **Kaydet**: mikrofonla söylediğin müzikle
+  karıştırılır (hafif yankı, ses seviyesi ve gecikme düzeltmesi sonradan ayarlanır) → `Belgeler\GMID Tool\Karaoke\Kayıtlar`.
+  Ayırma bu bilgisayarda, şarkı başına bir kez (ekran kartıyla DirectML: NVIDIA/AMD/Intel; yoksa işlemciyle 1–3 dk);
+  ilk kullanımda ses ayırma programı (ONNX Runtime, ~25 MB) ve model (~98 MB) iner. Kulaklıkla en temiz kayıt;
+  hoparlörde "Kulaklık takılı"yı kapat (müziğin mikrofona girmesi engellenir).
 - **Dublaj ve altyazı:** sitede birden çok ses dili ya da altyazı varsa indirirken seçilir (varsayılan: Türkçe
   dublaj, Türkçe altyazı; Kontrol Odası → Video İndirici). Altyazılar videonun yanına `<ad>.tr.vtt` olarak iner;
   eklenti, film sitelerinin ayrıca yüklediği altyazı dosyalarını da yakalar. Oynatıcıda **CC** ile açılır.

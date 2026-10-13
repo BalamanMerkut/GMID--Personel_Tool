@@ -13,6 +13,25 @@ pub struct NowPlaying {
     pub playing: bool,
     /// Kapak (data: URL, JPEG/PNG); yoksa `None`.
     pub thumb: Option<String>,
+    /// Ham uygulama kimliği (ses karıştırıcısındaki programla eşlemek için).
+    pub source: String,
+    /// Karıştırma açık mı; program desteklemiyorsa `None`.
+    pub shuffle: Option<bool>,
+    /// "none" | "track" | "list"; desteklemiyorsa `None`.
+    pub repeat: Option<String>,
+    /// Saniye; program bildirmiyorsa `None`.
+    pub position: Option<f64>,
+    pub duration: Option<f64>,
+}
+
+/// Tekrar düğmesi: kapalı → liste → parça → kapalı.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn next_repeat(current: Option<&str>) -> &'static str {
+    match current {
+        Some("list") => "track",
+        Some("track") => "none",
+        _ => "list",
+    }
 }
 
 /// "Spotify.exe", "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Chrome" → okunur ad.
@@ -54,6 +73,7 @@ mod win {
         GlobalSystemMediaTransportControlsSessionManager as Manager,
         GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
     };
+    use windows::Media::MediaPlaybackAutoRepeatMode as Repeat;
     use windows::Storage::Streams::DataReader;
     use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
@@ -99,39 +119,125 @@ mod win {
         ))
     }
 
+    /// Windows zamanı (1601'den beri 100 ns) şimdi.
+    fn now_ticks() -> i64 {
+        let unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as i64 / 100)
+            .unwrap_or(0);
+        unix + 116_444_736_000_000_000
+    }
+
     pub fn now() -> Option<NowPlaying> {
         let s = session()?;
         let props = s.TryGetMediaPropertiesAsync().ok()?.join().ok()?;
-        let playing = s
-            .GetPlaybackInfo()
-            .and_then(|p| p.PlaybackStatus())
-            .is_ok_and(|st| st == Status::Playing);
-        let app = s
+        let info = s.GetPlaybackInfo().ok();
+        let playing = info
+            .as_ref()
+            .and_then(|p| p.PlaybackStatus().ok())
+            .is_some_and(|st| st == Status::Playing);
+        let source = s
             .SourceAppUserModelId()
-            .map(|h| app_name(&h.to_string()))
+            .map(|h| h.to_string())
             .unwrap_or_default();
         let title = props.Title().map(|h| h.to_string()).unwrap_or_default();
         if title.trim().is_empty() {
             return None;
         }
+        let controls = info.as_ref().and_then(|p| p.Controls().ok());
+        let shuffle = controls
+            .as_ref()
+            .filter(|c| c.IsShuffleEnabled().unwrap_or(false))
+            .and_then(|_| info.as_ref()?.IsShuffleActive().ok()?.Value().ok());
+        let repeat = controls
+            .as_ref()
+            .filter(|c| c.IsRepeatEnabled().unwrap_or(false))
+            .and_then(|_| info.as_ref()?.AutoRepeatMode().ok()?.Value().ok())
+            .map(|m| {
+                match m {
+                    Repeat::Track => "track",
+                    Repeat::List => "list",
+                    _ => "none",
+                }
+                .to_string()
+            });
+        let (mut position, mut duration) = (None, None);
+        if let Ok(t) = s.GetTimelineProperties() {
+            let start = t.StartTime().map(|x| x.Duration).unwrap_or(0);
+            let end = t.EndTime().map(|x| x.Duration).unwrap_or(0);
+            if end > start {
+                let mut pos = t.Position().map(|x| x.Duration).unwrap_or(0) - start;
+                // Konum son güncellemedeki değer: çalıyorsa aradan geçen süre eklenir.
+                if playing {
+                    if let Ok(at) = t.LastUpdatedTime() {
+                        pos += (now_ticks() - at.UniversalTime).clamp(0, end - start);
+                    }
+                }
+                duration = Some((end - start) as f64 / 1e7);
+                position = Some(pos.clamp(0, end - start) as f64 / 1e7);
+            }
+        }
         Some(NowPlaying {
-            app,
+            app: app_name(&source),
             title,
             artist: props.Artist().map(|h| h.to_string()).unwrap_or_default(),
             playing,
             thumb: thumb(&props),
+            source,
+            shuffle,
+            repeat,
+            position,
+            duration,
         })
     }
 
+    /// "toggle" | "next" | "prev" | "shuffle" | "repeat" | "seek:<saniye>"
     pub fn control(action: &str) -> Result<(), String> {
         let s = session().ok_or("Çalan bir şey yok")?;
-        let op = match action {
-            "next" => s.TrySkipNextAsync(),
-            "prev" => s.TrySkipPreviousAsync(),
-            _ => s.TryTogglePlayPauseAsync(),
+        let err = |e: windows::core::Error| e.message().to_string();
+        let op = if let Some(secs) = action.strip_prefix("seek:") {
+            let secs: f64 = secs.parse().map_err(|_| "Geçersiz konum")?;
+            let start = s
+                .GetTimelineProperties()
+                .and_then(|t| t.StartTime())
+                .map(|x| x.Duration)
+                .unwrap_or(0);
+            s.TryChangePlaybackPositionAsync(start + (secs.max(0.0) * 1e7) as i64)
+        } else if action == "shuffle" {
+            let on = s
+                .GetPlaybackInfo()
+                .and_then(|p| p.IsShuffleActive())
+                .and_then(|v| v.Value())
+                .unwrap_or(false);
+            s.TryChangeShuffleActiveAsync(!on)
+        } else if action == "repeat" {
+            let cur = s
+                .GetPlaybackInfo()
+                .and_then(|p| p.AutoRepeatMode())
+                .and_then(|v| v.Value())
+                .ok()
+                .map(|m| match m {
+                    Repeat::Track => "track",
+                    Repeat::List => "list",
+                    _ => "none",
+                });
+            let next = match super::next_repeat(cur) {
+                "track" => Repeat::Track,
+                "list" => Repeat::List,
+                _ => Repeat::None,
+            };
+            s.TryChangeAutoRepeatModeAsync(next)
+        } else {
+            match action {
+                "next" => s.TrySkipNextAsync(),
+                "prev" => s.TrySkipPreviousAsync(),
+                _ => s.TryTogglePlayPauseAsync(),
+            }
         }
-        .map_err(|e| e.message().to_string())?;
-        op.join().map_err(|e| e.message().to_string())?;
+        .map_err(err)?;
+        if !op.join().map_err(err)? {
+            return Err("Bu program bunu desteklemiyor.".into());
+        }
         Ok(())
     }
 }
@@ -151,6 +257,14 @@ pub fn control(_action: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn repeat_cycles() {
+        assert_eq!(super::next_repeat(None), "list");
+        assert_eq!(super::next_repeat(Some("none")), "list");
+        assert_eq!(super::next_repeat(Some("list")), "track");
+        assert_eq!(super::next_repeat(Some("track")), "none");
+    }
+
     #[test]
     fn app_names() {
         assert_eq!(super::app_name("Spotify.exe"), "Spotify");

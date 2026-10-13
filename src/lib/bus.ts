@@ -17,6 +17,7 @@ export type AppEvent =
   | "tools-progress"
   | "bridge-changed"
   | "transcript-progress"
+  | "karaoke-progress"
   | "dictation-state"
   | "dictation-entry"
   | "dikte"
@@ -37,7 +38,9 @@ export type AppEvent =
   | "community"
   | "alarm-changed"
   | "panel-alarm"
-  | "power-changed";
+  | "power-changed"
+  | "gmid-player"
+  | "gmid-player-cmd";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {
@@ -48,6 +51,16 @@ export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void)
   const handler = (e: Event) => cb((e as CustomEvent<T>).detail);
   localBus.addEventListener(event, handler);
   return () => localBus.removeEventListener(event, handler);
+}
+
+/** Bütün pencerelere olay gönderir (ör. ana penceredeki oynatıcı ↔ oyun içi panel). */
+export async function emitAll(event: AppEvent, payload: unknown): Promise<void> {
+  if (inTauri) {
+    const { emit } = await import("@tauri-apps/api/event");
+    await emit(event, payload);
+    return;
+  }
+  localBus.dispatchEvent(new CustomEvent(event, { detail: payload }));
 }
 
 /** Ardı ardına gelen olayları tek çağrıya indirir. */

@@ -55,8 +55,6 @@
   let result = $state<Result | null>(null);
   let big = $state(false);
   let draft = $state("");
-  let bulk = $state(false);
-  let bulkText = $state("");
   let saving = $state(false);
   let saveName = $state("");
   let drawKind = $state<"pick" | "order" | "teams">("pick");
@@ -111,10 +109,14 @@
     draft = "";
   }
 
-  function addBulk() {
-    add(splitItems(bulkText));
-    bulkText = "";
-    bulk = false;
+  /** Birden çok satır ya da virgüllü liste yapıştırılınca hepsi eklenir. */
+  function onPaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData("text") ?? "";
+    const parts = splitItems(text);
+    if (parts.length > 1) {
+      e.preventDefault();
+      add(parts);
+    }
   }
 
   function remove(id: string) {
@@ -605,33 +607,53 @@
       <section class="panel list">
         <div class="head">
           <h3 class="h2"><Icon name="list" />Liste <span class="count tnum">{items.length}</span></h3>
-          <div class="row">
-            <button class="btn ghost sm" disabled={busy || items.length < 2} onclick={shuffleList} title="Listeyi karıştır"><Icon name="shuffle" size={14} /></button>
-            <button class="btn ghost sm" disabled={busy || !items.length} onclick={clearAll}>Temizle</button>
+          <div class="hbtns">
+            <button class="ico" disabled={busy || items.length < 2} onclick={shuffleList} title="Listeyi karıştır"><Icon name="shuffle" size={15} /></button>
+            <button class="ico" disabled={!items.length} onclick={() => (saving = !saving)} title="Listeyi kaydet"><Icon name="pin" size={15} /></button>
+            <button class="ico danger" disabled={busy || !items.length} onclick={clearAll} title="Listeyi temizle"><Icon name="trash" size={15} /></button>
           </div>
         </div>
 
         <form class="adder" onsubmit={(e) => (e.preventDefault(), addDraft())}>
-          <input bind:value={draft} placeholder="İsim, film, oyun… yaz, Enter" maxlength="80" disabled={busy} />
-          <button class="btn sm" disabled={busy || !draft.trim()}><Icon name="plus" size={15} />Ekle</button>
+          <input bind:value={draft} placeholder="İsim, film, oyun… yaz, Enter" maxlength="80" disabled={busy} onpaste={onPaste} />
+          <button class="addb" disabled={busy || !draft.trim()} title="Ekle" aria-label="Ekle"><Icon name="plus" size={17} /></button>
         </form>
-        <button class="link" onclick={() => (bulk = !bulk)}>{bulk ? "Toplu eklemeyi kapat" : "Toplu ekle (her satıra bir tane ya da virgülle)"}</button>
-        {#if bulk}
-          <textarea bind:value={bulkText} rows="5" placeholder={"Interstellar\nDune\nMatrix\n…"}></textarea>
-          <button class="btn sm" disabled={!bulkText.trim()} onclick={addBulk}>Hepsini ekle</button>
+        <span class="hint">Birden çok satır (ya da virgüllü liste) yapıştırırsan hepsi birden eklenir.</span>
+
+        {#if saving}
+          <form class="adder" onsubmit={(e) => (e.preventDefault(), saveList())}>
+            <!-- svelte-ignore a11y_autofocus -->
+            <input bind:value={saveName} placeholder="Liste adı (ör. Film gecesi)" maxlength="40" autofocus />
+            <button class="btn sm" disabled={!saveName.trim()}>Kaydet</button>
+          </form>
         {/if}
 
-        <div class="quick">
-          <span class="sub small">Hızlı doldur:</span>
-          <button class="chip" disabled={busy} onclick={fillWatchlist}><Icon name="film" size={13} />İzlenecek filmler</button>
-          <button class="chip" disabled={busy} onclick={fillWishlist}><Icon name="star" size={13} />İstediğim oyunlar</button>
-          <button class="chip" disabled={busy} onclick={fillInstalled}><Icon name="library" size={13} />Kurulu oyunlar</button>
+        <div class="fill">
+          <span class="flabel">Hızlı doldur</span>
+          <div class="ftiles">
+            <button disabled={busy} onclick={fillWatchlist}><Icon name="film" size={18} /><span>İzlenecek<br />filmler</span></button>
+            <button disabled={busy} onclick={fillWishlist}><Icon name="star" size={18} /><span>İstediğim<br />oyunlar</span></button>
+            <button disabled={busy} onclick={fillInstalled}><Icon name="library" size={18} /><span>Kurulu<br />oyunlar</span></button>
+          </div>
         </div>
+
+        {#if saved.length}
+          <div class="saved">
+            <span class="flabel">Listelerim</span>
+            {#each saved as s (s.name)}
+              <span class="chip lst">
+                <button class="ln" disabled={busy} onclick={() => loadList(s)} title="{s.items.length} öğe: yükle">{s.name}</button>
+                <button class="x" onclick={() => deleteList(s.name)} aria-label="{s.name} listesini sil"><Icon name="x" size={11} /></button>
+              </span>
+            {/each}
+          </div>
+        {/if}
 
         {#if items.length}
           <ol class="items">
             {#each items as it, i (it.id)}
               <li class:out={mode === "elim" && out.includes(it.id)}>
+                <span class="num tnum">{i + 1}</span>
                 <span class="sw" style:background={sliceColor(i, items.length)}></span>
                 <span class="nm">{it.name}</span>
                 {#if showLevels}
@@ -648,24 +670,6 @@
             Örnek: film gecesi, 6 kişi 6 film söyledi. Hepsini yaz, sonra çarkı çevir ya da elemeyle son kalanı izleyin.
           </p>
         {/if}
-
-        <div class="saved">
-          {#each saved as s (s.name)}
-            <span class="chip lst">
-              <button class="ln" disabled={busy} onclick={() => loadList(s)} title="{s.items.length} öğe: yükle">{s.name}</button>
-              <button class="x" onclick={() => deleteList(s.name)} aria-label="{s.name} listesini sil"><Icon name="x" size={11} /></button>
-            </span>
-          {/each}
-          {#if saving}
-            <form class="adder" onsubmit={(e) => (e.preventDefault(), saveList())}>
-              <!-- svelte-ignore a11y_autofocus -->
-              <input bind:value={saveName} placeholder="Liste adı (ör. Film gecesi)" maxlength="40" autofocus />
-              <button class="btn sm" disabled={!saveName.trim()}>Kaydet</button>
-            </form>
-          {:else}
-            <button class="chip" disabled={!items.length} onclick={() => (saving = true)}><Icon name="pin" size={13} />Listeyi kaydet</button>
-          {/if}
-        </div>
       </section>
 
       <section class="panel hist">
@@ -946,26 +950,42 @@
   .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .count { font-size: 12px; color: var(--dim); font-weight: 600; }
   .sm { padding: 5px 10px; font-size: 12.5px; }
+  .hbtns { display: flex; gap: 4px; }
+  .ico { border: 1px solid var(--line-2); background: transparent; color: var(--muted); width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; }
+  .ico:hover:not(:disabled) { color: var(--gold-glow); border-color: var(--gold-dim); }
+  .ico.danger:hover:not(:disabled) { color: var(--bad); border-color: rgba(224, 106, 106, 0.5); }
+  .ico:disabled { opacity: 0.35; }
   .adder { display: flex; gap: 8px; }
-  input, textarea { background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--text); min-width: 0; }
+  input { background: var(--coal-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: var(--text); min-width: 0; }
+  input:focus { border-color: var(--gold-dim); outline: none; }
   .adder input { flex: 1; }
-  textarea { resize: vertical; font: inherit; }
-  .link { background: none; border: 0; padding: 0; color: var(--gold-dim); font-size: 12.5px; text-align: left; align-self: flex-start; }
-  .link:hover { color: var(--gold); }
-  .quick, .saved { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .addb { flex: none; width: 42px; border: 0; border-radius: 12px; background: var(--gold); color: #1b1608; display: grid; place-items: center; }
+  .addb:disabled { opacity: 0.35; }
+  .hint { font-size: 11.5px; color: var(--dim); margin-top: -6px; }
+  .flabel { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+  .fill { display: flex; flex-direction: column; gap: 6px; }
+  .ftiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .ftiles button { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 6px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.025); color: var(--muted); font-size: 12px; line-height: 1.25; text-align: center; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+  .ftiles button :global(svg) { color: var(--gold-dim); }
+  .ftiles button:hover:not(:disabled) { border-color: var(--gold-dim); color: var(--text); background: rgba(227, 194, 112, 0.06); }
+  .ftiles button:hover:not(:disabled) :global(svg) { color: var(--gold); }
+  .ftiles button:disabled { opacity: 0.5; }
+  .saved { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .chip { cursor: pointer; }
   .chip:hover:not(:disabled) { color: var(--gold-glow); border-color: var(--gold-dim); }
-  .chip:disabled { opacity: 0.5; cursor: default; }
   .lst { padding: 0 4px 0 0; gap: 0; }
   .lst .ln { background: none; border: 0; color: inherit; padding: 4px 6px 4px 10px; font-size: 12px; }
-  .saved .adder { flex: 1 1 100%; }
-  .items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; max-height: 360px; overflow: auto; }
-  .items li { display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.025); font-size: 13.5px; }
+  .items { list-style: none; margin: 0; padding: 6px 0 0; display: flex; flex-direction: column; gap: 1px; max-height: 380px; overflow: auto; border-top: 1px solid var(--line); }
+  .items li { display: flex; align-items: center; gap: 9px; padding: 6px 6px 6px 4px; border-radius: 8px; font-size: 13.5px; }
+  .items li:hover { background: rgba(255, 255, 255, 0.04); }
   .items li.out { opacity: 0.45; }
   .items li.out .nm { text-decoration: line-through; }
-  .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .num { width: 18px; text-align: right; font-size: 11px; color: var(--dim); flex: none; }
+  .sw { width: 9px; height: 9px; border-radius: 50%; flex: none; }
   .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .x { background: none; border: 0; color: var(--dim); padding: 3px; border-radius: 6px; display: grid; place-items: center; }
+  .items li .x { opacity: 0; transition: opacity 0.12s; }
+  .items li:hover .x, .items li .x:focus-visible { opacity: 1; }
   .x:hover:not(:disabled) { color: var(--bad); background: rgba(224, 106, 106, 0.1); }
   .empty { line-height: 1.5; }
   .hist ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }

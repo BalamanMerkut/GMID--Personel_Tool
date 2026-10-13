@@ -194,6 +194,11 @@
     if (q.length) start(q[0], q);
   }
   const isOn = (d: Download) => player.item?.id === d.id;
+  /** Kartın/satırın herhangi bir yerine tıklamak oynatır; içindeki düğmeler (kalp, ekle, sil…) kendi işini yapar. */
+  function fromCard(e: MouseEvent, run: () => void) {
+    if ((e.target as HTMLElement).closest("button, a, input, .addmenu")) return;
+    run();
+  }
   function clickSong(d: Download) {
     if (isOn(d)) controls.toggle();
     else start(d, shown);
@@ -397,7 +402,8 @@
             {/if}
             {#each shown as d, i (d.id)}
               {@const on = isOn(d)}
-              <div class="track" class:on role="listitem" ondblclick={() => start(d, shown)}>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <div class="track" class:on role="listitem" onclick={(e) => fromCard(e, () => clickSong(d))}>
                 <span class="tn tnum">{#if on}{@render eq(player.playing)}{:else}{i + 1}{/if}</span>
                 <button class="tthumb" title={on ? (player.playing ? "Duraklat" : "Oynat") : "Çal"} onclick={() => clickSong(d)}>
                   {#if thumbOf(d)}<img src={thumbOf(d)} alt="" loading="lazy" onerror={() => thumbFailed(d)} />{:else}<Icon name="headphones" size={16} />{/if}
@@ -419,7 +425,8 @@
           <div class="covers">
             {#each shown as d (d.id)}
               {@const on = isOn(d)}
-              <article class="cover" class:on ondblclick={() => start(d, shown)}>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <article class="cover" class:on onclick={(e) => fromCard(e, () => clickSong(d))}>
                 <div class="cimg">
                   {#if thumbOf(d)}<img src={thumbOf(d)} alt="" loading="lazy" onerror={() => thumbFailed(d)} />{:else}<span class="ph"><Icon name="headphones" size={30} /></span>{/if}
                   {#if on}<span class="badge">{@render eq(player.playing)}</span>{/if}
@@ -477,13 +484,14 @@
 
       <div class="grid">
         {#each shown as d (d.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
           <article
             class="card"
             class:on={isOn(d)}
-            ondblclick={() => play(d, shown)}
+            onclick={(e) => fromCard(e, () => play(d, shown))}
             onmouseenter={() => (hovering = d.id)}
             onmouseleave={() => hovering === d.id && (hovering = null)}
-            title="Çift tıkla: oynat"
+            title="Oynat"
           >
             <div class="cthumb">
               {#if hovering === d.id && previewable(d) && inTauri}
@@ -618,7 +626,7 @@
   .thead, .track { display: grid; grid-template-columns: 30px 46px minmax(0, 1fr) 34px 56px 104px; gap: 12px; align-items: center; }
   .thead { padding: 0 10px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; }
   .thead span:first-child { text-align: center; }
-  .track { padding: 6px 10px; border-radius: 10px; transition: background 0.12s; }
+  .track { padding: 6px 10px; border-radius: 10px; transition: background 0.12s; cursor: pointer; }
   .track:hover { background: rgba(255, 255, 255, 0.045); }
   .track.on { background: rgba(227, 194, 112, 0.1); }
   .track.on .ttx b { color: var(--gold-glow); }
@@ -661,7 +669,7 @@
 
   /* Kapak görünümü */
   .covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); gap: 16px 14px; }
-  .cover { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px; border-radius: 14px; transition: background 0.12s; }
+  .cover { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px; border-radius: 14px; transition: background 0.12s; cursor: pointer; }
   .cover:hover { background: rgba(255, 255, 255, 0.045); }
   .cover > b { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cover.on > b { color: var(--gold-glow); }
@@ -687,7 +695,7 @@
   .chipbtn:hover { border-color: var(--gold-dim); }
   .chipbtn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 22px 18px; }
-  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; cursor: default; }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; cursor: pointer; }
   .cthumb { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: var(--coal-2); border: 1px solid var(--line); transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .cthumb img, .cthumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .card:hover .cthumb { border-color: var(--gold-dim); transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4); }

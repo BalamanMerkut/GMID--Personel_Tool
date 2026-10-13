@@ -17,6 +17,7 @@ const SUBFOLDERS: &[&str] = &[
     "Discord'a Hazır",
     "Ozetler",
     "Raporlar",
+    "Karaoke",
 ];
 
 #[derive(Clone)]

@@ -14,6 +14,7 @@ mod gamemode;
 mod games;
 mod hotkeys;
 mod install;
+mod karaoke;
 mod log;
 mod mediactl;
 mod net;
@@ -136,6 +137,7 @@ pub fn run() {
             app.manage(nettest::NetTest::default());
             app.manage(drivers::Drivers::default());
             app.manage(presence::Presence::default());
+            app.manage(karaoke::Karaoke::default());
             app.manage(downloader::Downloader::default());
             app.manage(downloader::tools::Tools::default());
             app.manage(downloader::bridge::Bridge::default());
@@ -312,6 +314,14 @@ pub fn run() {
             commands::videos::bridge_pair,
             commands::videos::bridge_unpair,
             commands::videos::extension_install,
+            commands::karaoke::karaoke_status,
+            commands::karaoke::karaoke_prepare,
+            commands::karaoke::karaoke_cancel,
+            commands::karaoke::karaoke_voice,
+            commands::karaoke::karaoke_mix,
+            commands::karaoke::karaoke_recordings,
+            commands::karaoke::karaoke_reveal,
+            commands::karaoke::karaoke_delete,
             commands::transcripts::transcript_get,
             commands::transcripts::transcript_create,
             commands::transcripts::transcript_delete,

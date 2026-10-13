@@ -8,14 +8,16 @@
   // Filmlerde videonun yanındaki altyazılar (.tr.vtt…) seçilip görüntünün üstünde gösterilir.
   import { onMount, tick, untrack } from "svelte";
   import { api, inTauri } from "../api";
-  import { on } from "../bus";
+  import { emitAll, on } from "../bus";
   import { formatDuration, siteLabel } from "../downloads.svelte";
   import Icon from "../Icon.svelte";
   import { getJson, setJson } from "../settings.svelte";
+  import { fill, wordsOf } from "../karaoke";
+  import Karaoke from "./Karaoke.svelte";
   import { countPlay } from "../library.svelte";
   import { controls, nav, player } from "../player.svelte";
   import { notify } from "../toast.svelte";
-  import type { Download, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
+  import type { Download, GmidPlayerState, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
 
   let {
     item,
@@ -307,6 +309,17 @@
     };
   });
 
+  /** Karaoke açıkken oynatıcının kendi sesi durur, karaoke kendi müziğini çalar. */
+  let karaoke = $state(false);
+  function openKaraoke() {
+    media?.pause();
+    if (!inTauri) playing = false;
+    karaoke = true;
+  }
+  $effect(() => {
+    if (mini) karaoke = false;
+  });
+
   function toggle() {
     if (!playable) {
       if (!inTauri) playing = !playing;
@@ -398,6 +411,45 @@
   $effect(() => {
     player.line = item.audioOnly && active >= 0 ? (segments[active]?.text ?? "") : "";
   });
+  // Oyun içi panel bu oynatıcıyı görsün ve yönetebilsin (karıştır, tekrar, ses, konum): saniyede bir durum.
+  function broadcast() {
+    void emitAll("gmid-player", {
+      title: item.title,
+      artist: item.uploader,
+      thumb: item.thumbnail,
+      playing,
+      shuffle,
+      repeat: repeat === "one" ? "track" : repeat === "all" ? "list" : "none",
+      position: time,
+      duration: total,
+      volume,
+      muted,
+    } satisfies GmidPlayerState);
+  }
+  onMount(() => {
+    const t = setInterval(() => playing && broadcast(), 1000);
+    const stop = on<{ action: string }>("gmid-player-cmd", ({ action }) => {
+      if (action === "toggle") toggle();
+      else if (action === "next") goNext();
+      else if (action === "prev") goPrev();
+      else if (action === "shuffle") ((shuffle = !shuffle), void setJson("player.shuffle", shuffle));
+      else if (action === "repeat") cycleRepeat();
+      else if (action.startsWith("seek:")) seekTo(Number(action.slice(5)));
+      else if (action.startsWith("volume:")) ((volume = Math.max(0, Math.min(1, Number(action.slice(7))))), (muted = false));
+      else if (action === "mute") muted = !muted;
+      setTimeout(broadcast, 120);
+    });
+    return () => {
+      clearInterval(t);
+      void stop.then((f) => f());
+    };
+  });
+  $effect(() => {
+    // Duraklatınca/parça değişince hemen bildir.
+    void [playing, item.id, shuffle, repeat];
+    untrack(broadcast);
+  });
+
   // "En çok dinlenenler" için: her şarkı açılışında bir kez say.
   let counted = "";
   $effect(() => {
@@ -414,7 +466,7 @@
 
   function onKey(e: KeyboardEvent) {
     // Küçültülmüşken uygulamanın geri kalanında yazı yazılabilsin: kısayollar yalnızca açıkken.
-    if (mini) return;
+    if (mini || karaoke) return;
     const target = e.target as HTMLElement;
     if (target.isContentEditable || target.closest("input:not([type=range]):not([type=checkbox]), select, textarea, [contenteditable]")) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -512,6 +564,8 @@
     if (p.stage === "lyrics") return "Şarkı sözü veritabanında aranıyor…";
     if (p.stage === "subtitles") return "Sitenin altyazısına bakılıyor…";
     if (p.stage === "audio") return "Ses hazırlanıyor…";
+    if (p.stage === "lang") return "Şarkının dili bulunuyor…";
+    if (p.stage === "load") return "Whisper hazırlanıyor (model yükleniyor)…";
     return `Whisper dinliyor… %${Math.round(p.progress * 100)}`;
   }
 
@@ -519,7 +573,8 @@
     if (!d.thumbnail) return "";
     return /^(https?:|data:)/.test(d.thumbnail) ? d.thumbnail : api.fileSrc(d.thumbnail);
   }
-  const wordState = (w: { start: number; end: number }) => (time >= w.end ? "sung" : time >= w.start ? "now" : "");
+  /** O an söylenen satırın kelimeleri (zamanı yoksa tahmini): kelime kelime soldan sağa altınla dolar. */
+  const activeWords = $derived(active >= 0 ? wordsOf(segments, active) : []);
   const src = $derived(item.filePath ? api.fileSrc(item.filePath) : "");
   const sourceLabel = $derived.by(() => {
     const t = transcript as Transcript | null;
@@ -577,6 +632,7 @@
         <button aria-pressed={view === "stage"} title="Sahne görünümü" onclick={() => setView("stage")}><Icon name="stage" size={16} />Sahne</button>
         <button aria-pressed={view === "list"} title="Liste görünümü: solda parçalar, sağda yazılar" onclick={() => setView("list")}><Icon name="list" size={16} />Liste</button>
       </div>
+      <button class="btn ghost sm kbtn" title="Karaoke: şarkının sesi ayrılır, sözler akar, sen söyler ve kaydedersin" onclick={openKaraoke}><Icon name="mic" size={16} />Karaoke</button>
       <button class="btn ghost sm" onclick={() => ((showText = !showText), void setJson("player.showText", showText))}>
         <Icon name="note" size={16} />{showText ? "Yazıları gizle" : "Yazıları göster"}
       </button>
@@ -698,8 +754,8 @@
               <button class="line" class:active={i === active} class:past={i < active} data-i={i} onclick={() => seekLine(s)}>
                 <span class="ts tnum">{formatDuration(s.start) || "0:00"}</span>
                 <span class="tx">
-                  {#if i === active && s.words?.length}
-                    {#each s.words as w, j (j)}<span class="w {wordState(w)}">{w.text}</span>{" "}{/each}
+                  {#if i === active && activeWords.length}
+                    {#each activeWords as w, j (j)}{@const p = fill(w, time)}<span class="w" class:now={p > 0 && p < 1} style:--p={p}>{w.text}</span>{" "}{/each}
                   {:else}
                     {s.text}
                   {/if}
@@ -710,7 +766,7 @@
         {:else if creating}
           <div class="make">
             <p>{stageText(creating)}</p>
-            <div class="pbar"><i style:width="{creating.stage === 'whisper' ? creating.progress * 100 : 8}%"></i></div>
+            <div class="pbar" class:busy={creating.stage !== "whisper" || creating.progress === 0}><i style:width="{creating.stage === 'whisper' ? creating.progress * 100 : 0}%"></i></div>
             <span class="sub small">Uzun videolarda birkaç dakika sürebilir; bu sırada izlemeye devam edebilirsin.</span>
             {#if (creating.stage === "whisper" || creating.stage === "audio") && gpuMissing}
               <p class="tip small">
@@ -882,6 +938,9 @@
       {/if}
     </div>
   </footer>
+  {#if karaoke && !mini}
+    <Karaoke {item} {segments} start={time} onclose={(t) => ((karaoke = false), seekTo(t))} />
+  {/if}
 </div>
 
 <style>
@@ -957,9 +1016,16 @@
   .line.active { color: var(--text); background: rgba(227, 194, 112, 0.1); box-shadow: inset 3px 0 0 var(--gold); }
   .line.active .tx { color: var(--gold-glow); font-weight: 600; }
   .ts { font-size: 11px; color: var(--dim); padding-top: 3px; }
-  .w { transition: color 0.12s; color: var(--muted); }
-  .w.now { color: var(--gold-glow); text-shadow: 0 0 12px rgba(240, 216, 120, 0.6); }
-  .w.sung { color: var(--gold); }
+  /* Kelime dolumu: --p (0…1) her karede güncellenir; yumuşak kenarlı altın, soldan sağa. */
+  .w {
+    --p: 0;
+    color: transparent;
+    background: linear-gradient(90deg, var(--gold-glow) calc(var(--p) * 120% - 20%), rgba(236, 231, 220, 0.55) calc(var(--p) * 120%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    transition: filter 0.25s;
+  }
+  .w.now { filter: drop-shadow(0 0 10px rgba(240, 216, 120, 0.45)); }
   .big .line { font-size: 22px; font-family: var(--f-display); padding: 10px 12px; grid-template-columns: minmax(0, 1fr); }
   .big .ts { display: none; }
   .make { padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
@@ -972,6 +1038,9 @@
   .tip .link { display: inline; text-align: left; }
   .pbar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
   .pbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--neon)); transition: width 0.3s; }
+  /* Yüzde henüz yokken (dil bulma, model yükleme) ilerlediğini gösteren kayan şerit. */
+  .pbar.busy i { width: 30% !important; animation: busy 1.3s ease-in-out infinite; }
+  @keyframes busy { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
   .wbox { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid rgba(53, 160, 162, 0.4); background: rgba(53, 160, 162, 0.06); }
   .wopt { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--coal-2); }
   .wopt:hover:not(:disabled) { border-color: var(--gold); }

@@ -32,6 +32,11 @@ tiny_http = "0.12.0"
 sha2 = "0.10"
 base64 = "0.22"
 tauri-plugin-clipboard-manager = "2"
+# Karaoke: şarkıdan sesi ayıran model (Demucs). ONNX Runtime ilk kullanımda iner, uygulamayla gelmez.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic", "directml"] }
+rustfft = "6"
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

@@ -357,7 +357,6 @@ pub fn transcribe(
     }
 
     // 2) Whisper
-    progress("whisper", 0.0);
     let threads = std::thread::available_parallelism()
         .map(|n| n.get().clamp(1, 8))
         .unwrap_or(4)
@@ -368,8 +367,10 @@ pub fn transcribe(
         _ => {
             // Whisper dili ilk 30 saniyeden anlar; şarkıların girişi çoğu zaman yalnızca müzik
             // olduğundan yanlış dil seçip uydurabiliyor. Dil, kaydın ortasındaki parçadan bulunur.
+            progress("lang", 0.0);
             detected = detect_language(
                 root,
+                &clis[0],
                 &model_file,
                 &wav,
                 &tmp.join(format!("{name}-dil.wav")),
@@ -381,6 +382,7 @@ pub fn transcribe(
     let mut result = Err("Whisper çalışırken hata oluştu.".to_string());
     for (i, program) in clis.iter().enumerate() {
         let _ = std::fs::remove_file(&json);
+        progress("load", 0.0);
         result = run_cli(
             program,
             &model_file,
@@ -455,6 +457,9 @@ fn run_cli(
                 .and_then(|r| r.trim().trim_end_matches('%').trim().parse::<f64>().ok())
             {
                 progress("whisper", (p / 100.0).clamp(0.0, 1.0));
+            } else if line.contains("main: processing") {
+                // Model yüklendi, dinleme başladı.
+                progress("whisper", 0.0);
             } else if line.to_lowercase().contains("error") {
                 last_err = line.trim().to_string();
             }
@@ -478,6 +483,7 @@ fn run_cli(
 /// Kaydın ortasından 30 saniyelik bir parça alıp dilini Whisper'a sorar ("en", "tr"…).
 fn detect_language(
     root: &Path,
+    program: &Path,
     model_file: &Path,
     wav: &Path,
     clip: &Path,
@@ -501,7 +507,8 @@ fn detect_language(
     let ok = cmd.status().is_ok_and(|s| s.success());
     let found = ok
         .then(|| {
-            let mut cmd = Command::new(cli(root));
+            // NVIDIA sürümü kuruluysa dil de onunla bulunur (işlemcide büyük modelle dakikalar sürebiliyordu).
+            let mut cmd = Command::new(program);
             cmd.arg("-m")
                 .arg(model_file)
                 .arg("-f")
@@ -509,7 +516,7 @@ fn detect_language(
                 .args(["-l", "auto", "-dl", "-t", threads])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
-            if let Some(d) = cli(root).parent() {
+            if let Some(d) = program.parent() {
                 cmd.current_dir(d);
             }
             hide_console(&mut cmd);

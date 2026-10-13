@@ -353,6 +353,8 @@ impl Worker {
     fn apps(&self) -> WinResult<Vec<AppVolume>> {
         let own = std::process::id();
         let mut out: Vec<AppVolume> = Vec::new();
+        // GMID'in kendi sesi (oynatıcı) WebView2 alt sürecinden çıkar: "Msedgewebview2" değil "GMID Tool" yazsın.
+        let mut parents = None;
         for (pid, system, active, vol) in self.sessions()? {
             let key = if system { 0 } else { pid };
             if let Some(a) = out.iter_mut().find(|a| a.pid == key) {
@@ -366,7 +368,14 @@ impl Worker {
                 if exe.is_empty() && pid != own {
                     (exe, format!("Uygulama {pid}"))
                 } else {
-                    let n = if pid == own {
+                    let webview = exe.to_lowercase().starts_with("msedgewebview2");
+                    let n = if pid == own
+                        || (webview
+                            && crate::games::procs::descends_from(
+                                parents.get_or_insert_with(crate::games::procs::parents),
+                                pid,
+                                own,
+                            )) {
                         "GMID Tool".to_string()
                     } else {
                         app_label(&exe)

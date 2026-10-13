@@ -21,7 +21,7 @@ const inputs: Device[] = [
 ];
 let lock: number | null = 1;
 let fpsReady = false;
-let mockMedia = { app: "Spotify", title: "Gül ki Sevgilim", artist: "Oğuzhan Koç", playing: true, thumb: null as string | null };
+let mockMedia = { app: "Spotify", title: "Gül ki Sevgilim", artist: "Oğuzhan Koç", playing: true, thumb: null as string | null, source: "Spotify.exe", shuffle: false as boolean | null, repeat: "none" as string | null, position: 74 as number | null, duration: 213 as number | null };
 let powerPlan: { action: "shutdown" | "restart" | "sleep"; at: number; hidden: boolean } | null = new URLSearchParams(location.search).has("power") ? { action: "shutdown", at: Date.now() + 42_000, hidden: false } : null;
 let borderlessList = ["cod2mp_s.exe"];
 
@@ -312,6 +312,13 @@ let dictRules = [{ from: "GMI", to: "GMID", hits: 4 }];
 let dictLearn = [{ id: 1, from: "videoyu", to: "VDS" }];
 
 // ---- Yazılar ----
+const karaokeReady = new Set<string>();
+let karaokeRecs: { path: string; name: string; size: number; modified: number }[] = [];
+const karaokeOf = (id: string) =>
+  karaokeReady.has(id)
+    ? { ready: true, music: `/mock/Karaoke/${id}/muzik.m4a`, vocals: `/mock/Karaoke/${id}/vokal.m4a`, downloadMb: 0 }
+    : { ready: false, music: null, vocals: null, downloadMb: karaokeReady.size ? 0 : 123 };
+
 const lyric = (start: number, text: string): Segment => {
   const words = text.split(" ");
   const step = 2.6 / words.length;
@@ -588,6 +595,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return mockMedia;
     case "media_control":
       if (a.action === "toggle") mockMedia = { ...mockMedia, playing: !mockMedia.playing };
+      else if (a.action === "shuffle") mockMedia = { ...mockMedia, shuffle: !mockMedia.shuffle };
+      else if (a.action === "repeat") mockMedia = { ...mockMedia, repeat: mockMedia.repeat === "list" ? "track" : mockMedia.repeat === "track" ? "none" : "list" };
+      else if (String(a.action).startsWith("seek:")) mockMedia = { ...mockMedia, position: Number(String(a.action).slice(5)) };
       else mockMedia = { ...mockMedia, title: a.action === "next" ? "Yakar Geçerim" : "Dudu", artist: a.action === "next" ? "Ajda Pekkan" : "Tarkan", playing: true };
       return;
     case "net_test": {
@@ -755,6 +765,36 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         segments: ["Merhaba, malikâneye hoş geldin.", "Bugün yeni bir oyuna bakıyoruz.", "Önce ayarları açalım.", "Grafikler gerçekten çok güzel."].map((t, i) => lyric(0.5 + i * 3.4, t)) };
       return transcripts[a.id as string];
     }
+    case "karaoke_status":
+      return { ...karaokeOf(a.id as string), busy: null };
+    case "karaoke_prepare": {
+      const id = a.id as string;
+      for (const [stage, steps] of [["model", 3], ["decode", 1], ["separate", 6], ["save", 1]] as const) {
+        for (let i = 1; i <= steps; i++) {
+          await new Promise((r) => setTimeout(r, 250));
+          emit("karaoke-progress", { id, stage, progress: i / steps, gpu: true });
+        }
+      }
+      karaokeReady.add(id);
+      return { ...karaokeOf(id), busy: null };
+    }
+    case "karaoke_cancel":
+      return null;
+    case "karaoke_voice":
+      return "/mock/Karaoke/Kayıtlar/.ham/ses.webm";
+    case "karaoke_mix": {
+      const m = a.mix as { title: string; output: string | null };
+      const path = m.output ?? `/mock/Karaoke/Kayıtlar/${m.title} - 2026-10-13 21.00.m4a`;
+      if (!karaokeRecs.some((r) => r.path === path)) karaokeRecs.unshift({ path, name: path.split("/").pop()!.replace(".m4a", ""), size: 3_400_000, modified: now() });
+      return path;
+    }
+    case "karaoke_recordings":
+      return karaokeRecs;
+    case "karaoke_reveal":
+      return null;
+    case "karaoke_delete":
+      karaokeRecs = karaokeRecs.filter((r) => r.path !== a.path);
+      return null;
     case "transcript_delete":
       delete transcripts[a.id as string];
       return;

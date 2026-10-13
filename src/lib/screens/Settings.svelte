@@ -51,7 +51,7 @@
     { id: "ses", label: "Ses & Mikrofon", icon: "speaker", keys: "mikrofon kilit seviye gösterge osd kulaklık hoparlör" },
     { id: "bildirimler", label: "Bildirimler", icon: "bell", keys: "bildirim ses uyarı hatırlatıcı windows sayaç indirme bitti" },
     { id: "indirici", label: "Video İndirici", icon: "download", keys: "video indirme yt-dlp ffmpeg deno araç güncelle eklenti chrome opera aynı anda klasör" },
-    { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü discord durum rich presence profil" },
+    { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü" },
     { id: "sunucular", label: "Sunucular", icon: "server", keys: "sunucu topluluk liste adres github" },
     { id: "sistem", label: "Sistem özellikleri", icon: "monitor", keys: "sistem özellik donanım işlemci cpu ekran kartı gpu ram bellek anakart disk ssd monitör fare klavye ses ağ windows sürüm" },
     { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun geri yükle format zip" },
@@ -115,15 +115,6 @@
   let driversNotify = $state(getJson("drivers.notify", true));
   let gamesTrack = $state(getJson("games.track", true));
   let gamesAsk = $state(getJson("games.ask", true));
-  // Discord'da durum (Rich Presence): uygulama kimliği Discord Developer Portal'dan.
-  let presenceOn = $state(getJson("discord.presence", true));
-  let presenceId = $state(getJson<string>("discord.appId", ""));
-  const presenceValid = $derived(/^\d{17,20}$/.test(presenceId.trim()));
-  async function savePresence() {
-    await setJson("discord.presence", presenceOn);
-    await setJson("discord.appId", presenceId.trim());
-    await api.presence.refresh().catch(() => {});
-  }
 
   let lockTimer: ReturnType<typeof setTimeout> | undefined;
   function setLockLevel(v: number) {
@@ -342,29 +333,6 @@
           <Switch label="Yeni oyun açılınca sor" checked={gamesAsk} onchange={(v) => toggle("games.ask", v, (x) => (gamesAsk = x))} />
         </div>
       </section>
-      <section class="panel">
-        <h3 class="h2"><Icon name="discord" />Discord'da durum</h3>
-        <div class="line">
-          <div>
-            <b>Oyundayken Discord profilimde göster</b>
-            <span class="sub small">
-              Arkadaşların profilinde "GMID Tool · Valorant oynuyor", süresi ve <b>GMID'e katıl</b> düğmesini görür. Discord
-              uygulaması açık olmalı; sunucu gerekmez, yalnızca bu bilgisayardaki Discord'a bildirilir.
-            </span>
-          </div>
-          <Switch label="Discord'da durum" checked={presenceOn} onchange={(v) => ((presenceOn = v), void savePresence())} />
-        </div>
-        <label class="field">
-          <span>Uygulama kimliği (Application ID)</span>
-          <input bind:value={presenceId} inputmode="numeric" placeholder="ör. 1234567890123456789" onchange={savePresence} />
-        </label>
-        {#if presenceId && !presenceValid}<p class="err small">Kimlik 17–20 haneli bir sayı olmalı.</p>{/if}
-        <p class="sub small">
-          Bir kez: <button class="link" onclick={() => api.openUrl("https://discord.com/developers/applications")}>Discord Developer Portal</button>
-          → <b>New Application</b> → adı <b>GMID Tool</b> → <b>Application ID</b>'yi kopyalayıp buraya yapıştır. Logonun görünmesi için aynı
-          sayfada Rich Presence → Art Assets'e GMID logosunu <b>gmid</b> adıyla yükle. Kimlik herkese açık bir numaradır, şifre değildir.
-        </p>
-      </section>
       <ClipsSettings />
     {:else if tab === "sunucular"}
       <ServersList />
@@ -410,9 +378,6 @@
   .panel p { margin: 0; }
   .field { display: flex; flex-direction: column; gap: 8px; }
   .field input { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 12px; max-width: 360px; }
-  .link { background: none; border: 0; padding: 0; color: var(--teal); font: inherit; font-weight: 600; cursor: pointer; }
-  .link:hover { color: var(--neon); }
-  .err { color: var(--bad); margin: 0; }
   .label { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
   .label b { color: var(--gold); margin-left: 6px; }
   .line { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }

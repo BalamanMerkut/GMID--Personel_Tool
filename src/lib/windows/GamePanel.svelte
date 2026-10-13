@@ -3,13 +3,13 @@
   // bu oyuna not, son klip, yaklaşan hatırlatıcılar. Esc ya da aynı tuş kapatır; odak oyuna döner.
   import { onMount } from "svelte";
   import { api } from "../api";
-  import { on } from "../bus";
+  import { emitAll, on } from "../bus";
   import AppMixer from "../components/AppMixer.svelte";
   import PowerWarn from "../components/PowerWarn.svelte";
   import Icon from "../Icon.svelte";
   import { msText, summary, tone } from "../ping";
   import { clock, playtime } from "../time";
-  import type { NetReport, NowPlaying, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
+  import type { AppVolume, GmidPlayerState, NetReport, NowPlaying, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
 
   let audio = $state<AudioState | null>(null);
   let game = $state<Game | null>(null);
@@ -74,13 +74,76 @@
   // Ölçüm yalnız panel açıkken (saniyede bir).
   // Şimdi çalan (Spotify, YouTube…): panel açıkken 2 sn'de bir.
   let media = $state<NowPlaying | null>(null);
+  /** Konumun okunduğu an (araya giren saniyeler çalıyorsa eklenir). */
+  let mediaAt = $state(0);
+  let mixApps = $state<AppVolume[]>([]);
   let mediaTimer: ReturnType<typeof setInterval> | undefined;
-  const loadMedia = () => void api.media.now().then((m) => (media = m)).catch(() => {});
-  async function mediaDo(action: "toggle" | "next" | "prev") {
+  const loadMedia = () => {
+    void api.media.now().then((m) => ((media = m), (mediaAt = Date.now()))).catch(() => {});
+    void api.audio.apps().then((a) => (mixApps = a)).catch(() => {});
+  };
+  // GMID'in kendi oynatıcısı çalıyorsa (son 3 sn'de durum geldiyse) onun bilgisi ve komutları kullanılır:
+  // Windows'un medya oturumu karıştır/tekrar/ses bilgisini bu oynatıcı için vermiyor.
+  let gmid = $state<GmidPlayerState | null>(null);
+  let gmidAt = $state(0);
+  onMount(() => {
+    const stop = on<GmidPlayerState>("gmid-player", (st) => ((gmid = st), (gmidAt = Date.now())));
+    return () => void stop.then((f) => f());
+  });
+  const ownPlayer = $derived(!!gmid && (gmid.playing ? now - gmidAt < 3000 : now - gmidAt < 60_000));
+  /** Kartta gösterilen: GMID oynatıcısı ya da Windows'un medya oturumu. */
+  const np = $derived<NowPlaying | null>(
+    ownPlayer && gmid
+      ? {
+          app: "GMID Tool",
+          title: gmid.title,
+          artist: gmid.artist,
+          playing: gmid.playing,
+          thumb: gmid.thumb ? (/^(https?:|data:)/.test(gmid.thumb) ? gmid.thumb : api.fileSrc(gmid.thumb)) : null,
+          source: "gmid",
+          shuffle: gmid.shuffle,
+          repeat: gmid.repeat,
+          position: gmid.position,
+          duration: gmid.duration || null,
+        }
+      : media,
+  );
+  async function mediaDo(action: string) {
+    if (ownPlayer) {
+      if (gmid && action === "toggle") gmid = { ...gmid, playing: !gmid.playing };
+      if (gmid && action.startsWith("seek:")) ((gmid = { ...gmid, position: Number(action.slice(5)) }), (gmidAt = Date.now()));
+      await emitAll("gmid-player-cmd", { action });
+      return;
+    }
     if (media && action === "toggle") media = { ...media, playing: !media.playing };
+    if (media && action.startsWith("seek:")) ((media = { ...media, position: Number(action.slice(5)) }), (mediaAt = Date.now()));
     await api.media.control(action).catch((e) => flash(String(e)));
-    setTimeout(loadMedia, action === "toggle" ? 250 : 700);
+    setTimeout(loadMedia, action === "next" || action === "prev" ? 700 : 250);
   }
+  const mediaPos = $derived(
+    np?.position == null
+      ? 0
+      : Math.min(np.duration ?? Infinity, np.position + (np.playing ? Math.max(0, now - (ownPlayer ? gmidAt : mediaAt)) / 1000 : 0)),
+  );
+  /** Çalan programın ses karıştırıcısındaki karşılığı (ör. Spotify.exe, Chrome; GMID'in kendi oynatıcısı). */
+  const mediaApp = $derived.by(() => {
+    if (!media || ownPlayer) return null;
+    const src = media.source.toLowerCase();
+    const stem = (a: AppVolume) => a.exe.toLowerCase().replace(/\.exe$/, "");
+    const key = src.replace(/\.exe$/, "").split(/[!\\._]/)[0];
+    return (
+      mixApps.find((a) => a.pid && stem(a) && src.includes(stem(a))) ??
+      (key ? mixApps.find((a) => a.pid && stem(a).includes(key)) : undefined) ??
+      null
+    );
+  });
+  function setMediaVol(level: number) {
+    const a = mediaApp;
+    if (!a) return;
+    mixApps = mixApps.map((x) => (x.pid === a.pid ? { ...x, level } : x));
+    void api.audio.setAppVolume(a.pid, level).catch(() => {});
+  }
+  const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
   function startPerf() {
     stopPerf();
@@ -309,7 +372,7 @@
         <button class="dev" onclick={() => alarmAct(api.reminders.snooze(r.id, 10))}>10 dk ertele</button>
         <button class="dev" onclick={() => alarmAct(api.reminders.snooze(r.id, 30))}>30 dk</button>
         <button class="dev on" onclick={() => alarmAct(api.reminders.complete(r.id))}>Kapat</button>
-        <button class="dev" onclick={() => api.alarm.mute()} title="Melodiyi sustur"><Icon name="mute" size={14} /></button>
+        <button class="dev ic" onclick={() => api.alarm.mute()} title="Melodiyi sustur" aria-label="Melodiyi sustur"><Icon name="mute" size={16} /></button>
       </div>
     {/each}
     {#each alarmTimers as t (t.id)}
@@ -318,7 +381,7 @@
         <div class="atx"><span class="kind">Süre doldu</span><b>{t.label}</b></div>
         <button class="dev" onclick={() => alarmAct(api.timers.toggle(t.id))}>Yeniden başlat</button>
         <button class="dev on" onclick={() => alarmAct(api.timers.remove(t.id))}>Kapat</button>
-        <button class="dev" onclick={() => api.alarm.mute()} title="Melodiyi sustur"><Icon name="mute" size={14} /></button>
+        <button class="dev ic" onclick={() => api.alarm.mute()} title="Melodiyi sustur" aria-label="Melodiyi sustur"><Icon name="mute" size={16} /></button>
       </div>
     {/each}
 
@@ -379,17 +442,41 @@
       </section>
 
       <section class="card np" class:on={media?.playing}>
-        <h3><Icon name="headphones" size={17} />Şimdi çalan{#if media}<span class="sub small app">{media.app}</span>{/if}</h3>
-        {#if media}
+        <h3><Icon name="headphones" size={17} />Şimdi çalan{#if np}<span class="sub small app">{np.app}</span>{/if}</h3>
+        {#if np}
           <div class="track">
-            {#if media.thumb}<img src={media.thumb} alt="" />{:else}<span class="art"><Icon name="headphones" size={22} /></span>{/if}
-            <div class="tt"><b title={media.title}>{media.title}</b><span class="sub small">{media.artist}</span></div>
+            {#if np.thumb}<img src={np.thumb} alt="" />{:else}<span class="art"><Icon name="headphones" size={22} /></span>{/if}
+            <div class="tt"><b title={np.title}>{np.title}</b><span class="sub small">{np.artist}</span></div>
           </div>
+          {#if np.duration}
+            <div class="mprog">
+              <span class="tnum">{mmss(mediaPos)}</span>
+              <input type="range" min="0" max={np.duration} step="1" value={mediaPos} onchange={(e) => mediaDo(`seek:${e.currentTarget.value}`)} aria-label="Konum" />
+              <span class="tnum">{mmss(np.duration)}</span>
+            </div>
+          {/if}
           <div class="mctl">
+            <button class="ib sm" class:on={np.shuffle} disabled={np.shuffle === null} onclick={() => mediaDo("shuffle")} title={np.shuffle === null ? "Bu program karıştırmayı desteklemiyor" : np.shuffle ? "Karıştırma açık" : "Karıştır"}><Icon name="shuffle" size={15} /></button>
             <button class="ib" onclick={() => mediaDo("prev")} title="Önceki"><Icon name="prev" size={16} /></button>
-            <button class="ib big" onclick={() => mediaDo("toggle")} title={media.playing ? "Duraklat" : "Oynat"}><Icon name={media.playing ? "pause" : "play"} size={18} /></button>
+            <button class="ib big" onclick={() => mediaDo("toggle")} title={np.playing ? "Duraklat" : "Oynat"}><Icon name={np.playing ? "pause" : "play"} size={18} /></button>
             <button class="ib" onclick={() => mediaDo("next")} title="Sonraki"><Icon name="next" size={16} /></button>
+            <button class="ib sm rep" class:on={np.repeat === "list" || np.repeat === "track"} disabled={np.repeat === null} onclick={() => mediaDo("repeat")} title={np.repeat === null ? "Bu program tekrarı desteklemiyor" : np.repeat === "track" ? "Bu parçayı tekrarla" : np.repeat === "list" ? "Listeyi tekrarla" : "Tekrar kapalı"}>
+              <Icon name="repeat" size={15} />{#if np.repeat === "track"}<i>1</i>{/if}
+            </button>
           </div>
+          {#if ownPlayer && gmid}
+            <label class="slider" title="GMID oynatıcısının sesi">
+              <button class="ib" class:bad={gmid.muted} onclick={(e) => (e.preventDefault(), void emitAll("gmid-player-cmd", { action: "mute" }))} title={gmid.muted ? "Sesi aç" : "Sessize al"}><Icon name={gmid.muted ? "mute" : "speaker"} size={15} /></button>
+              <input type="range" min="0" max="1" step="0.01" value={gmid.volume} oninput={(e) => void emitAll("gmid-player-cmd", { action: `volume:${e.currentTarget.value}` })} />
+              <span class="tnum">{pct(gmid.volume)}</span>
+            </label>
+          {:else if mediaApp}
+            <label class="slider" title="{mediaApp.name} ses seviyesi">
+              <button class="ib" class:bad={mediaApp.muted} onclick={(e) => (e.preventDefault(), void api.audio.setAppMute(mediaApp.pid, !mediaApp.muted).then(loadMedia))} title={mediaApp.muted ? "Sesi aç" : "Sessize al"}><Icon name={mediaApp.muted ? "mute" : "speaker"} size={15} /></button>
+              <input type="range" min="0" max="1" step="0.01" value={mediaApp.level} oninput={(e) => setMediaVol(Number(e.currentTarget.value))} />
+              <span class="tnum">{pct(mediaApp.level)}</span>
+            </label>
+          {/if}
         {:else}
           <p class="sub small">Spotify, YouTube ya da başka bir oynatıcıda bir şey çalınca burada görünür; oyundan çıkmadan durdur, geç.</p>
         {/if}
@@ -520,6 +607,9 @@
   }
   @keyframes alarmRing { from { color: var(--gold); background: rgba(227, 194, 112, 0.16); } to { color: #ff8a8a; background: rgba(224, 106, 106, 0.2); } }
   @media (prefers-reduced-motion: reduce) { .alarm, .alarm .ring { animation: none; border-color: #e06a6a; } }
+  /* Düğmeler aynı yükseklikte ve ortalı; yalnız simgeli "sustur" kare. */
+  .alarm .dev { height: 34px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .alarm .dev.ic { width: 34px; padding: 0; }
   .alarm .ring { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--gold); background: rgba(227, 194, 112, 0.14); flex: none; }
   .atx { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .atx .kind { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }
@@ -556,6 +646,12 @@
   .tt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .tt b, .tt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mctl { display: flex; justify-content: center; align-items: center; gap: 10px; }
+  .mctl .ib.sm { color: var(--muted); background: transparent; position: relative; }
+  .mctl .ib.sm.on { color: var(--gold); }
+  .mctl .ib.sm:disabled { opacity: 0.3; }
+  .mctl .rep i { position: absolute; right: 1px; bottom: 0; font: 700 9px var(--f-body); font-style: normal; color: var(--gold); }
+  .mprog { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+  .mprog input { accent-color: var(--gold); width: 100%; }
   .mctl .ib.big { place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--gold); color: #1b1608; }
   .ping h3 .mini { margin-left: auto; padding: 4px 10px; font-size: 12px; }
   .ping.good { border-color: rgba(92, 192, 138, 0.55); }
