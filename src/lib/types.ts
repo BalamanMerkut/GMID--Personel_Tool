@@ -907,9 +907,19 @@ export interface PowerPlan {
   at: number;
 }
 
-/** Sistem özellikleri bölümü: [ad, değer] satırları. */
-export interface SysSection {
-  title: string;
-  icon: string;
-  rows: [string, string][];
+/** Sistem özellikleri (Windows'un kendi kayıtlarından; boyutlar bayt). */
+export interface Specs {
+  os: { name: string; version: string; build: string; computer: string; maker: string; model: string; uptimeMin: number };
+  cpu: { name: string; cores: number; threads: number; mhz: number }[];
+  /** Ekran kartları, belleği büyükten küçüğe; ilki asıl kart. */
+  gpu: { name: string; vram: number; driver: string; width: number; height: number; hz: number }[];
+  /** `type`: SMBIOS bellek türü (26 DDR4, 34 DDR5). */
+  ram: { total: number; modules: { slot: string; size: number; speed: number; maker: string; part: string; type: number }[] };
+  board: { maker: string; product: string; bios: string; biosDate: string };
+  disks: { name: string; size: number; media: string; bus: string }[];
+  volumes: { letter: string; label: string; size: number; free: number }[];
+  monitors: { name: string; maker: string; year: number; inches: number }[];
+  input: { kind: string; name: string }[];
+  audio: { kind: string; name: string }[];
+  net: { name: string; desc: string; speed: string }[];
 }

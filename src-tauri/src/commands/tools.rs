@@ -317,7 +317,7 @@ pub fn power_now(app: AppHandle) -> CmdResult<()> {
 
 /// Sistem özellikleri (önbellekten; `refresh` ile yeniden okur).
 #[tauri::command]
-pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<Vec<crate::sysinfo::Section>> {
+pub async fn system_info(app: AppHandle, refresh: bool) -> CmdResult<crate::sysinfo::Specs> {
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<crate::sysinfo::SysInfo>().get(refresh)
     })

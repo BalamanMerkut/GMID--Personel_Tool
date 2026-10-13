@@ -540,18 +540,39 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       };
     case "system_info":
       await wait(700);
-      return [
-        { title: "Sistem", icon: "monitor", rows: [["Windows", "Windows 11 Pro 24H2 (derleme 26100)"], ["Bilgisayar", "ASUS System Product Name"], ["Açık kalma süresi", "1 gün 4 saat 12 dk"]] },
-        { title: "İşlemci", icon: "bolt", rows: [["AMD Ryzen 7 7800X3D 8-Core Processor", "8 çekirdek / 16 iş parçacığı · 4,20 GHz"]] },
-        { title: "Ekran kartı", icon: "monitor", rows: [["NVIDIA GeForce RTX 4070", "12,0 GB bellek · sürücü 32.0.15.6614 · 2560×1440 @ 165 Hz"]] },
-        { title: "Bellek (RAM)", icon: "lap", rows: [["Toplam", "32,0 GB · 2 modül · 6000 MT/s"], ["DIMM_A2", "16,0 GB · 6000 · G.Skill F5-6000J3038F16G"], ["DIMM_B2", "16,0 GB · 6000 · G.Skill F5-6000J3038F16G"]] },
-        { title: "Anakart", icon: "server", rows: [["Model", "ASUSTeK COMPUTER INC. TUF GAMING B650-PLUS WIFI"], ["BIOS", "3024 (2025-02-14)"]] },
-        { title: "Diskler", icon: "folder", rows: [["Samsung SSD 990 PRO 2TB", "1.863,0 GB · SSD · NVMe"], ["Sürücü C:", "412,3 GB boş / 1.862,4 GB"]] },
-        { title: "Monitörler", icon: "monitor", rows: [["LG ULTRAGEAR", "Üretici kodu GSM · 2023"]] },
-        { title: "Fare ve klavye", icon: "keyboard", rows: [["Fare", "G502 HERO Gaming Mouse"], ["Klavye", "HyperX Alloy Origins"]] },
-        { title: "Ses aygıtları", icon: "headphones", rows: [["Çıkış", "Kulaklık (HyperX Cloud II)"], ["Giriş", "Mikrofon (HyperX Cloud II)"]] },
-        { title: "Ağ", icon: "link", rows: [["Ethernet", "Realtek Gaming 2.5GbE Family Controller · 1 Gbps"]] },
-      ];
+      return {
+        os: { name: "Microsoft Windows 11 Pro", version: "24H2", build: "26100", computer: "MALIKANE", maker: "ASUS", model: "System Product Name", uptimeMin: 1692 },
+        cpu: [{ name: "AMD Ryzen 7 7800X3D", cores: 8, threads: 16, mhz: 4201 }],
+        gpu: [
+          { name: "NVIDIA GeForce RTX 4070", vram: 12 * 1024 ** 3, driver: "32.0.15.6614", width: 2560, height: 1440, hz: 165 },
+          { name: "AMD Radeon Graphics", vram: 512 * 1024 ** 2, driver: "31.0.21912.14", width: 0, height: 0, hz: 0 },
+        ],
+        ram: { total: 32 * 1024 ** 3, modules: [
+          { slot: "DIMM_A2", size: 16 * 1024 ** 3, speed: 6000, maker: "G.Skill", part: "F5-6000J3038F16G", type: 34 },
+          { slot: "DIMM_B2", size: 16 * 1024 ** 3, speed: 6000, maker: "G.Skill", part: "F5-6000J3038F16G", type: 34 },
+        ] },
+        board: { maker: "ASUSTeK COMPUTER INC.", product: "TUF GAMING B650-PLUS WIFI", bios: "3024", biosDate: "2025-02-14" },
+        disks: [
+          { name: "Samsung SSD 990 PRO 2TB", size: 2_000_398_934_016, media: "SSD", bus: "NVMe" },
+          { name: "WDC WD20EZBX-00AYRA0", size: 2_000_398_934_016, media: "HDD", bus: "SATA" },
+        ],
+        volumes: [
+          { letter: "C:", label: "", size: 999_000_000_000, free: 442_000_000_000 },
+          { letter: "D:", label: "Oyunlar", size: 1_000_202_039_296, free: 120_000_000_000 },
+          { letter: "E:", label: "Arşiv", size: 2_000_381_014_016, free: 1_210_000_000_000 },
+        ],
+        monitors: [
+          { name: "LG ULTRAGEAR", maker: "LG", year: 2023, inches: 27 },
+          { name: "VG249Q1A", maker: "ASUS", year: 2021, inches: 23.8 },
+        ],
+        input: [{ kind: "Fare", name: "G502 HERO Gaming Mouse" }, { kind: "Klavye", name: "HyperX Alloy Origins" }],
+        audio: [
+          { kind: "Çıkış", name: "Kulaklık (HyperX Cloud II)" },
+          { kind: "Çıkış", name: "LG ULTRAGEAR (NVIDIA High Definition Audio)" },
+          { kind: "Giriş", name: "Mikrofon (HyperX Cloud II)" },
+        ],
+        net: [{ name: "Ethernet", desc: "Realtek Gaming 2.5GbE Family Controller", speed: "1 Gbps" }],
+      };
     case "system_info_text":
       return "🖥️ Sistem özellikleri (GMID Tool)\n…";
     case "power_status":

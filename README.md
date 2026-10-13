@@ -191,8 +191,9 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   Odası → Bildirimler: açılır pencere, oyunda panel, melodi ve ses düzeyi (Dinle).
 - **Bilgisayarı zamanla kapat** (Kontrol Odası → Genel; yanlış tıklamaya karşı onay sorar): Kapat / Yeniden başlat / Uyut — 10 dk, 30 dk, 1 saat… ya da elle.
   Son bir dakikada ortada geri sayım çıkar (İptal / Şimdi). Zamanı gelince açık programlar kapatılır.
-- **Sistem özellikleri** (Kontrol Odası): işlemci, ekran kartı, RAM modülleri, anakart, diskler, monitörler, fare ve
-  klavye adları, ses ve ağ aygıtları; **Kopyala** ile Discord'a yapıştır.
+- **Sistem özellikleri** (Kontrol Odası): bilgisayarın özeti ve dört ana parça (işlemci, ekran kartı, bellek, depolama),
+  altında sürücü doluluğu, bellek modülleri, ekranlar (inç, çözünürlük, Hz), fare/klavye/kulaklık, anakart ve ağ;
+  **Discord'a kopyala** ile düzenli bir özet yapıştır.
 
 ### Kontrol Odası (ayarlar merkezi)
 
