@@ -2,7 +2,7 @@
 
 use crate::util::hide_console;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// "Duration: 00:01:02.50," → 62.5
@@ -33,15 +33,84 @@ pub struct Probe {
 }
 
 /// Küçük resmi (480 px genişlik) yazar; süre ve çözünürlüğü döndürür.
+///
+/// Videolarda kare, sürenin %20–%60'ı arasından rastgele seçilir (başlangıçtaki siyah ekran ya da yükleme
+/// görüntüsü kapak olmasın). Çıkan kare neredeyse tek renkse (JPEG çok küçük) başka bir yer denenir.
 pub fn thumbnail(ffmpeg: &Path, input: &Path, out: &Path, video: bool) -> Result<Probe, String> {
     if let Some(d) = out.parent() {
         let _ = std::fs::create_dir_all(d);
     }
+    let (duration, size) = if video {
+        let (d, s, _) = probe(ffmpeg, input);
+        (d, s)
+    } else {
+        (None, None)
+    };
+    let positions: Vec<Option<f64>> = match duration {
+        Some(d) if video && d > 3.0 => (0..3)
+            .map(|k| Some(d * frame_spot(k)))
+            .chain([Some(0.5_f64.min(d / 2.0)), None])
+            .collect(),
+        _ if video => vec![Some(0.5), None],
+        _ => vec![None],
+    };
+    let mut last_err = String::new();
+    let mut best: Option<(u64, PathBuf)> = None;
+    for (k, at) in positions.iter().enumerate() {
+        let tmp = out.with_extension(format!("{k}.jpg"));
+        match grab(ffmpeg, input, &tmp, *at) {
+            Ok(len) => {
+                if !best.as_ref().is_some_and(|(l, _)| len <= *l) {
+                    if let Some((_, old)) = best.take() {
+                        let _ = std::fs::remove_file(old);
+                    }
+                    best = Some((len, tmp));
+                } else {
+                    let _ = std::fs::remove_file(&tmp);
+                }
+                // 480 px genişlikte ~6 KB'tan büyük bir JPEG: içinde görüntü var.
+                if len >= 6_000 {
+                    break;
+                }
+            }
+            Err(e) => last_err = e,
+        }
+    }
+    let Some((_, tmp)) = best else {
+        return Err(if last_err.is_empty() {
+            "küçük resim çıkarılamadı".into()
+        } else {
+            last_err
+        });
+    };
+    std::fs::rename(&tmp, out)
+        .or_else(|_| std::fs::copy(&tmp, out).map(|_| ()))
+        .map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&tmp);
+    let size = size.or_else(|| {
+        // Görsellerde (ekran görüntüsü) çözünürlük çıkarırken yazılan çıktıdan.
+        let (_, s, _) = probe(ffmpeg, input);
+        s
+    });
+    Ok(Probe { duration, size })
+}
+
+/// Kapak karesinin yeri (sürenin oranı): %20–%60 arası, her denemede farklı.
+fn frame_spot(attempt: u32) -> f64 {
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0)
+        .wrapping_add(attempt.wrapping_mul(2_654_435_761));
+    0.2 + 0.4 * ((seed % 1000) as f64 / 1000.0)
+}
+
+/// Tek kare yazar; dosyanın boyutunu döner.
+fn grab(ffmpeg: &Path, input: &Path, out: &Path, at: Option<f64>) -> Result<u64, String> {
     let mut cmd = Command::new(ffmpeg);
     cmd.args(["-hide_banner", "-y"]);
-    if video {
-        // İlk karelerde siyah ekran olabiliyor: 1. saniyeden (kısa kliplerde baştan).
-        cmd.args(["-ss", "1"]);
+    if let Some(t) = at {
+        cmd.args(["-ss", &format!("{t:.2}")]);
     }
     cmd.arg("-i")
         .arg(input)
@@ -52,32 +121,13 @@ pub fn thumbnail(ffmpeg: &Path, input: &Path, out: &Path, video: bool) -> Result
         .stderr(Stdio::piped());
     hide_console(&mut cmd);
     let o = cmd.output().map_err(|e| e.to_string())?;
-    let err = String::from_utf8_lossy(&o.stderr);
-    let probe = Probe {
-        duration: if video { parse_duration(&err) } else { None },
-        size: parse_size(&err),
-    };
-    if !out.is_file() && video {
-        // Klip 1 saniyeden kısaysa baştan dene.
-        let mut cmd = Command::new(ffmpeg);
-        cmd.args(["-hide_banner", "-y", "-i"])
-            .arg(input)
-            .args(["-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "5"])
-            .arg(out)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        hide_console(&mut cmd);
-        let _ = cmd.status();
-    }
-    if out.is_file() {
-        Ok(probe)
-    } else {
-        Err(err
+    match std::fs::metadata(out) {
+        Ok(m) if m.len() > 0 => Ok(m.len()),
+        _ => Err(String::from_utf8_lossy(&o.stderr)
             .lines()
             .last()
             .unwrap_or("küçük resim çıkarılamadı")
-            .to_string())
+            .to_string()),
     }
 }
 
@@ -559,6 +609,55 @@ mod real_ffmpeg {
     use super::*;
 
     /// `cargo test -- --ignored real_ffmpeg` (sistemde ffmpeg varsa): büyük bir klibi gerçekten sığdırır.
+    /// Başı siyah bir klipte kapak siyah kare olmamalı (gerçek ffmpeg gerekir).
+    #[test]
+    #[ignore]
+    fn thumbnail_skips_black_intro() {
+        let ff = Path::new("ffmpeg");
+        let dir = std::env::temp_dir().join(format!("gmid-thumb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("siyah basli.mp4");
+        let st = Command::new(ff)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=1280x720:d=2:r=30",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=s=1280x720:d=8:r=30",
+                "-filter_complex",
+                "[0][1]concat=n=2:v=1:a=0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+            ])
+            .arg(&src)
+            .status()
+            .unwrap();
+        assert!(st.success());
+        let out = dir.join("t.jpg");
+        let p = thumbnail(ff, &src, &out, true).unwrap();
+        assert_eq!(p.size, Some((1280, 720)));
+        assert!((9.0..11.0).contains(&p.duration.unwrap()));
+        let len = std::fs::metadata(&out).unwrap().len();
+        assert!(len > 6_000, "kapak siyah kare gibi: {len} bayt");
+        // Geçici kareler kalmamalı.
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .collect();
+        assert_eq!(left.len(), 2, "{left:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     #[ignore]
     fn fits_a_big_clip() {

@@ -44,6 +44,10 @@
   let trim: Clip | null = $state(null);
   /** Kartta "Sil?" onayı bekleyen klip. */
   let armed: string | null = $state(null);
+  /** Kapaklar: ffmpeg yoksa arka planda iniyor ("ffmpeg") ya da inemedi ("failed"). */
+  let thumbs = $state<"" | "ffmpeg" | "failed">("");
+  /** Dosyası açılamayan kapaklar (simge gösterilir). */
+  let broken = $state<Record<string, true>>({});
 
   async function load() {
     const [c, g] = await Promise.all([api.clips.list().catch(() => []), api.games.list().catch(() => [])]);
@@ -58,6 +62,10 @@
     void load();
     const stops = [
       on("clips-changed", () => void load()),
+      on<string>("clips-thumbs", (s) => {
+        thumbs = s === "ffmpeg" ? "ffmpeg" : s === "failed" ? "failed" : "";
+        if (s === "ready") void load();
+      }),
       on("games-changed", () => void load()),
       on<{ id: string; progress: number }>("clip-fit", (e) => {
         if (e.progress >= 1) {
@@ -230,6 +238,18 @@
       </div>
     </div>
 
+    {#if thumbs}
+      <div class="tnote" class:bad={thumbs === "failed"}>
+        <Icon name={thumbs === "failed" ? "info" : "download"} size={16} />
+        {#if thumbs === "ffmpeg"}
+          <span>Kapaklar hazırlanıyor: videolardan kare almak için gereken ffmpeg bir kez indiriliyor (~90 MB).</span>
+        {:else}
+          <span>Kapaklar için ffmpeg indirilemedi. Video İndirici → Araçlar'dan kurunca kapaklar kendiliğinden gelir.</span>
+          <button class="btn ghost sm" onclick={() => onnavigate("videos")}>Video İndirici</button>
+        {/if}
+      </div>
+    {/if}
+
     {#if loaded && !clips.length}
       <div class="empty">
         <Icon name="clip" size={40} />
@@ -271,7 +291,7 @@
                 title={`${label(c)} · çift tıkla aç`}
               >
                 <div class="th">
-                  {#if c.thumb}<img src={src(c.thumb)} alt="" loading="lazy" />{:else if c.kind === "shot"}<img src={src(c.path)} alt="" loading="lazy" />{:else}<span class="noth"><Icon name="play" size={22} /></span>{/if}
+                  {#if c.thumb && !broken[c.id]}<img src={src(c.thumb)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else if c.kind === "shot" && !broken[c.id]}<img src={src(c.path)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else}<span class="noth"><Icon name="play" size={22} /></span>{/if}
                   {#if hover === c.id}<video class="prev" src={src(c.path)} muted autoplay loop playsinline></video>{/if}
                   <span class="srcb">{SOURCES[c.source]}</span>
                   {#if c.kind === "clip" && c.duration}<span class="dur tnum">{dur(c.duration)}</span>{/if}
@@ -374,6 +394,9 @@
 {/if}
 
 <style>
+  .tnote { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; border-radius: 12px; font-size: 13px; color: var(--muted); border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); }
+  .tnote.bad { border-color: rgba(224, 106, 106, 0.5); }
+  .tnote span { flex: 1; }
   .clips { display: flex; flex-direction: column; gap: 16px; max-width: 1600px; margin: 0 auto; }
   .panel { display: flex; flex-direction: column; gap: 16px; }
   .bar { flex-wrap: wrap; row-gap: 10px; }

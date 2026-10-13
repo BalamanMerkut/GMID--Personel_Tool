@@ -69,6 +69,8 @@ pub struct Clips {
     started: Mutex<bool>,
     /// Discord'a sığdırılan klipler (aynı klip iki kez başlatılmasın).
     fitting: Mutex<HashSet<String>>,
+    /// Kapaklar için ffmpeg bu oturumda indirilmeye başlandı mı (bir kez).
+    ffmpeg_fetch: std::sync::atomic::AtomicBool,
 }
 
 const COLUMNS: &str =
@@ -327,6 +329,28 @@ impl Clips {
                 })
                 .unwrap_or_default()
         };
+        // Kapak dosyası silinmişse (Kapaklar klasörü temizlendi) yeniden çıkarılır.
+        {
+            let conn = db.conn();
+            let lost: Vec<String> = conn
+                .prepare("SELECT id, thumb FROM captures WHERE thumb IS NOT NULL")
+                .and_then(|mut st| {
+                    st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+                        .map(|rows| {
+                            rows.filter_map(Result::ok)
+                                .filter(|(_, t)| !Path::new(t).is_file())
+                                .map(|(id, _)| id)
+                                .collect()
+                        })
+                })
+                .unwrap_or_default();
+            for id in lost {
+                let _ = conn.execute(
+                    "UPDATE captures SET thumb = NULL, thumb_at = NULL WHERE id = ?1",
+                    [id],
+                );
+            }
+        }
         for (id, _, thumb) in &gone {
             let _ = db
                 .conn()
@@ -343,28 +367,68 @@ impl Clips {
         added
     }
 
-    /// Küçük resmi olmayanlar için ffmpeg (tur başına en çok 12; ffmpeg yoksa sonra).
+    /// Küçük resmi olmayanlar için ffmpeg (tur başına en çok 12). ffmpeg yoksa (Video İndirici'nin araçları hiç
+    /// kurulmadıysa) arka planda yalnızca ffmpeg indirilir, bitince kapaklar çıkarılır. Çıkarılamayanlar 6 saat
+    /// sonra yeniden denenir; yazılması süren dosyalar (son 2 dk'da değişmiş) sonraki tura kalır.
     fn thumbs(&self, app: &AppHandle) {
         let dir = app.state::<DataDir>();
-        let Some(ff) = ffmpeg(dir.root()) else {
-            return;
-        };
-        let out_dir = dir.folder(Some("Kapaklar")).join("Klipler");
         let db = app.state::<Db>();
+        let retry_before = now_ms() - 6 * 3600 * 1000;
         let todo: Vec<(String, String, String)> = {
             let conn = db.conn();
             let mut stmt = match conn.prepare(
-                "SELECT id, path, kind FROM captures WHERE thumb_at IS NULL ORDER BY created_at DESC LIMIT 12",
+                "SELECT id, path, kind FROM captures
+                 WHERE thumb_at IS NULL OR (thumb IS NULL AND thumb_at < ?1)
+                 ORDER BY created_at DESC LIMIT 12",
             ) {
                 Ok(s) => s,
                 Err(_) => return,
             };
-            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            stmt.query_map([retry_before], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
                 .map(|rows| rows.filter_map(Result::ok).collect())
                 .unwrap_or_default()
         };
+        if todo.is_empty() {
+            return;
+        }
+        let Some(ff) = ffmpeg(dir.root()) else {
+            use std::sync::atomic::Ordering;
+            if cfg!(windows) && !self.ffmpeg_fetch.swap(true, Ordering::SeqCst) {
+                crate::log!("Klip kapakları için ffmpeg indiriliyor");
+                let _ = app.emit("clips-thumbs", "ffmpeg");
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    let root = app.state::<DataDir>().root().to_path_buf();
+                    let r = app
+                        .state::<crate::downloader::tools::Tools>()
+                        .install_only(&app, &root, "ffmpeg");
+                    match r {
+                        Ok(()) => {
+                            let _ = app.emit("clips-thumbs", "ready");
+                            app.state::<Clips>().thumbs(&app);
+                        }
+                        Err(e) => {
+                            crate::log!("Klip kapakları: ffmpeg indirilemedi: {e}");
+                            let _ = app.emit("clips-thumbs", "failed");
+                        }
+                    }
+                });
+            }
+            return;
+        };
+        let out_dir = dir.folder(Some("Kapaklar")).join("Klipler");
+        let fresh = |p: &str| {
+            std::fs::metadata(p)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|age| age < std::time::Duration::from_secs(120))
+        };
         let mut any = false;
         for (id, path, kind) in todo {
+            if fresh(&path) {
+                continue;
+            }
             let out = out_dir.join(format!("{id}.jpg"));
             let r = media::thumbnail(&ff, Path::new(&path), &out, kind == "clip");
             let (thumb, dur, size) = match r {

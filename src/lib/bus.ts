@@ -5,6 +5,7 @@ export const localBus = new EventTarget();
 
 export type AppEvent =
   | "navigate"
+  | "clips-thumbs"
   | "audio-changed"
   | "notes-changed"
   | "reminders-changed"

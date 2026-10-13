@@ -164,6 +164,21 @@ impl Tools {
 
     /// Eksik araçları (ya da `force` ise hepsini) indirir. İlerleme `tools-progress` olayıyla gider.
     pub fn install(&self, app: &AppHandle, root: &Path, force: bool) -> Result<(), String> {
+        self.install_some(app, root, force, None)
+    }
+
+    /// Yalnızca bir aracı indirir (ör. klip kapakları için ffmpeg); kuruluysa bir şey yapmaz.
+    pub fn install_only(&self, app: &AppHandle, root: &Path, id: &str) -> Result<(), String> {
+        self.install_some(app, root, false, Some(id))
+    }
+
+    fn install_some(
+        &self,
+        app: &AppHandle,
+        root: &Path,
+        force: bool,
+        only: Option<&str>,
+    ) -> Result<(), String> {
         if self.installing.swap(true, Ordering::SeqCst) {
             return Err("Araçlar zaten indiriliyor.".into());
         }
@@ -171,7 +186,7 @@ impl Tools {
             let base = dir(root);
             std::fs::create_dir_all(&base).map_err(|e| e.to_string())?;
             for t in TOOLS {
-                if !force && base.join(t.file).is_file() {
+                if only.is_some_and(|id| id != t.id) || (!force && base.join(t.file).is_file()) {
                     continue;
                 }
                 let emit = |stage: &str, done: u64, total: u64, error: Option<String>| {
