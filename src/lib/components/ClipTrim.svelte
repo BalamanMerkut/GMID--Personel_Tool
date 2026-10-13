@@ -10,7 +10,9 @@
   import { notify } from "../toast.svelte";
   import type { Clip, FitChoice, FitOptions, FitResult } from "../types";
 
-  let { clip, onclose }: { clip: Clip; onclose: () => void } = $props();
+  let { clip, onclose, onsaved }: { clip: Clip; onclose: () => void; onsaved?: () => void } = $props();
+  /** Medya'daki indirilen video (kimlik "dl:…"): kırpılmış kopyası Videolar'a yeni video olarak eklenir. */
+  const isVideo = $derived(clip.id.startsWith("dl:"));
 
   const QUALITY: Record<FitChoice["quality"], [string, string]> = {
     great: ["Çok net", "good"],
@@ -47,7 +49,7 @@
       {
         key: UNLIMITED,
         title: "Sınırsız",
-        note: "Sadece kırp · orijinal kalite, klibin yanına kaydedilir",
+        note: isVideo ? "Sadece kırp · orijinal kalite, Videolar'a yeni video olarak eklenir" : "Sadece kırp · orijinal kalite, klibin yanına kaydedilir",
         options: { start, end, limitMb: null, codec: "h264" },
         height: clip.height ?? 1080,
         fps: 0,
@@ -148,8 +150,9 @@
       const r = await api.clips.fitDiscord(clip.id, opts);
       const item = { ...r, title: c.title };
       if (c.options.limitMb === null) {
-        notify("Kırpılmış kopya klibin yanına kaydedildi", "check");
-        void api.clips.rescan();
+        notify(isVideo ? "Kırpılmış kopya Videolar'a eklendi" : "Kırpılmış kopya klibin yanına kaydedildi", "check");
+        if (onsaved) onsaved();
+        else void api.clips.rescan();
       } else {
         notify(`${c.title} · ${mb(r.size)} hazır · panoya kopyalandı, Discord'da Ctrl+V`, "check");
       }
@@ -200,7 +203,7 @@
 <div class="back" role="presentation" onclick={(e) => e.target === e.currentTarget && progress === null && onclose()}>
   <div class="dlg panel" role="dialog" aria-label="Discord'a hazırla">
     <div class="spread">
-      <h3 class="h2"><Icon name="clip" />Discord'a hazırla</h3>
+      <h3 class="h2"><Icon name="clip" />{isVideo ? "Kırp ve Discord'a hazırla" : "Discord'a hazırla"}</h3>
       <button class="x" onclick={onclose} disabled={progress !== null} title="Kapat"><Icon name="x" size={18} /></button>
     </div>
 

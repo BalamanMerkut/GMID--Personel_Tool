@@ -113,6 +113,8 @@ adlar, ör. `Trojan:Win32/Bearfoos.A!ml`) zararlı sanıp karantinaya alabilir. 
   Dokunulmayanlar nedeniyle gösterilir. Sen seçip onaylarsın: dosyalar **Geri Dönüşüm Kutusu**'na gider, kayıtlar silinmeden
   önce `.reg` olarak yedeklenir (Belgeler › GMID Tool › Yedekler). Listede her programın kendi simgesi görünür; programlar türe (uygulama, oyun, sürücü & donanım, çalışma ortamı, Microsoft) ve
   diske göre süzülebilir, satıra tıklayınca nerede kurulu olduğu, yükleyicisi ve kaldırmanın riski görünür.
+- **Videoları kırp:** Medya'daki video kartında "Kırp / Discord'a hazırla": başlangıç/bitiş seç, Discord boyutuna sığdır
+  ya da yalnız kırp (kırpılmış kopya Medya'ya yeni video olarak eklenir).
 - **Sürükle-bırak:** Medya'daki videoları ve şarkıları, Kliplerim'deki klipleri basılı tutup sürükleyerek Masaüstü'ne, bir
   klasöre ya da Discord'a bırakabilirsin (kopyalanır, kütüphanedeki dosya yerinde kalır).
 ### Faz 6 — Film & Dizi Arşivi

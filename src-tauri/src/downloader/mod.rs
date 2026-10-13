@@ -122,6 +122,48 @@ pub fn get(db: &Db, id: &str) -> rusqlite::Result<Option<Download>> {
         .optional()
 }
 
+/// Kırpılmış kopyayı kütüphaneye ekler: başlığın sonuna "(kırpılmış)", kanal/site/kapak aynı; çalma listesine
+/// girmez. Yeni kaydın kimliği döner.
+pub fn add_copy(
+    db: &Db,
+    src_id: &str,
+    path: &Path,
+    duration: f64,
+    size: u64,
+) -> Result<String, String> {
+    let d = get(db, src_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Video bulunamadı")?;
+    let id = new_id();
+    let now = now_ms();
+    db.conn()
+        .execute(
+            "INSERT INTO downloads (id, url, video_id, title, uploader, site, thumbnail, duration, quality,
+                option_format, parts, audio_only, status, progress, size, file_path, source, created_at,
+                finished_at, subdir)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, '', 1, ?10, 'done', 1, ?11, ?12, ?13, ?14, ?14, ?15)",
+            params![
+                id,
+                d.url,
+                d.video_id,
+                format!("{} (kırpılmış)", d.title),
+                d.uploader,
+                d.site,
+                d.thumbnail,
+                duration,
+                d.quality,
+                d.audio_only,
+                size as i64,
+                path.to_string_lossy(),
+                d.source,
+                now,
+                d.subdir,
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
 fn set_status(db: &Db, id: &str, status: &str, error: Option<&str>) {
     let _ = db.conn().execute(
         "UPDATE downloads SET status = ?2, error = ?3 WHERE id = ?1",

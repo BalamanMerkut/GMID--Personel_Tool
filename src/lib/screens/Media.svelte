@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { api, formatSize, inTauri } from "../api";
   import { dragOut } from "../dragout";
+  import ClipTrim from "../components/ClipTrim.svelte";
   import PlaylistEditor from "../components/PlaylistEditor.svelte";
   import { downloads, formatDuration, siteLabel } from "../downloads.svelte";
   import { shuffle } from "../fun";
@@ -14,7 +15,7 @@
   import { getJson, setJson } from "../settings.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import type { Download, UserPlaylist } from "../types";
+  import type { Clip, Download, UserPlaylist } from "../types";
 
   let { onnavigate }: { onnavigate: (id: string) => void } = $props();
 
@@ -43,6 +44,30 @@
   let search = $state("");
   let armed: string | null = $state(null);
   let hovering: string | null = $state(null);
+  /** Kırpma / Discord'a hazırlama penceresi açık olan video. */
+  let trimming: Clip | null = $state(null);
+
+  /** İndirilen videoyu kırpma penceresinin anladığı biçime çevirir (kimlik "dl:…"). */
+  function asClip(d: Download): Clip {
+    const h = parseInt(d.quality, 10);
+    return {
+      id: `dl:${d.id}`,
+      path: d.filePath ?? "",
+      name: d.title,
+      kind: "clip",
+      source: "folder",
+      gameId: null,
+      gameHint: null,
+      title: d.title,
+      size: d.size ?? 0,
+      duration: d.duration ?? null,
+      width: null,
+      height: Number.isFinite(h) ? h : null,
+      thumb: null,
+      favorite: false,
+      createdAt: d.createdAt,
+    };
+  }
   /** Kendi çalma listelerim. */
   let myLists: UserPlaylist[] = $state([]);
   let editing: UserPlaylist | "new" | null = $state(null);
@@ -515,6 +540,7 @@
               <div class="spread">
                 <span class="sub small">{[d.uploader, siteLabel(d.site)].filter(Boolean).join(" · ")}{d.finishedAt ? ` · ${ago(d.finishedAt)}` : ""}</span>
                 <span class="sacts" class:open={armed === d.id}>
+                  <button class="mini" title="Kırp / Discord'a hazırla" onclick={() => (trimming = asClip(d))}><Icon name="clip" size={16} /></button>
                   <button class="mini" title="Klasörde göster" onclick={() => act(api.videos.reveal(d.id))}><Icon name="folder" size={16} /></button>
                   <button class="mini" class:armed={armed === d.id} title="Videoyu sil" onclick={() => remove(d)}>
                     <Icon name="trash" size={16} />{#if armed === d.id}<span>Sil?</span>{/if}
@@ -549,6 +575,10 @@
 {/snippet}
 
 <svelte:window onclick={onWindowClick} />
+
+{#if trimming}
+  <ClipTrim clip={trimming} onclose={() => (trimming = null)} onsaved={() => {}} />
+{/if}
 
 {#if editing}
   <PlaylistEditor

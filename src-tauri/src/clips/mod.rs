@@ -163,6 +163,42 @@ pub fn list(db: &Db) -> Result<Vec<Clip>, String> {
     Ok(rows)
 }
 
+/// Video İndirici'nin videoları da kırpılıp Discord'a hazırlanabilir: kimlikleri "dl:<indirme kimliği>".
+pub const DL_PREFIX: &str = "dl:";
+
+/// Klip ya da (kimlik "dl:" ile başlıyorsa) indirilen video.
+fn lookup(db: &Db, id: &str) -> Result<Clip, String> {
+    let Some(dl) = id.strip_prefix(DL_PREFIX) else {
+        return get(db, id);
+    };
+    let d = crate::downloader::get(db, dl)
+        .map_err(|e| e.to_string())?
+        .ok_or("Video bulunamadı")?;
+    let path = d.file_path.clone().ok_or("Videonun dosyası yok")?;
+    let name = Path::new(&path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| d.title.clone());
+    let height = d.quality.trim_end_matches('p').parse::<i64>().ok();
+    Ok(Clip {
+        id: id.to_string(),
+        path,
+        name,
+        kind: if d.audio_only { "audio" } else { "clip" }.into(),
+        source: "video".into(),
+        game_id: None,
+        game_hint: None,
+        title: Some(d.title),
+        size: d.size.unwrap_or(0) as i64,
+        duration: d.duration,
+        width: None,
+        height,
+        thumb: d.thumbnail,
+        favorite: false,
+        created_at: d.created_at,
+    })
+}
+
 pub fn get(db: &Db, id: &str) -> Result<Clip, String> {
     db.conn()
         .query_row(
@@ -465,7 +501,7 @@ impl Clips {
         opts: FitOptions,
     ) -> Result<FitResult, String> {
         let db = app.state::<Db>();
-        let clip = get(&db, id)?;
+        let clip = lookup(&db, id)?;
         let src = PathBuf::from(&clip.path);
         if !src.is_file() {
             return Err("Dosya bulunamadı (silinmiş ya da taşınmış)".into());
@@ -561,8 +597,14 @@ impl Clips {
             if limit.is_some() {
                 win::copy_file(&out)?;
             }
+            let size = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+            // İndirilen videonun kırpılmış kopyası Medya'da yeni bir video olarak görünsün.
+            if let (None, Some(dl)) = (limit, id.strip_prefix(DL_PREFIX)) {
+                crate::downloader::add_copy(&db, dl, &out, end - start, size)?;
+                let _ = app.emit("downloads-changed", ());
+            }
             Ok(FitResult {
-                size: std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
+                size,
                 path: out.to_string_lossy().into_owned(),
                 height: plan.height,
                 fps: plan.fps,
@@ -584,20 +626,24 @@ impl Clips {
         start: Option<f64>,
         end: Option<f64>,
     ) -> Result<Vec<Choice>, String> {
-        let clip = get(&app.state::<Db>(), id)?;
+        let clip = lookup(&app.state::<Db>(), id)?;
         let duration = clip.duration.filter(|d| *d > 0.0).unwrap_or(30.0);
         let s = start.unwrap_or(0.0).clamp(0.0, duration);
         let e = end
             .unwrap_or(duration)
             .clamp(s + 0.5, duration.max(s + 0.5));
         let full = s <= 0.05 && e >= duration - 0.05;
-        let fps = ffmpeg(app.state::<DataDir>().root())
-            .and_then(|ff| media::probe(&ff, Path::new(&clip.path)).2)
-            .unwrap_or(60.0);
-        let src = (
-            clip.width.unwrap_or(1920).max(16) as u32,
-            clip.height.unwrap_or(1080).max(16) as u32,
-        );
+        let probed = ffmpeg(app.state::<DataDir>().root())
+            .map(|ff| media::probe(&ff, Path::new(&clip.path)));
+        let fps = probed.as_ref().and_then(|p| p.2).unwrap_or(60.0);
+        // Gerçek boyut (dikey videolar da doğru çıksın); okunamazsa kayıttaki.
+        let src = probed
+            .and_then(|p| p.1)
+            .map(|(w, h)| (w.max(16) as u32, h.max(16) as u32))
+            .unwrap_or((
+                clip.width.unwrap_or(1920).max(16) as u32,
+                clip.height.unwrap_or(1080).max(16) as u32,
+            ));
         Ok(choices(
             e - s,
             full,
@@ -610,7 +656,7 @@ impl Clips {
     }
 
     pub fn plan(db: &Db, id: &str, opts: &FitOptions) -> Result<media::Plan, String> {
-        let clip = get(db, id)?;
+        let clip = lookup(db, id)?;
         let duration = clip.duration.filter(|d| *d > 0.0).unwrap_or(30.0);
         let start = opts.start.unwrap_or(0.0).clamp(0.0, duration);
         let end = opts
@@ -1291,5 +1337,39 @@ mod tests {
         assert_eq!(c.name, "a");
         delete(&db, &id).unwrap();
         assert!(list(&db).unwrap().is_empty());
+    }
+
+    #[test]
+    fn downloaded_videos_can_be_trimmed() {
+        let dir = std::env::temp_dir().join(format!("gmid-dlv-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_file(dir.join("gmid.db"));
+        let db = Db::open(&dir.join("gmid.db")).unwrap();
+        db.conn()
+            .execute(
+                "INSERT INTO downloads (id, url, video_id, title, uploader, site, thumbnail, duration, quality,
+                    option_format, audio_only, status, progress, size, file_path, source, created_at, finished_at)
+                 VALUES ('v1', 'https://x', 'abc', 'Scarface Edit', 'Diesel', 'Youtube', 't.jpg', 47.0, '2160p',
+                    'f', 0, 'done', 1, 9000000, ?1, 'app', 5, 5)",
+                [r"C:\GMID\Videolar\Youtube\Scarface Edit.mp4"],
+            )
+            .unwrap();
+        let c = lookup(&db, "dl:v1").unwrap();
+        assert_eq!(c.id, "dl:v1");
+        assert_eq!(c.kind, "clip");
+        assert_eq!(c.height, Some(2160));
+        assert_eq!(c.duration, Some(47.0));
+        assert_eq!(c.title.as_deref(), Some("Scarface Edit"));
+        assert!(lookup(&db, "dl:yok").is_err());
+
+        let new = crate::downloader::add_copy(&db, "v1", Path::new("kırpık.mp4"), 12.5, 2_000_000)
+            .unwrap();
+        let d = crate::downloader::get(&db, &new).unwrap().unwrap();
+        assert_eq!(d.title, "Scarface Edit (kırpılmış)");
+        assert_eq!(d.status, "done");
+        assert_eq!(d.duration, Some(12.5));
+        assert_eq!(d.size, Some(2_000_000));
+        assert_eq!(d.file_path.as_deref(), Some("kırpık.mp4"));
+        assert_eq!(d.playlist, None);
     }
 }
