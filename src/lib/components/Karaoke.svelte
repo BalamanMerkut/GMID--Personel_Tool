@@ -51,7 +51,12 @@
   let result = $state<Result | null>(null);
   let mixing = $state(false);
   let latencyMs = $state(150);
-  let voiceGain = $state(getJson("karaoke.voiceGain", 1.2));
+  // Ses ve müzik kaydedilirken aynı yüksekliğe getirilir (Rust); bunlar onun üzerine ayar (1 = dengeli).
+  let voiceGain = $state(getJson("karaoke.voiceGain2", 1));
+  let musicGain = $state(getJson("karaoke.musicGain", 1));
+  /** Kayıt boyunca mikrofonun en yüksek seviyesi: hiç ses gelmediyse uyarılır. */
+  let maxLevel = 0;
+  let quietMic = $state(false);
   let echo = $state(getJson("karaoke.echo", true));
   let recordings = $state<KaraokeRecording[]>([]);
   let previewKey = $state(0);
@@ -202,10 +207,13 @@
       let peak = 0;
       for (const v of data) peak = Math.max(peak, Math.abs(v));
       level = level * 0.7 + peak * 0.3;
+      maxLevel = Math.max(maxLevel, peak);
       requestAnimationFrame(tick);
     };
     tick();
     latencyGuess = Math.min(0.4, Math.max(0.08, (meterCtx.outputLatency || 0.04) + (meterCtx.baseLatency || 0.01) + 0.08));
+    maxLevel = 0;
+    quietMic = false;
     recorder.start(500);
     if (music?.paused) toggle();
   }
@@ -232,6 +240,7 @@
       r.onload = () => res(String(r.result));
       r.readAsDataURL(blob);
     });
+    quietMic = maxLevel < 0.02;
     mixing = true;
     try {
       const voice = await api.karaoke.voice(data, mime.includes("ogg") ? "ogg" : "webm");
@@ -252,7 +261,7 @@
     songStart,
     latency: latencyMs / 1000,
     voiceGain,
-    musicGain: 0.85,
+    musicGain,
     echo,
     output,
     title: item.title,
@@ -261,7 +270,8 @@
   async function remix() {
     if (!result) return;
     mixing = true;
-    void setJson("karaoke.voiceGain", voiceGain);
+    void setJson("karaoke.voiceGain2", voiceGain);
+    void setJson("karaoke.musicGain", musicGain);
     void setJson("karaoke.echo", echo);
     try {
       await api.karaoke.mix(item.id, mixOpts(result.voice, result.songStart, result.path));
@@ -532,12 +542,22 @@
     <div class="rback" role="presentation" onclick={(e) => e.target === e.currentTarget && (result = null)}>
       <div class="rcard" role="dialog" aria-label="Kayıt">
         <h3><Icon name="check" size={18} />Kaydın hazır</h3>
+        {#if quietMic}
+          <p class="warnbox">
+            Mikrofondan neredeyse hiç ses gelmedi. Windows'ta doğru mikrofon seçili mi (Ses & Mikrofon ekranı ya da Windows ses
+            ayarları → Giriş)? Mikrofon kilidi açıksa seviyesine de bak.
+          </p>
+        {/if}
+        <p class="sub small">Sesin ve müzik otomatik olarak dengelendi; istersen aşağıdan ince ayar yap ve yenile.</p>
         {#key previewKey}
           <audio class="pv" controls src={api.fileSrc(result.path)}></audio>
         {/key}
         <div class="rset">
           <label>Sesin <b class="tnum">%{Math.round(voiceGain * 100)}</b>
             <input type="range" min="0.3" max="2.5" step="0.05" bind:value={voiceGain} />
+          </label>
+          <label>Müzik <b class="tnum">%{Math.round(musicGain * 100)}</b>
+            <input type="range" min="0.2" max="1.5" step="0.05" bind:value={musicGain} />
           </label>
           <label title="Sesin müzikten geride kalıyorsa artır, önde gidiyorsa azalt">Gecikme düzeltme <b class="tnum">{latencyMs} ms</b>
             <input type="range" min="0" max="500" step="10" bind:value={latencyMs} />
@@ -651,6 +671,7 @@
   .rcard h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-family: var(--f-display); color: var(--gold-glow); }
   .pv { width: 100%; }
   .rset { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .warnbox { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(227, 194, 112, 0.45); background: rgba(227, 194, 112, 0.08); color: var(--text); font-size: 13px; line-height: 1.5; }
   .rset label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
   .rset label b { color: var(--text); }
   .rset input[type="range"] { accent-color: var(--gold); }

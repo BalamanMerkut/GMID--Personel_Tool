@@ -529,10 +529,17 @@ pub(crate) fn encode(root: &Path, st: &demucs::Stereo, dest: &Path) -> Result<()
     {
         let mut stdin = child.stdin.take().ok_or("FFmpeg girişi yok")?;
         let mut buf = Vec::with_capacity(1 << 20);
-        // Taşan örnekler kırpılır (patlama sesi olmasın), sayı olmayanlar sessizlik.
+        // Taşma olursa bütün parça birlikte kısılır (tek tek kırpmak hafif bozulma yapıyordu);
+        // sayı olmayanlar sessizlik, yine de kalan tepe kırpılır (patlama olmasın).
+        let peak = st
+            .iter()
+            .flatten()
+            .filter(|x| x.is_finite())
+            .fold(0f32, |m, x| m.max(x.abs()));
+        let scale = if peak > 0.98 { 0.98 / peak } else { 1.0 };
         let safe = |x: f32| {
             if x.is_finite() {
-                x.clamp(-1.0, 1.0)
+                (x * scale).clamp(-1.0, 1.0)
             } else {
                 0.0
             }
@@ -636,7 +643,13 @@ pub fn mix(root: &Path, id: &str, m: &Mix) -> Result<String, String> {
             ))
         }
     };
-    let filter = filter_graph(m);
+    // Ses ve müzik aynı ölçüye getirilir (EBU R128): mikrofon kaydı çoğu zaman şarkıdan 15–25 dB kısıktır;
+    // ses müziğin ~4 LU üstüne oturur, kaydırıcılar bunun üzerine çarpan olur.
+    let voice_lufs = loudness(root, &voice, m.latency.clamp(0.0, 1.0), None);
+    let music_lufs = loudness(root, &music, m.song_start.max(0.0), Some(600.0));
+    let (gv, gm) = level_gains(voice_lufs, music_lufs);
+    crate::log!("Karaoke karışımı: ses {voice_lufs:?} LUFS → {gv:+.1} dB, müzik {music_lufs:?} LUFS → {gm:+.1} dB");
+    let filter = filter_graph(m, gv, gm);
     let tmp = out.with_extension("yaziliyor.m4a");
     let mut cmd = Command::new(ffmpeg(root)?);
     cmd.args(["-nostdin", "-y", "-loglevel", "error", "-ss"])
@@ -678,8 +691,60 @@ pub fn mix(root: &Path, id: &str, m: &Mix) -> Result<String, String> {
     Ok(out.to_string_lossy().into_owned())
 }
 
-/// ffmpeg süzgeci: ses gecikmesi kadar baştan kırpılır, seviyeler, isteğe bağlı yankı; müzik sesin süresi kadar.
-fn filter_graph(m: &Mix) -> String {
+/// Hedef ses yüksekliği (LUFS): ses müziğin biraz üstünde.
+const VOICE_LUFS: f64 = -16.0;
+const MUSIC_LUFS: f64 = -20.0;
+
+/// Ölçülen yüksekliklerden ses ve müzik için kazanç (dB). Ölçülemezse 0.
+fn level_gains(voice: Option<f64>, music: Option<f64>) -> (f64, f64) {
+    let gv = voice.map_or(0.0, |l| (VOICE_LUFS - l).clamp(-10.0, 40.0));
+    let gm = music.map_or(0.0, |l| (MUSIC_LUFS - l).clamp(-20.0, 6.0));
+    (gv, gm)
+}
+
+/// Dosyanın (ya da `start`tan itibaren `dur` saniyesinin) bütünleşik ses yüksekliği, LUFS.
+fn loudness(root: &Path, file: &Path, start: f64, dur: Option<f64>) -> Option<f64> {
+    let mut cmd = Command::new(ffmpeg(root).ok()?);
+    cmd.args(["-nostdin", "-hide_banner", "-nostats", "-ss"])
+        .arg(format!("{start:.3}"));
+    if let Some(d) = dur {
+        cmd.arg("-t").arg(format!("{d:.0}"));
+    }
+    cmd.arg("-i")
+        .arg(file)
+        .args([
+            "-vn",
+            "-af",
+            "highpass=f=80,ebur128=framelog=quiet",
+            "-f",
+            "null",
+            "-",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    hide_console(&mut cmd);
+    let out = cmd.output().ok()?;
+    parse_lufs(&String::from_utf8_lossy(&out.stderr))
+}
+
+/// ebur128 özetindeki "I: -21.7 LUFS".
+fn parse_lufs(log: &str) -> Option<f64> {
+    let rest = log.rsplit("Integrated loudness:").next()?;
+    let v: f64 = rest
+        .split("I:")
+        .nth(1)?
+        .split("LUFS")
+        .next()?
+        .trim()
+        .parse()
+        .ok()?;
+    // Sessizlik -70 civarı çıkar: anlamlı değil.
+    (v > -60.0).then_some(v)
+}
+
+/// ffmpeg süzgeci: ses gecikmesi kadar baştan kırpılır, iki kayıt aynı yüksekliğe getirilir (`gv`, `gm` dB),
+/// sese hafif sıkıştırma (kısık yerler de duyulsun), isteğe bağlı yankı; müzik sesin süresi kadar.
+fn filter_graph(m: &Mix, gv: f64, gm: f64) -> String {
     let lat = m.latency.clamp(0.0, 1.0);
     let vg = m.voice_gain.clamp(0.0, 4.0);
     let mg = m.music_gain.clamp(0.0, 2.0);
@@ -690,8 +755,9 @@ fn filter_graph(m: &Mix) -> String {
     };
     format!(
         "[1:a]aresample=44100,aformat=channel_layouts=stereo,atrim=start={lat:.3},asetpts=PTS-STARTPTS,\
-         volume={vg:.2}{echo}[v];[0:a]volume={mg:.2}[m];[m][v]amix=inputs=2:duration=shortest:normalize=0,\
-         alimiter=limit=0.95[out]"
+         highpass=f=80,volume={gv:.1}dB,acompressor=threshold=-20dB:ratio=3:attack=8:release=180:makeup=1.5,\
+         volume={vg:.2}{echo}[v];[0:a]volume={gm:.1}dB,volume={mg:.2}[m];\
+         [m][v]amix=inputs=2:duration=shortest:normalize=0,alimiter=limit=0.95[out]"
     )
 }
 
@@ -716,6 +782,17 @@ mod tests {
     }
 
     #[test]
+    fn loudness_matching() {
+        let log = "[Parsed_ebur128_0] Summary:\n\n  Integrated loudness:\n    I:         -38.2 LUFS\n    Threshold: -48.2 LUFS\n";
+        assert_eq!(parse_lufs(log), Some(-38.2));
+        assert_eq!(parse_lufs("Integrated loudness:\n I: -70.0 LUFS"), None);
+        // Kısık mikrofon (-38) yükseltilir, yüksek master (-8) kısılır; ses müziğin 4 LU üstünde.
+        assert_eq!(level_gains(Some(-38.0), Some(-8.0)), (22.0, -12.0));
+        assert_eq!(level_gains(None, None), (0.0, 0.0));
+        assert_eq!(level_gains(Some(-80.0), Some(10.0)).0, 40.0);
+    }
+
+    #[test]
     fn filter_is_clamped() {
         let m = Mix {
             voice: String::new(),
@@ -727,9 +804,10 @@ mod tests {
             output: None,
             title: String::new(),
         };
-        let f = filter_graph(&m);
+        let f = filter_graph(&m, 18.0, -6.5);
         assert!(f.contains("atrim=start=1.000"));
         assert!(f.contains("volume=4.00"));
+        assert!(f.contains("volume=18.0dB") && f.contains("volume=-6.5dB"));
         assert!(f.contains("aecho"));
         assert!(f.ends_with("[out]"));
     }
@@ -850,7 +928,10 @@ mod tests {
             "-f",
             "lavfi",
             "-i",
+            // Çok kısık mikrofon (~-45 dBFS): karışımda yine de müziğin üstünde duyulmalı.
             "sine=f=500:d=5",
+            "-af",
+            "volume=0.03",
             "-c:a",
             "libopus",
             voice_src.to_str().unwrap(),
@@ -874,6 +955,24 @@ mod tests {
         let back = decode(&root, Path::new(&out)).unwrap();
         let secs = back[0].len() as f64 / 44100.0;
         assert!((secs - 4.88).abs() < 0.2, "karışım {secs:.2} sn");
+        // Goertzel: karışımdaki ses (500 Hz) ile müziğin (330 Hz) gücü.
+        let power = |f: f64| {
+            let x = &back[0][44100..2 * 44100];
+            let w = 2.0 * (std::f64::consts::TAU * f / 44100.0).cos();
+            let (mut a, mut b) = (0f64, 0f64);
+            for &v in x {
+                let c = v as f64 + w * a - b;
+                b = a;
+                a = c;
+            }
+            a * a + b * b - w * a * b
+        };
+        let ratio_db = 10.0 * (power(500.0) / power(330.0)).log10();
+        eprintln!("ses / müzik: {ratio_db:+.1} dB");
+        assert!(
+            ratio_db > 0.0,
+            "ses müziğin altında kaldı: {ratio_db:+.1} dB"
+        );
     }
 
     /// İndirilen npm paketinden modelin çıkarılması (`GMID_KARAOKE_TGZ`: demucs-1.0.0.tgz).
