@@ -175,6 +175,8 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
   kendiliğinden işlemciye geçer.
 - **Toparlama (deneme):** yerel dil modeli (Gemma 3 4B, llama.cpp, ~3 GB) noktalama, paragraf, dolgu sözleri,
   "yarın, yok yok cuma" gibi düzeltmeler ve devrik cümleler. Şüpheli sonuçta ham yazı yapıştırılır.
+- **Açılışta hazırla:** GMID açıldıktan biraz sonra modeller arka planda yüklenir ve ekran kartı bir kez ısındırılır;
+  ilk dikte beklemez. Model yüklenirken gösterge "Hazırlanıyor" der.
 - 15 dakika kullanılmazsa modeller bellekten çıkar (oyunda ekran kartı boş kalsın). Kontrol Odası → Sesle yazma:
   özel sözcükler, dil, deneme alanı, son dikteler (yapışmadıysa kopyala).
 - **Sözlük (kullandıkça öğrenir):** Whisper bir sözcüğü hep yanlış yazıyorsa ("GMID" → "GMD", "VDS" → "videoyu")

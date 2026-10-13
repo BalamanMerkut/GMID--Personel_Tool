@@ -31,7 +31,7 @@ pub struct OsdMessage {
     pub text: String,
 }
 
-/// Sesle yazma göstergesinin durumu: "listening" | "processing" | "error" | "hidden".
+/// Sesle yazma göstergesinin durumu: "listening" | "loading" | "processing" | "error" | "hidden".
 #[derive(Serialize, Clone, Default)]
 pub struct DictationView {
     pub state: String,
@@ -183,6 +183,8 @@ pub fn dictation_view(app: &AppHandle, state: &str, secs: u32) {
     let limit = match state {
         "error" => Some(Duration::from_secs(2)),
         "processing" => Some(Duration::from_secs(120)),
+        // İlk açılışta model yüklemesi ve ekran kartı hazırlığı uzun sürebilir.
+        "loading" => Some(Duration::from_secs(300)),
         _ => None,
     };
     if let Some(limit) = limit {

@@ -111,7 +111,25 @@ fn wait_ready(child: &mut Child, url: &str, timeout: Duration) -> Result<(), Str
         }
         std::thread::sleep(Duration::from_millis(250));
     }
-    Err("zamanında hazır olmadı".into())
+    Err(SLOW.into())
+}
+
+/// `wait_ready`: program açık ama süresinde hazır olmadı (ilk açılışta virüs taraması, sürücü derlemesi…).
+const SLOW: &str = "zamanında hazır olmadı";
+
+/// İlk istek: ekran kartı ilk kez kullanılırken CUDA çekirdekleri hazırlanır (yeni kartlarda sürücü
+/// bunları derler, birkaç dakika sürebilir). Bunu boş bir sesle önceden yaptırırız; kişinin ilk diktesi
+/// beklemesin.
+fn warm_whisper(port: u16) {
+    let started = Instant::now();
+    let silence = vec![0i16; 16_000];
+    match post_inference(port, &super::to_wav(&silence), "", Duration::from_secs(300)) {
+        Ok(_) => crate::log!(
+            "Sesle yazma: Whisper ısındı ({:.1} sn)",
+            started.elapsed().as_secs_f64()
+        ),
+        Err(e) => crate::log!("Sesle yazma: Whisper ısınamadı: {e}"),
+    }
 }
 
 impl Engine {
@@ -203,16 +221,19 @@ impl Engine {
                     continue;
                 }
             };
-            match wait_ready(
-                &mut child,
-                &format!("http://127.0.0.1:{port}/"),
-                Duration::from_secs(90),
-            ) {
+            let started = Instant::now();
+            // Ekran kartı sürümünün ilk açılışı uzun sürebilir (büyük CUDA dosyaları taranır, yüklenir).
+            let limit = Duration::from_secs(if gpu { 240 } else { 90 });
+            match wait_ready(&mut child, &format!("http://127.0.0.1:{port}/"), limit) {
                 Ok(()) => {
                     crate::log!(
-                        "Sesle yazma: Whisper sunucusu hazır ({})",
-                        if gpu { "NVIDIA" } else { "işlemci" }
+                        "Sesle yazma: Whisper sunucusu hazır ({}, {:.1} sn)",
+                        if gpu { "NVIDIA" } else { "işlemci" },
+                        started.elapsed().as_secs_f64()
                     );
+                    if gpu {
+                        warm_whisper(port);
+                    }
                     *guard = Some(Server {
                         child,
                         port,
@@ -230,7 +251,9 @@ impl Engine {
                     let _ = child.kill();
                     let _ = child.wait();
                     crate::log!("Sesle yazma: Whisper sunucusu açılamadı (gpu={gpu}): {e}");
-                    if gpu {
+                    // Yalnızca program çöktüyse bu oturumda işlemciye geçilir; yavaş açıldıysa
+                    // sonraki dikte ekran kartını yeniden dener.
+                    if gpu && e != SLOW {
                         *self.gpu_failed.lock().unwrap_or_else(|e| e.into_inner()) =
                             Some(e.clone());
                     }
@@ -239,6 +262,14 @@ impl Engine {
             }
         }
         Err(format!("Whisper sunucusu açılamadı: {last}"))
+    }
+
+    /// Whisper sunucusu açık ve hazır mı? (Yükleniyorsa beklemeden `false`.)
+    pub fn loaded(&self) -> bool {
+        match self.whisper.try_lock() {
+            Ok(mut g) => g.as_mut().is_some_and(|s| s.alive()),
+            Err(_) => false,
+        }
     }
 
     /// Şu an NVIDIA ile mi çalışıyor? (`None`: sunucu kapalı)
@@ -274,7 +305,7 @@ impl Engine {
         // Sunucu kapanmışsa (çökme, uyku) bir kez yeniden başlatıp dener.
         for _ in 0..2 {
             let port = self.whisper_port(root, cfg)?;
-            match post_inference(port, wav, prompt) {
+            match post_inference(port, wav, prompt, Duration::from_secs(120)) {
                 Ok(t) => return Ok(t),
                 Err(e) => {
                     last = e;
@@ -332,6 +363,12 @@ impl Engine {
             return Err(format!("Toparlayıcı açılamadı: {e}"));
         }
         crate::log!("Sesle yazma: toparlayıcı hazır");
+        // İlk istek ekran kartını hazırlar (Whisper'daki gibi); kısa bir yanıt yeter.
+        let agent = crate::net::agent(Duration::from_secs(5), Duration::from_secs(180));
+        let _ = agent
+            .post(&format!("http://127.0.0.1:{port}/v1/chat/completions"))
+            .header("Content-Type", "application/json")
+            .send(r#"{"messages":[{"role":"user","content":"Merhaba"}],"max_tokens":1}"#);
         *guard = Some(Server {
             child,
             port,
@@ -418,7 +455,12 @@ pub fn accept_tidy(original: &str, out: &str) -> String {
 }
 
 /// whisper-server'a WAV gönderir (multipart/form-data).
-fn post_inference(port: u16, wav: &[u8], prompt: &str) -> Result<String, String> {
+fn post_inference(
+    port: u16,
+    wav: &[u8],
+    prompt: &str,
+    timeout: Duration,
+) -> Result<String, String> {
     let boundary = format!("gmid{}", crate::util::new_id());
     let mut body: Vec<u8> = Vec::with_capacity(wav.len() + 1024);
     let mut field = |name: &str, value: &str| {
@@ -440,7 +482,7 @@ fn post_inference(port: u16, wav: &[u8], prompt: &str) -> Result<String, String>
     body.extend_from_slice(wav);
     let _ = write!(body, "\r\n--{boundary}--\r\n");
 
-    let agent = crate::net::agent(Duration::from_secs(5), Duration::from_secs(120));
+    let agent = crate::net::agent(Duration::from_secs(5), timeout);
     let mut resp = agent
         .post(&format!("http://127.0.0.1:{port}/inference"))
         .header(

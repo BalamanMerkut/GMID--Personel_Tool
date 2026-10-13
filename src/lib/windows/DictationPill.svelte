@@ -1,13 +1,14 @@
 <script lang="ts">
   // Sesle yazma göstergesi (ekranın alt ortası, tıklamaları geçirir): yazı yok, sadece durum.
   //  • dinliyor: kırmızı nokta, sesle oynayan dalga, süre
+  //  • model yükleniyor (ilk dikte): üç nokta + "Hazırlanıyor"
   //  • yazıya döküyor: üç altın nokta
   //  • hata: kısa bir uyarı işareti (ayrıntı sağ üstteki göstergede)
   import { onMount } from "svelte";
   import { call } from "../api";
   import { on } from "../bus";
 
-  type View = { state: "listening" | "processing" | "error" | "hidden"; secs: number };
+  type View = { state: "listening" | "loading" | "processing" | "error" | "hidden"; secs: number };
   const BARS = 9;
 
   let view: View = $state({ state: "hidden", secs: 0 });
@@ -17,7 +18,7 @@
   // Güvenlik ağı: dinlerken her saniye, diğer durumlarda bir kez haber gelir. Haber kesilirse (uygulama
   // gizlemeyi kaçırırsa) gösterge kendini boşaltır; pencere zaten tıklamaları geçirir.
   let lastSeen = Date.now();
-  const STALE: Record<View["state"], number> = { listening: 3500, processing: 125_000, error: 2500, hidden: Infinity };
+  const STALE: Record<View["state"], number> = { listening: 3500, loading: 305_000, processing: 125_000, error: 2500, hidden: Infinity };
 
   onMount(() => {
     const set = (v: View) => {
@@ -55,7 +56,7 @@
 </script>
 
 {#if view.state !== "hidden"}
-  <div class="pill" class:proc={view.state === "processing"} class:err={view.state === "error"}>
+  <div class="pill" class:proc={view.state === "processing" || view.state === "loading"} class:err={view.state === "error"}>
     {#if view.state === "listening"}
       <span class="rec"></span>
       <span class="wave" aria-hidden="true">
@@ -64,6 +65,9 @@
       <span class="t">{time}</span>
     {:else if view.state === "processing"}
       <span class="dots" aria-label="Yazıya dökülüyor"><i></i><i></i><i></i></span>
+    {:else if view.state === "loading"}
+      <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="t">Hazırlanıyor</span>
     {:else}
       <span class="bang">!</span>
     {/if}

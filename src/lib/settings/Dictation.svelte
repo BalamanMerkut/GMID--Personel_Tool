@@ -19,6 +19,7 @@
   let tidy = $state(getJson("dictation.tidy", false));
   let words = $state(getJson<string>("dictation.words", ""));
   let sounds = $state(getJson("dictation.sounds", true));
+  let preload = $state(getJson("dictation.preload", true));
   let showRaw: number | null = $state(null);
   let rules: DictRule[] = $state([]);
   let newFrom = $state("");
@@ -181,6 +182,16 @@
     <div class="line">
       <div><b>Ses efekti</b><span class="sub small">Dinlemeye başlarken ve bırakınca kısa bir "tık" sesi.</span></div>
       <Switch label="Ses efekti" checked={sounds} onchange={(v) => ((sounds = v), void setJson("dictation.sounds", v))} />
+    </div>
+    <div class="line">
+      <div>
+        <b>Açılışta hazırla</b>
+        <span class="sub small">
+          GMID açıldıktan biraz sonra model arka planda yüklenir; ilk dikte beklemez. 15 dakika kullanılmazsa ekran kartı
+          belleği oyunlar için boşaltılır (sonraki dikte birkaç saniye "Hazırlanıyor" gösterir).
+        </span>
+      </div>
+      <Switch label="Açılışta hazırla" checked={preload} onchange={(v) => ((preload = v), void setJson("dictation.preload", v))} />
     </div>
     <p class="sub small">
       Türkçe klavyede <b>AltGr</b> (@, €, {"{"}…) dikteyi başlatmaz. Ctrl+Alt+N gibi kısayollar da çalışmaya devam eder:

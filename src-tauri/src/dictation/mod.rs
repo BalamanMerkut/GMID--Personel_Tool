@@ -27,6 +27,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
 pub const ENABLED_KEY: &str = "dictation.enabled";
+/// Açılışta modelleri önceden yükle (varsayılan açık).
+pub const PRELOAD_KEY: &str = "dictation.preload";
 
 /// Son diktelerden kaç tanesi hatırlansın (yalnızca bellekte).
 const HISTORY: usize = 20;
@@ -286,6 +288,21 @@ pub fn apply(app: &AppHandle) {
             .name("dikte".into())
             .spawn(move || controller(app2, rx))
             .ok();
+        // Açılışta modeller arka planda yüklensin: ilk dikte model yüklemesini ve ekran kartının ilk
+        // hazırlığını beklemesin (açılış ağırlaşmasın diye biraz sonra; oyun öndeyse yapılmaz).
+        let app4 = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(20));
+            let d = app4.state::<Dictation>();
+            let preload = app4
+                .state::<Db>()
+                .setting_json::<bool>(PRELOAD_KEY)
+                .unwrap_or(true);
+            if preload && d.enabled.load(Ordering::SeqCst) && !crate::panel::foreground_fullscreen()
+            {
+                warm_up(&app4);
+            }
+        });
         // Uzun süre kullanılmayan sunucular kapanır.
         let app3 = app.clone();
         std::thread::spawn(move || loop {
@@ -497,6 +514,11 @@ fn run(
     }
     let s = settings(&db);
     d.set_phase(app, "transcribing", None);
+    // Model henüz yükleniyorsa gösterge bunu söylesin (ilk dikte birkaç saniye sürebilir).
+    let loading = !d.engine.loaded();
+    if loading {
+        crate::overlay::dictation_view(app, "loading", 0);
+    }
     let raw = d
         .engine
         .transcribe(
@@ -512,6 +534,9 @@ fn run(
                 e
             }
         })?;
+    if loading {
+        crate::overlay::dictation_view(app, "processing", 0);
+    }
     let raw = crate::transcript::parse::clean_dictation(&raw);
     if raw.is_empty() {
         return Ok(None);

@@ -1001,7 +1001,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       userPlaylists.splice(userPlaylists.findIndex((p) => p.id === a.id), 1);
       return;
     case "dictation_view_state": {
-      // Tarayıcı önizlemesi: ?view=dikte&demo=listening|processing|error
+      // Tarayıcı önizlemesi: ?view=dikte&demo=listening|loading|processing|error
       const demo = new URLSearchParams(location.search).get("demo") ?? "listening";
       if (demo === "listening") setInterval(() => emit("dikte-level", Math.random() * 0.8), 80);
       return { state: demo, secs: 7 };
