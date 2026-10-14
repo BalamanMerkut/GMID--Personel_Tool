@@ -48,12 +48,50 @@
   let pick: Item | null = $state(null);
   let rolling = $state(false);
 
+  /** Wikipedia'dan İngilizce gelen tür adları Türkçeleşir; aynı anlama gelenler birleşir ("Thriller" = "Gerilim"). */
+  const GENRE_TR: Record<string, string> = {
+    action: "Aksiyon", "action film": "Aksiyon", adventure: "Macera", animation: "Animasyon", animated: "Animasyon",
+    biography: "Biyografi", biographical: "Biyografi", "black comedy": "Kara komedi", "dark comedy": "Kara komedi",
+    comedy: "Komedi", "comedy film": "Komedi", "comedy-drama": "Komedi-dram", "comedy drama": "Komedi-dram", crime: "Suç",
+    "crime film": "Suç", "crime drama": "Suç", "crime thriller": "Suç", documentary: "Belgesel", drama: "Dram",
+    "drama film": "Dram", "televizyon draması": "Dram", "television drama": "Dram", family: "Aile", fantasy: "Fantastik",
+    history: "Tarih", historical: "Tarih", horror: "Korku", "horror film": "Korku", musical: "Müzikal", music: "Müzik",
+    mystery: "Gizem", romance: "Romantik", romantic: "Romantik", "romantic comedy": "Romantik komedi",
+    "science fiction": "Bilimkurgu", "sci-fi": "Bilimkurgu", "bilim kurgu": "Bilimkurgu", sports: "Spor", sport: "Spor",
+    thriller: "Gerilim", "psychological thriller": "Psikolojik gerilim", war: "Savaş", western: "Western",
+    "contemporary western": "Modern western", "neo-western": "Modern western", superhero: "Süper kahraman",
+    "superhero film": "Süper kahraman", heist: "Soygun", "heist film": "Soygun", disaster: "Felaket", spy: "Casus",
+    satire: "Hiciv", sitcom: "Durum komedisi", "teen": "Gençlik", "coming-of-age": "Gençlik", "martial arts": "Dövüş",
+    "neo-noir": "Kara film", "film noir": "Kara film", "war film": "Savaş", "dram": "Dram", "korku": "Korku",
+  };
+  const trGenre = (g: string) => GENRE_TR[g.trim().toLocaleLowerCase("tr-TR")] ?? GENRE_TR[g.trim().toLowerCase()] ?? g.trim().charAt(0).toLocaleUpperCase("tr-TR") + g.trim().slice(1);
+
   async function load() {
-    const [t, r] = await Promise.all([api.titles.list().catch(() => []), api.reviews.list("title").catch(() => [])]);
+    const [t0, r] = await Promise.all([api.titles.list().catch(() => []), api.reviews.list("title").catch(() => [])]);
+    const t = t0.map((x) => ({ ...x, genres: [...new Set(x.genres.map(trGenre))] }));
     titles = t;
     reviews = r;
     loaded = true;
     if (detail) detail = items.find((i) => i.r.id === detail?.r.id) ?? null;
+  }
+
+  /** İki tıkla kaldırma: puanla birlikte film/dizi de arşivden gider. */
+  let armedRemove = $state(false);
+  async function removeTitle(d: Item) {
+    if (!armedRemove) {
+      armedRemove = true;
+      setTimeout(() => (armedRemove = false), 3500);
+      return;
+    }
+    armedRemove = false;
+    try {
+      await api.reviews.remove(d.r.id);
+      detail = null;
+      notify(`${d.t.name} arşivden kaldırıldı`, "check");
+      await load();
+    } catch (e) {
+      notify(String(e), "info");
+    }
   }
 
   onMount(() => {
@@ -438,7 +476,12 @@
       <div class="foot">
         <button class="link sm" onclick={() => api.titles.pickPoster(d.t.id).then((ok) => ok && notify("Afiş değişti", "image")).catch((e) => notify(String(e), "info"))}>Afiş seç</button>
         <button class="link sm" onclick={() => api.titles.refresh(d.t.id).then(() => notify("Bilgiler yenileniyor", "check"))}>Bilgileri yenile</button>
-        <button class="btn" onclick={() => (rating = { title: d.t, review: d.r, fresh: false })}><Icon name="edit" size={16} />Düzenle</button>
+        <span class="row">
+          <button class="btn ghost danger" class:armed={armedRemove} onclick={() => removeTitle(d)} title="Puanı ve kaydı arşivden siler">
+            <Icon name="trash" size={16} />{armedRemove ? "Emin misin? Tekrar bas" : "Arşivden kaldır"}
+          </button>
+          <button class="btn" onclick={() => (rating = { title: d.t, review: d.r, fresh: false })}><Icon name="edit" size={16} />Düzenle</button>
+        </span>
       </div>
       <p class="sub small credit">Bilgiler: Wikipedia ve Wikidata · afiş: Wikipedia, iTunes ya da TVmaze</p>
     </div>
@@ -580,6 +623,8 @@
   .spoil { border: 0; padding: 0 4px; border-radius: 4px; background: var(--coal-2); color: transparent; text-shadow: 0 0 8px rgba(255, 255, 255, 0.5); cursor: pointer; font: inherit; }
   .sp { background: rgba(255, 255, 255, 0.06); border-radius: 4px; padding: 0 4px; }
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .danger:hover { color: #ff9a9a; border-color: rgba(224, 106, 106, 0.6); }
+  .danger.armed { color: #fff; background: var(--bad); border-color: var(--bad); }
 
   .flist { overflow: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 12px; padding: 6px; min-height: 120px; max-height: 420px; }
   .hit { display: flex; align-items: center; gap: 12px; text-align: left; border: 0; background: transparent; color: var(--text); padding: 6px 8px; border-radius: 9px; }

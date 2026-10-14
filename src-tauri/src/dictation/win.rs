@@ -328,25 +328,43 @@ pub fn watch_field(
             return;
         };
         let Ok(el) = uia.GetFocusedElement() else {
+            crate::log!("Sesle yazma: odaktaki yazı alanı bulunamadı; bu dikteden öğrenilmeyecek");
             return;
         };
         if el.CurrentIsPassword().is_ok_and(|p| p.as_bool()) {
             return;
         }
         let mut last: Option<String> = None;
-        // En çok ~2 dakika: düzeltme genelde göndermeden hemen önce yapılır.
-        for _ in 0..80 {
+        // Aynı kaldığı tur sayısı (1,5 sn'de bir bakılır).
+        let mut still = 0;
+        // En çok ~2 dakika. Düzeltme bitti sayılır: gönderilince/silinince, ya da yazı değişip 6 sn dokunulmayınca.
+        for i in 0..80 {
             if !alive() {
                 break;
             }
             let Some(text) = field_text(&el) else {
+                if i == 0 {
+                    crate::log!("Sesle yazma: bu programın yazı alanı okunamıyor; düzeltmeden öğrenme burada çalışmaz");
+                }
                 break;
             };
             // Gönderildi ya da silindi: son görülen hal karşılaştırılır.
             if super::vocab::overlap(&pasted, &text) < 0.5 {
                 break;
             }
+            still = if last.as_deref() == Some(text.as_str()) {
+                still + 1
+            } else {
+                0
+            };
             last = Some(text);
+            if still >= 4
+                && last
+                    .as_deref()
+                    .is_some_and(|t| !super::vocab::suggest(&pasted, t).is_empty())
+            {
+                break;
+            }
             std::thread::sleep(Duration::from_millis(1500));
         }
         if let Some(t) = last {

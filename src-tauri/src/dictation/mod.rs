@@ -170,9 +170,17 @@ impl Dictation {
     pub fn propose(&self, app: &AppHandle, pasted: &str, edited: &str) {
         let db = app.state::<Db>();
         let auto = db.setting_json::<bool>(AUTO_LEARN_KEY).unwrap_or(true);
-        let pairs: Vec<(String, String)> = vocab::fresh(&db, vocab::suggest(pasted, edited))
-            .into_iter()
-            .filter(|(f, t)| !auto || vocab::plausible(f, t))
+        let found = vocab::fresh(&db, vocab::suggest(pasted, edited));
+        let pairs: Vec<(String, String)> = found
+            .iter()
+            .filter(|(f, t)| {
+                let ok = !auto || vocab::plausible(f, t);
+                if !ok {
+                    crate::log!("Sesle yazma: {f} → {t} öğrenilmedi (yanlış duyulmuşa benzemiyor)");
+                }
+                ok
+            })
+            .cloned()
             .collect();
         if pairs.is_empty() {
             return;
