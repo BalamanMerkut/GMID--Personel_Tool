@@ -182,6 +182,8 @@ pub fn dictation_view(app: &AppHandle, state: &str, secs: u32) {
     // Takılı kalmasın: hata 2 sn, yazıya dökme en fazla 2 dk görünür.
     let limit = match state {
         "error" => Some(Duration::from_secs(2)),
+        // Tuşlar bırakılmadan kalırsa (kaçırılan olay) görünmez gösterge açık kalmasın.
+        "armed" => Some(Duration::from_secs(3)),
         "processing" => Some(Duration::from_secs(120)),
         // İlk açılışta model yüklemesi ve ekran kartı hazırlığı uzun sürebilir.
         "loading" => Some(Duration::from_secs(300)),

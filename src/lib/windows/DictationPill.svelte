@@ -8,7 +8,8 @@
   import { call } from "../api";
   import { on } from "../bus";
 
-  type View = { state: "listening" | "loading" | "processing" | "error" | "hidden"; secs: number };
+  // "armed": Ctrl+Alt basıldı, süre dolmadı. Dinleme göstergesi görünmez olarak hazır bekler; dolunca anında belirir.
+  type View = { state: "armed" | "listening" | "loading" | "processing" | "error" | "hidden"; secs: number };
   const BARS = 9;
 
   let view: View = $state({ state: "hidden", secs: 0 });
@@ -18,7 +19,7 @@
   // Güvenlik ağı: dinlerken her saniye, diğer durumlarda bir kez haber gelir. Haber kesilirse (uygulama
   // gizlemeyi kaçırırsa) gösterge kendini boşaltır; pencere zaten tıklamaları geçirir.
   let lastSeen = Date.now();
-  const STALE: Record<View["state"], number> = { listening: 3500, loading: 305_000, processing: 125_000, error: 2500, hidden: Infinity };
+  const STALE: Record<View["state"], number> = { armed: 3000, listening: 3500, loading: 305_000, processing: 125_000, error: 2500, hidden: Infinity };
 
   onMount(() => {
     const set = (v: View) => {
@@ -56,8 +57,8 @@
 </script>
 
 {#if view.state !== "hidden"}
-  <div class="pill" class:proc={view.state === "processing" || view.state === "loading"} class:err={view.state === "error"}>
-    {#if view.state === "listening"}
+  <div class="pill" class:armed={view.state === "armed"} class:proc={view.state === "processing" || view.state === "loading"} class:err={view.state === "error"}>
+    {#if view.state === "listening" || view.state === "armed"}
       <span class="rec"></span>
       <span class="wave" aria-hidden="true">
         {#each bars as b, i (i)}<i style:height="{Math.round(b * 17) + 3}px"></i>{/each}
@@ -76,6 +77,7 @@
 
 <style>
   :global(html), :global(body) { background: transparent !important; overflow: hidden; }
+  .pill.armed { opacity: 0; }
   .pill {
     position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
     /* İnce ama okunur: 34 px boy, ince altın çizgi. */

@@ -428,6 +428,9 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
         mode = match mode {
             Mode::Idle => {
                 if combo && !others && d.enabled.load(Ordering::SeqCst) {
+                    // Gösterge şimdiden (görünmez) açılır: pencere ve içindeki sayfa uyanmış olur, süre
+                    // dolunca yalnız görünür hale gelir; bekleyen pencerenin uyanması gecikme yapmaz.
+                    crate::overlay::dictation_view(&app, "armed", 0);
                     Mode::Armed(Instant::now(), None)
                 } else {
                     Mode::Idle
@@ -439,6 +442,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                     if let Some(r) = rec {
                         std::thread::spawn(move || drop(r.finish()));
                     }
+                    crate::overlay::dictation_view(&app, "hidden", 0);
                     if others {
                         Mode::Blocked
                     } else {
@@ -449,6 +453,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                         if let Some(r) = rec {
                             std::thread::spawn(move || drop(r.finish()));
                         }
+                        crate::overlay::dictation_view(&app, "hidden", 0);
                         crate::overlay::show_osd(&app, "mic", "Önceki yazı hazırlanıyor…");
                         Mode::Blocked
                     } else {
@@ -459,9 +464,13 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                         }
                         d.set_phase(&app, "listening", None);
                         crate::overlay::dictation_view(&app, "listening", 0);
-                        // Konuşma sürerken modeller yüklensin.
+                        // Konuşma sürerken modeller yüklensin. Biraz sonra: model yüklemesi (ekran kartı ve
+                        // işlemci yükü) göstergenin ilk çizimiyle aynı ana denk gelip onu geciktirmesin.
                         let app2 = app.clone();
-                        std::thread::spawn(move || warm_up(&app2));
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(350));
+                            warm_up(&app2);
+                        });
                         Mode::Recording(rec, Instant::now(), 0)
                     }
                 } else if rec.is_none() && t.elapsed() >= PRE_ROLL {
