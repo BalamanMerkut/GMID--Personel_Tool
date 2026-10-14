@@ -445,14 +445,14 @@
 
 {#snippet matchRow(m: FootballMatch)}
   <div class="match" class:live={m.state === "in"}>
-    <div class="st tnum">
-      {#if m.state === "in"}<span class="dot"></span>{m.status}
-      {:else if m.state === "post"}<span class="fin">{m.status}</span>
-      {:else}{TIME.format(new Date(m.date))}{/if}
-    </div>
     {@render teamBtn(m.league, m.home.team, true, m.home.winner)}
-    <div class="score tnum">
-      {#if m.home.score === null}<span class="vs">–</span>{:else}{m.home.score}<i>-</i>{m.away.score}{/if}
+    <div class="mid">
+      {#if m.home.score === null}
+        <div class="score tnum kick">{m.status || TIME.format(new Date(m.date))}</div>
+      {:else}
+        <div class="score tnum">{m.home.score}<i>-</i>{m.away.score}</div>
+        <div class="st tnum">{#if m.state === "in"}<span class="dot"></span>{/if}{m.status}</div>
+      {/if}
     </div>
     {@render teamBtn(m.league, m.away.team, false, m.away.winner)}
     {#if m.events.length}
@@ -536,12 +536,13 @@
   .lgh { margin-top: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 6px; }
   .lgh.link { background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; align-self: flex-start; }
   .lgh.link:hover { color: var(--gold); }
-  .match { display: grid; grid-template-columns: 60px minmax(0, 1fr) 76px minmax(0, 1fr); align-items: center; gap: 4px 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.025); border: 1px solid transparent; }
+  .match { display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); align-items: center; gap: 4px 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.025); border: 1px solid transparent; }
   .match:hover { background: rgba(255, 255, 255, 0.045); }
   .match.live { border-color: rgba(224, 106, 106, 0.35); }
-  .st { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .mid { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .st { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--dim); }
   .match.live .st { color: #ff8a8a; font-weight: 700; }
-  .fin { color: var(--dim); font-weight: 600; }
+  .score.kick { font-size: 14px; font-weight: 600; color: var(--muted); }
   .tm { display: flex; align-items: center; gap: 10px; min-width: 0; background: none; border: 0; padding: 4px 6px; border-radius: 8px; color: inherit; font: inherit; cursor: pointer; }
   .tm:hover { background: rgba(255, 255, 255, 0.05); }
   .tm:hover .nm { color: var(--gold-glow); }
@@ -554,7 +555,7 @@
   .match.live .score { color: #ffd2d2; }
   .score i { font-style: normal; color: var(--dim); font-weight: 400; }
   .vs { color: var(--dim); font-weight: 400; }
-  .evs { grid-column: 2 / 5; display: grid; grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr); gap: 0 12px; font-size: 12px; color: var(--muted); }
+  .evs { grid-column: 1 / 4; display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); gap: 0 12px; font-size: 12px; color: var(--muted); }
   .ev { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 0 6px; }
   .ev.home { text-align: right; }
   .ev.away { grid-column: 3; }
@@ -618,7 +619,8 @@
     .side { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 10px; }
     .brand, .cat, .src { display: none; }
     .lg-btn { width: auto; border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 12px; }
-    .match { grid-template-columns: 52px minmax(0, 1fr) 64px minmax(0, 1fr); gap: 4px 8px; }
+    .match { grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr); gap: 4px 8px; }
+    .evs { grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr); gap: 0 8px; }
     .tr { grid-template-columns: 28px minmax(0, 1fr) 28px 28px 28px 28px 0 0 36px; }
     .tr > :nth-child(7), .tr > :nth-child(8) { display: none; }
     .game { grid-template-columns: 80px minmax(0, 1fr) 54px minmax(0, 1fr) 34px; }
