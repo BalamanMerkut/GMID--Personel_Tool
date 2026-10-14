@@ -175,6 +175,7 @@ pub fn run() {
             titles::fetch_meta(handle);
             updater::start(handle);
             deals::start(handle);
+            football::start(handle);
             drivers::start(handle);
             presence::start(handle);
             servers::watch::start(handle);
@@ -225,6 +226,8 @@ pub fn run() {
             commands::football_leagues,
             commands::football_matches,
             commands::football_week,
+            commands::football_live,
+            commands::football_refresh_live,
             commands::football_standings,
             commands::football_team,
             commands::football_leaders,

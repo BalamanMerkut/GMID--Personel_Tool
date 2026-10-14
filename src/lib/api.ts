@@ -86,6 +86,10 @@ export const api = {
     standings: (league: string) => call<FootballGroup[]>("football_standings", { league }),
     team: (league: string, id: string) => call<FootballTeamPage>("football_team", { league, id }),
     leaders: (league: string) => call<FootballLeaders>("football_leaders", { league }),
+    /** Favorilerin canlı / bugünkü maçları; `show`: panelde gösterilsin mi. */
+    live: () => call<{ show: boolean; matches: FootballMatch[] }>("football_live"),
+    /** Favoriler değişti: hemen bak. */
+    refreshLive: () => call<void>("football_refresh_live"),
   },
 
   /** Dosyaları uygulamadan dışarı sürükler (fare basılıyken çağrılır); bırakılan yere kopyalanır. */

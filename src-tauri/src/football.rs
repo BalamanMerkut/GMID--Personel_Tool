@@ -7,7 +7,7 @@
 //! Yanıtlar kısa süre bellekte tutulur (bugün/canlı 30 sn, diğer günler 10 dk); okuma esnek yapılır, eksik alan
 //! hata değildir.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -486,6 +486,108 @@ const LONG: Duration = Duration::from_secs(600);
 #[derive(Default)]
 pub struct Football {
     cache: Mutex<HashMap<String, (Instant, Duration, Value)>>,
+    /// Favori takımların izlenen maçlarının son hâli (bildirim için karşılaştırılır).
+    seen: Mutex<HashMap<String, Snap>>,
+    /// Favorilerin canlı / bugünkü maçları (oyun içi panel için).
+    live: Mutex<Vec<Match>>,
+}
+
+/// Favori takım (`football.favs` ayarı).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Fav {
+    pub league: String,
+    pub id: String,
+    pub name: String,
+    pub logo: String,
+}
+
+pub const FAVS_KEY: &str = "football.favs";
+/// Gol / başladı / bitti bildirimi (varsayılan açık).
+pub const NOTIFY_KEY: &str = "football.notify";
+/// Oyun içi panelde canlı skor (varsayılan açık).
+pub const PANEL_KEY: &str = "panel.football";
+
+/// Maçın bildirim için hatırlanan hâli.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Snap {
+    pub state: String,
+    pub home: Option<u32>,
+    pub away: Option<u32>,
+}
+
+impl Snap {
+    pub fn of(m: &Match) -> Snap {
+        Snap {
+            state: m.state.clone(),
+            home: m.home.score,
+            away: m.away.score,
+        }
+    }
+}
+
+/// Önceki hâle göre bildirilecek değişiklikler: başladı, gol (atanla), bitti. İlk görülen maç için hiçbiri
+/// (uygulama açılırken eski goller bildirilmesin).
+pub fn changes(prev: Option<&Snap>, m: &Match) -> Vec<String> {
+    let Some(p) = prev else {
+        return Vec::new();
+    };
+    let (h, a) = (&m.home.team.short, &m.away.team.short);
+    let score = |m: &Match| {
+        format!(
+            "{} {}–{} {}",
+            h,
+            m.home.score.unwrap_or(0),
+            m.away.score.unwrap_or(0),
+            a
+        )
+    };
+    let mut out = Vec::new();
+    if p.state == "pre" && m.state == "in" {
+        out.push(format!("Maç başladı: {h} – {a}"));
+    }
+    for (side, before, now) in [
+        ("home", p.home, m.home.score),
+        ("away", p.away, m.away.score),
+    ] {
+        let (before, now) = (before.unwrap_or(0), now.unwrap_or(0));
+        if now > before && m.state != "pre" {
+            let who = m
+                .events
+                .iter()
+                .rev()
+                .find(|e| e.side == side && e.kind != "red")
+                .map(|e| {
+                    format!(" · {} {}", e.player, e.minute)
+                        .trim_end()
+                        .to_string()
+                })
+                .unwrap_or_default();
+            out.push(format!("GOL! {}{who}", score(m)));
+        }
+    }
+    if p.state != "post" && m.state == "post" && m.home.score.is_some() {
+        out.push(format!("Maç bitti: {}", score(m)));
+    }
+    out
+}
+
+/// "2026-10-18T17:00Z" ya da tam RFC 3339 → Unix saniye.
+pub fn kickoff(date: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(date)
+        .map(|d| d.timestamp())
+        .ok()
+        .or_else(|| {
+            chrono::NaiveDateTime::parse_from_str(date, "%Y-%m-%dT%H:%MZ")
+                .ok()
+                .map(|d| d.and_utc().timestamp())
+        })
+}
+
+/// Favori takımın maçı mı.
+pub fn is_fav(favs: &[Fav], m: &Match) -> bool {
+    favs.iter()
+        .any(|f| f.league == m.league && (m.home.team.id == f.id || m.away.team.id == f.id))
 }
 
 fn known(league: &str) -> bool {
@@ -897,6 +999,117 @@ pub fn scorers(matches: &[Match], top: usize) -> Vec<Leader> {
     out
 }
 
+/// Favorilerin izlenmesi: oynanan maç varken 45 sn'de, yakında başlayacak maç yokken 10 dk'da bir bakılır.
+impl Football {
+    /// Bir tur: favorilerin bugünkü maçlarını alır, değişiklikleri bildirir, paneli günceller; bir sonraki
+    /// bakışa kadar beklenecek süreyi (sn) döner.
+    fn tick(&self, app: &tauri::AppHandle, favs: &[Fav]) -> u64 {
+        use tauri::{Emitter, Manager};
+        let mut leagues: Vec<String> = favs.iter().map(|f| f.league.clone()).collect();
+        leagues.sort();
+        leagues.dedup();
+        let now = chrono::Utc::now();
+        let days = [
+            (now - chrono::Duration::days(1))
+                .format("%Y%m%d")
+                .to_string(),
+            now.format("%Y%m%d").to_string(),
+        ];
+        let Ok(list) = self.matches(&leagues, &days) else {
+            return 120;
+        };
+        let t = now.timestamp();
+        let mine: Vec<Match> = list
+            .into_iter()
+            .filter(|m| is_fav(favs, m))
+            .filter(|m| {
+                let k = kickoff(&m.date).unwrap_or(t);
+                // Oynanan; 12 saat içinde başlayacak; ya da 3 saat önce bitmiş.
+                m.state == "in"
+                    || (m.state == "pre" && k - t < 12 * 3600)
+                    || (m.state == "post" && t - k < 5 * 3600)
+            })
+            .collect();
+        let notify = app
+            .state::<crate::db::Db>()
+            .setting_json::<bool>(NOTIFY_KEY)
+            .unwrap_or(true);
+        {
+            let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+            for m in &mine {
+                let key = format!("{}:{}", m.league, m.id);
+                if notify {
+                    for text in changes(seen.get(&key), m) {
+                        deliver(app, &text);
+                    }
+                }
+                seen.insert(key, Snap::of(m));
+            }
+            seen.retain(|k, _| mine.iter().any(|m| format!("{}:{}", m.league, m.id) == *k));
+        }
+        *self.live.lock().unwrap_or_else(|e| e.into_inner()) = mine.clone();
+        let _ = app.emit("football-live", &mine);
+        let soon = mine.iter().any(|m| {
+            m.state == "in"
+                || (m.state == "pre" && kickoff(&m.date).is_some_and(|k| k - t < 20 * 60))
+        });
+        if soon {
+            45
+        } else {
+            600
+        }
+    }
+
+    /// Favorilerin canlı / bugünkü maçları (panel açılınca).
+    pub fn live(&self) -> Vec<Match> {
+        self.live.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+/// Bildirimi gösterir: oyun ön plandaysa ekran göstergesi (oyunun üstünde), değilse Windows bildirimi.
+fn deliver(app: &tauri::AppHandle, text: &str) {
+    crate::log!("Futbol: {text}");
+    if crate::panel::foreground_fullscreen() {
+        crate::overlay::show_osd(app, "trophy", format!("⚽ {text}"));
+    } else {
+        crate::overlay::system_notification(app, NOTIFY_KEY, "⚽ GMID Futbol", text);
+    }
+}
+
+/// Açılıştan 40 sn sonra başlar; favori yoksa 10 dk'da bir yalnızca ayara bakar.
+pub fn start(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(40));
+        loop {
+            let favs: Vec<Fav> = app
+                .state::<crate::db::Db>()
+                .setting_json(FAVS_KEY)
+                .unwrap_or_default();
+            let wait = if favs.is_empty() {
+                600
+            } else {
+                app.state::<Football>().tick(&app, &favs)
+            };
+            std::thread::sleep(Duration::from_secs(wait));
+        }
+    });
+}
+
+/// Favoriler değişince (ya da elle) hemen bir tur.
+pub fn refresh_now(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let favs: Vec<Fav> = app
+            .state::<crate::db::Db>()
+            .setting_json(FAVS_KEY)
+            .unwrap_or_default();
+        app.state::<Football>().tick(&app, &favs);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1128,5 +1341,51 @@ mod tests {
         assert!(Football::default()
             .week(&["tur.1".into()], "20261020", "20261001")
             .is_err());
+    }
+
+    #[test]
+    fn notifications_on_changes() {
+        let m0 = &parse_scoreboard("tur.1", &sample())[0]; // canlı, 2–1
+                                                           // İlk görülen maç: bildirim yok.
+        assert!(changes(None, m0).is_empty());
+        // Başlamamıştı, şimdi 2–1: başladı + iki ev sahibi golü… değil: skor farkı başına bir bildirim.
+        let pre = Snap {
+            state: "pre".into(),
+            home: None,
+            away: None,
+        };
+        let c = changes(Some(&pre), m0);
+        assert_eq!(c[0], "Maç başladı: Galatasaray – Fenerbahce");
+        assert!(
+            c[1].starts_with("GOL! Galatasaray 2–1 Fenerbahce · Kim"),
+            "{c:?}"
+        );
+        assert!(
+            c[2].starts_with("GOL! Galatasaray 2–1 Fenerbahce · Dzeko 45'+2'"),
+            "{c:?}"
+        );
+        // Aynı hâl: bildirim yok.
+        assert!(changes(Some(&Snap::of(m0)), m0).is_empty());
+        // Bitti.
+        let mut end = m0.clone();
+        end.state = "post".into();
+        assert_eq!(
+            changes(Some(&Snap::of(m0)), &end),
+            ["Maç bitti: Galatasaray 2–1 Fenerbahce"]
+        );
+        assert_eq!(kickoff("2026-10-18T17:00Z"), Some(1_792_342_800));
+        assert_eq!(kickoff("2026-10-18T17:00:00Z"), Some(1_792_342_800));
+        let favs = [Fav {
+            league: "tur.1".into(),
+            id: "2".into(),
+            ..Default::default()
+        }];
+        assert!(is_fav(&favs, m0));
+        let other = [Fav {
+            league: "eng.1".into(),
+            id: "2".into(),
+            ..Default::default()
+        }];
+        assert!(!is_fav(&other, m0));
     }
 }

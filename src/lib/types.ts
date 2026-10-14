@@ -1193,3 +1193,10 @@ export interface FootballLeaders {
   goals: FootballLeader[];
   assists: FootballLeader[];
 }
+
+export interface FootballFav {
+  league: string;
+  id: string;
+  name: string;
+  logo: string;
+}

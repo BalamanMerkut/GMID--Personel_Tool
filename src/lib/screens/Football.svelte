@@ -5,8 +5,9 @@
   import { onDestroy, onMount } from "svelte";
   import { api } from "../api";
   import Icon from "../Icon.svelte";
+  import Switch from "../components/Switch.svelte";
   import { getJson, setJson } from "../settings.svelte";
-  import type { FootballGroup, FootballLeaders, FootballMatch, FootballTeam, FootballTeamPage } from "../types";
+  import type { FootballFav, FootballGroup, FootballLeaders, FootballMatch, FootballTeam, FootballTeamPage } from "../types";
 
   type Tab = "matches" | "table" | "leaders";
   const CATS: [string, string[]][] = [
@@ -37,6 +38,26 @@
   let updated = $state<Date | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let seq = 0;
+
+  /** Favori takımlar: maçları başlayınca, gol olunca ve bitince bildirilir; oyun içi panelde skoru görünür. */
+  let favs = $state(getJson<FootballFav[]>("football.favs", []));
+  let notify = $state(getJson<boolean>("football.notify", true));
+  let inPanel = $state(getJson<boolean>("panel.football", true));
+  const isFav = (id: string) => !!id && favs.some((f) => f.id === id);
+  async function toggleFav(lg: string, t: FootballTeam) {
+    if (!t.id) return;
+    favs = isFav(t.id) ? favs.filter((f) => f.id !== t.id) : [...favs, { league: lg, id: t.id, name: t.name, logo: t.logo }];
+    await setJson("football.favs", $state.snapshot(favs));
+    void api.football.refreshLive().catch(() => {});
+  }
+  function setNotify(v: boolean) {
+    notify = v;
+    void setJson("football.notify", v);
+  }
+  function setInPanel(v: boolean) {
+    inPanel = v;
+    void setJson("panel.football", v);
+  }
 
   const WEEKDAY = new Intl.DateTimeFormat("tr-TR", { weekday: "short" });
   const DAYHEAD = new Intl.DateTimeFormat("tr-TR", { weekday: "long", day: "numeric", month: "long" });
@@ -132,6 +153,8 @@
 
   onMount(async () => {
     leagues = await api.football.leagues().catch(() => []);
+    // Panelden × ile kapatılmış olabilir: anahtarın gerçek hâli.
+    void api.football.live().then((r) => (inPanel = r.show)).catch(() => {});
     if (league !== "all" && !leagues.some(([s]) => s === league)) league = "all";
     if (league === "all") tab = "matches";
     reload();
@@ -258,6 +281,16 @@
         {/each}
       {/if}
     {/each}
+    <div class="cat">Favorilerim</div>
+    {#each favs as f (f.id)}
+      <button class="lg-btn" class:on={teamOpen?.team.id === f.id} onclick={() => openTeam(f.league, { id: f.id, name: f.name, short: f.name, logo: f.logo })}>
+        {#if f.logo}<img class="flogo" src={f.logo} alt="" />{:else}<span class="star">★</span>{/if}<span class="fname">{f.name}</span>
+      </button>
+    {:else}
+      <p class="sub small hint">Takım sayfasındaki ☆ ile ekle; maçı başlayınca, gol olunca ve bitince haber veririm.</p>
+    {/each}
+    <label class="opt"><span>Gol bildirimi</span><Switch checked={notify} label="Gol bildirimi" onchange={setNotify} /></label>
+    <label class="opt"><span>Oyun içi panelde skor</span><Switch checked={inPanel} label="Oyun içi panelde skor" onchange={setInPanel} /></label>
     <p class="sub small src">Kaynak: ESPN</p>
   </aside>
 
@@ -272,6 +305,9 @@
             <h2>{tp?.team.name || teamOpen.team.name}</h2>
             <p class="sub small">{[leagueName(teamOpen.league), standingTr(tp?.standing ?? ""), tp?.venue].filter(Boolean).join(" · ")}</p>
           </div>
+          <button class="btn ghost sm favb" class:on={isFav(teamOpen.team.id)} onclick={() => teamOpen && toggleFav(teamOpen.league, { ...teamOpen.team, name: tp?.team.name || teamOpen.team.name, logo: tp?.team.logo || teamOpen.team.logo })}>
+            <span class="star">{isFav(teamOpen.team.id) ? "★" : "☆"}</span>{isFav(teamOpen.team.id) ? "Favoride" : "Favorilere ekle"}
+          </button>
         </div>
         <div class="seg" role="tablist">
           <button aria-pressed={teamTab === "squad"} onclick={() => (teamTab = "squad")}>Kadro{tp ? ` · ${tp.players.length}` : ""}</button>
@@ -444,7 +480,7 @@
 {/snippet}
 
 {#snippet matchRow(m: FootballMatch)}
-  <div class="match" class:live={m.state === "in"}>
+  <div class="match" class:live={m.state === "in"} class:fav={isFav(m.home.team.id) || isFav(m.away.team.id)}>
     {@render teamBtn(m.league, m.home.team, true, m.home.winner)}
     <div class="mid">
       {#if m.home.score === null}
@@ -511,6 +547,15 @@
   .lg-btn:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
   .lg-btn.on { background: rgba(227, 194, 112, 0.12); color: var(--gold-glow); font-weight: 600; }
   .src { margin: 14px 8px 0; }
+  .hint { margin: 2px 8px 6px; line-height: 1.45; }
+  .flogo { width: 18px; height: 18px; object-fit: contain; flex: none; }
+  .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .star { color: var(--gold-glow); font-size: 15px; line-height: 1; }
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 10px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .favb { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+  .favb.on { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
+  .match.fav { background: rgba(227, 194, 112, 0.06); }
+  .match.fav:not(.live) { border-color: rgba(227, 194, 112, 0.25); }
   h2 { margin: 0; font-family: var(--f-display); font-size: 22px; }
   .sm { padding: 6px 11px; font-size: 13px; }
   .seg button:disabled { opacity: 0.4; cursor: default; }

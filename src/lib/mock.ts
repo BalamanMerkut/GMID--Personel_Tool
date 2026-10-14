@@ -843,6 +843,15 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         assists: [L("Dušan Tadić", "Fenerbahçe", 6), L("Gabriel Sara", "Galatasaray", 5), L("Rafa Silva", "Beşiktaş", 4)],
       };
     }
+    case "football_refresh_live":
+      return null;
+    case "football_live": {
+      const t = (id: string, name: string) => ({ id, name, short: name, logo: "" });
+      return { show: JSON.parse(localStorage.getItem("gmid.settings") ?? "{}")["panel.football"] !== "false", matches: [
+        { id: "2", league: "tur.1", date: new Date().toISOString(), state: "in", status: "67'", home: { team: t("3", "Fenerbahçe"), score: 1, winner: false }, away: { team: t("1", "Galatasaray"), score: 2, winner: false },
+          events: [{ kind: "goal", minute: "23'", player: "E. Dzeko", side: "home" }, { kind: "goal", minute: "41'", player: "V. Osimhen", side: "away" }, { kind: "goal", minute: "64'", player: "M. Icardi", side: "away" }] },
+      ] };
+    }
     case "football_standings": {
       await wait(300);
       const names = ["Galatasaray", "Fenerbahçe", "Samsunspor", "Beşiktaş", "Göztepe", "Trabzonspor", "Başakşehir", "Kocaelispor", "Gaziantep FK", "Alanyaspor", "Rizespor", "Konyaspor", "Kasımpaşa", "Antalyaspor", "Eyüpspor", "Kayserispor", "Gençlerbirliği", "Karagümrük"];

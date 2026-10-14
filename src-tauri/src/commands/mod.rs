@@ -107,6 +107,22 @@ pub async fn football_week(
     .map_err(|e| e.to_string())?
 }
 
+/// Futbol: favorilerin canlı / bugünkü maçları ve panelde gösterilsin mi.
+#[tauri::command]
+pub fn football_live(app: AppHandle) -> serde_json::Value {
+    let show = tauri::Manager::state::<Db>(&app)
+        .setting_json::<bool>(crate::football::PANEL_KEY)
+        .unwrap_or(true);
+    let matches = tauri::Manager::state::<crate::football::Football>(&app).live();
+    serde_json::json!({ "show": show, "matches": matches })
+}
+
+/// Futbol: favoriler değişti, hemen bir tur bak.
+#[tauri::command]
+pub fn football_refresh_live(app: AppHandle) {
+    crate::football::refresh_now(&app);
+}
+
 /// Futbol: ligin puan durumu.
 #[tauri::command]
 pub async fn football_standings(

@@ -98,6 +98,9 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 
 - **Eğlence Salonu → Futbol:** Süper Lig, Avrupa kupaları ve büyük ligler: haftanın maçları, canlı skor ve dakika, golü
   kimin attığı, kırmızı kartlar ve puan durumu (kaynak: ESPN; canlı maçlar 30 sn'de bir yenilenir).
+- **Favori takım:** takım sayfasındaki ☆ ile eklenir. Maç başlayınca, gol olunca ve bitince haber verir (oyundaysan
+  oyunun üstünde kısa gösterge, değilsen Windows bildirimi). Favorinin canlı / bugünkü maçı Oyun İçi Panel'in üstünde
+  görünür; Futbol ekranındaki "Oyun içi panelde skor" ya da paneldeki × ile gizlenir.
 
 ### Windows Defender uyarısı
 

@@ -9,7 +9,7 @@
   import Icon from "../Icon.svelte";
   import { msText, summary, tone } from "../ping";
   import { clock, playtime } from "../time";
-  import type { AppVolume, GmidPlayerState, NetReport, NowPlaying, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
+  import type { AppVolume, FootballMatch, GmidPlayerState, NetReport, NowPlaying, AudioState, Clip, Countdown, Game, GameModeStatus, NoteSummary, PanelOpen, PerfSample, Reminder } from "../types";
 
   let audio = $state<AudioState | null>(null);
   let game = $state<Game | null>(null);
@@ -231,6 +231,21 @@
     flashTimer = setTimeout(() => (msg = ""), 2200);
   }
 
+  // Favori takımların canlı / bugünkü maçları (Futbol ekranındaki ☆). "Oyun içi panelde skor" kapalıysa gizli.
+  let fbShow = $state(false);
+  let fbMatches = $state<FootballMatch[]>([]);
+  async function loadFootball() {
+    const r = await api.football.live().catch(() => null);
+    fbShow = !!r?.show;
+    fbMatches = r?.matches ?? [];
+  }
+  async function hideFootball() {
+    fbShow = false;
+    await api.setSetting("panel.football", "false").catch(() => {});
+    flash("Skor gizlendi · Futbol ekranından yeniden açabilirsin");
+  }
+  const fbTime = (iso: string) => new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+
   async function addTimer(min: number) {
     const s = await api.timers.add(`${min} dk mola`, min * 60_000).catch(() => null);
     if (s) countdowns = s.countdowns;
@@ -295,13 +310,16 @@
   onMount(() => {
     void refresh();
     void loadAlarms();
+    void loadFootball();
     startPerf();
     const stops = [
       on<PanelOpen | null>("panel-open", (info) => {
         if (info) openInfo = info;
         void refresh();
+        void loadFootball();
         startPerf();
       }),
+      on<FootballMatch[]>("football-live", (list) => (fbMatches = list)),
       on("panel-close", () => stopPerf()),
       // Orta tuşa (ya da seçilen tuşa) basılınca panel fareyi aldı.
       on("panel-grabbed", () => (openInfo = { ...openInfo, mode: "interactive" })),
@@ -410,6 +428,25 @@
         {:else if openInfo.borderless}
           <span class="ok"><Icon name="check" size={14} />Kenarlıksız listesinde</span>
         {/if}
+      </div>
+    {/if}
+
+    {#if fbShow && fbMatches.length}
+      <div class="fbbar">
+        <span class="fbh"><Icon name="trophy" size={16} />Maç</span>
+        <div class="fbl">
+          {#each fbMatches as m (m.league + m.id)}
+            <div class="fbm" class:live={m.state === "in"}>
+              {#if m.home.team.logo}<img src={m.home.team.logo} alt="" />{/if}
+              <b>{m.home.team.short}</b>
+              <span class="fbs tnum">{m.home.score === null ? fbTime(m.date) : `${m.home.score} - ${m.away.score}`}</span>
+              <b>{m.away.team.short}</b>
+              {#if m.away.team.logo}<img src={m.away.team.logo} alt="" />{/if}
+              {#if m.home.score !== null}<span class="fbst tnum">{#if m.state === "in"}<i class="dot"></i>{/if}{m.status}</span>{/if}
+            </div>
+          {/each}
+        </div>
+        <button class="x sm" onclick={hideFootball} title="Panelde skoru gizle"><Icon name="x" size={14} /></button>
       </div>
     {/if}
 
@@ -612,6 +649,19 @@
   .hint .ok { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--good); font-weight: 600; }
   .hint b { color: var(--text); }
   .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .fbbar { display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px; border-radius: 14px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); }
+  .fbh { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 14px; color: var(--gold-glow); flex: none; }
+  .fbl { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .fbm { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; font-size: 13.5px; }
+  .fbm.live { border-color: rgba(224, 106, 106, 0.45); }
+  .fbm img { width: 20px; height: 20px; object-fit: contain; }
+  .fbm b { font-weight: 600; }
+  .fbs { padding: 2px 8px; border-radius: 7px; background: rgba(0, 0, 0, 0.35); font-weight: 800; font-size: 15px; }
+  .fbm.live .fbs { color: #ffd2d2; }
+  .fbst { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--dim); }
+  .fbm.live .fbst { color: #ff8a8a; }
+  .fbst .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5a5a; }
+  .x.sm { padding: 6px; flex: none; }
   .card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: rgba(18, 20, 23, 0.94); border: 1px solid var(--line-2); min-width: 0; }
   .card.wide { grid-column: span 2; }
   .card.lit { border-color: var(--gold); box-shadow: 0 0 24px rgba(227, 194, 112, 0.18); }
