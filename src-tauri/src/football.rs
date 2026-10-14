@@ -1005,9 +1005,7 @@ impl Football {
     /// bakışa kadar beklenecek süreyi (sn) döner.
     fn tick(&self, app: &tauri::AppHandle, favs: &[Fav]) -> u64 {
         use tauri::{Emitter, Manager};
-        let mut leagues: Vec<String> = favs.iter().map(|f| f.league.clone()).collect();
-        leagues.sort();
-        leagues.dedup();
+        let leagues = watch_leagues(favs);
         let now = chrono::Utc::now();
         let days = [
             (now - chrono::Duration::days(1))
@@ -1064,6 +1062,23 @@ impl Football {
     pub fn live(&self) -> Vec<Match> {
         self.live.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
+}
+
+/// Favorilerin maç oynayabileceği ligler. Takım kendi liginin yanında Avrupa kupalarında da oynar
+/// (Fenerbahçe: Süper Lig + Avrupa Ligi); favori bir kupa sayfasından eklendiyse ligi bilinmediğinden hepsine bakılır.
+fn watch_leagues(favs: &[Fav]) -> Vec<String> {
+    let cups = ["uefa.champions", "uefa.europa", "uefa.europa.conf"];
+    let mut v: Vec<String> = if favs.iter().any(|f| f.league.starts_with("uefa.")) {
+        LEAGUES.iter().map(|(s, _)| s.to_string()).collect()
+    } else {
+        favs.iter()
+            .map(|f| f.league.clone())
+            .chain(cups.iter().map(|c| c.to_string()))
+            .collect()
+    };
+    v.sort();
+    v.dedup();
+    v
 }
 
 /// Bildirimi gösterir: oyun ön plandaysa ekran göstergesi (oyunun üstünde), değilse Windows bildirimi.
@@ -1137,6 +1152,20 @@ mod tests {
               { "homeAway": "home", "score": "0", "team": { "id": "4", "displayName": "Trabzonspor" } }
             ] }] }
         ]})
+    }
+
+    #[test]
+    fn cups_are_watched_too() {
+        let f = |league: &str| Fav {
+            league: league.into(),
+            id: "436".into(),
+            name: "Fenerbahçe".into(),
+            logo: String::new(),
+        };
+        let l = watch_leagues(&[f("tur.1")]);
+        assert!(l.contains(&"tur.1".to_string()) && l.contains(&"uefa.europa".to_string()));
+        assert!(!l.contains(&"eng.1".to_string()));
+        assert_eq!(watch_leagues(&[f("uefa.europa")]).len(), LEAGUES.len());
     }
 
     #[test]
