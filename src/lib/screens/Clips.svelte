@@ -20,7 +20,7 @@
   type Kind = "all" | "clip" | "shot" | "fav";
   const KINDS: [Kind, string][] = [["all", "Tümü"], ["clip", "Klipler"], ["shot", "Ekran görüntüleri"], ["fav", "Favoriler"]];
   const SOURCES: Record<Clip["source"], string> = {
-    nvidia: "NVIDIA", xbox: "Xbox", amd: "AMD", obs: "OBS", steam: "Steam", medal: "Medal", folder: "Klasör",
+    nvidia: "NVIDIA", xbox: "Xbox", amd: "AMD", obs: "OBS", steam: "Steam", medal: "Medal", folder: "Klasör", gmid: "GMID",
   };
   const OTHER = "__other";
 

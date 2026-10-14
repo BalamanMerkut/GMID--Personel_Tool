@@ -34,6 +34,7 @@ mod report;
 mod restore;
 mod reviews;
 mod scheduler;
+mod screenshot;
 mod search;
 mod servers;
 mod sysinfo;

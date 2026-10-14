@@ -79,6 +79,12 @@ pub const ACTIONS: &[Action] = &[
         default: "Ctrl+Shift+G",
     },
     Action {
+        id: "screen.shot",
+        group: "Oyun",
+        label: "Ekran görüntüsü al (panoya kopyalanır, oyundan çıkmaz)",
+        default: "PrintScreen",
+    },
+    Action {
         id: "videos.clipboard",
         group: "Video İndirici",
         label: "Panodaki bağlantıyı indir (önerilen kalite)",
@@ -138,11 +144,14 @@ fn overrides(app: &AppHandle) -> HashMap<String, String> {
 pub fn register_all(app: &AppHandle) {
     let custom = overrides(app);
     for a in ACTIONS {
-        let accel = custom
-            .get(a.id)
-            .cloned()
-            .unwrap_or_else(|| a.default.into());
+        let custom_accel = custom.get(a.id).cloned();
+        let fallback = custom_accel.is_none() && a.id == "screen.shot";
+        let accel = custom_accel.unwrap_or_else(|| a.default.into());
         bind(app, a.id, accel);
+        // Print Screen'i Windows (Ekran Alıntısı Aracı) tutuyorsa Ctrl+Print Screen denenir.
+        if fallback && failed(app, a.id) {
+            bind(app, a.id, "Ctrl+PrintScreen".into());
+        }
     }
 }
 
@@ -167,6 +176,12 @@ fn bind(app: &AppHandle, id: &'static str, accel: String) {
         }
     }
     map.insert(id, bound);
+}
+
+fn failed(app: &AppHandle, id: &str) -> bool {
+    let state = app.state::<Hotkeys>();
+    let map = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    map.get(id).is_some_and(|b| b.error.is_some())
 }
 
 pub fn list(app: &AppHandle) -> Vec<HotkeyStatus> {
@@ -234,6 +249,7 @@ fn run(app: &AppHandle, action: &str) {
         "note.quick" => window::open_quick_note(app),
         "app.show" => window::show_main(app),
         "videos.clipboard" => download_clipboard(app),
+        "screen.shot" => crate::screenshot::take(app),
         "gamemode.toggle" => {
             app.state::<crate::gamemode::GameMode>().toggle(app);
         }

@@ -225,6 +225,8 @@ fn scan_videos(out: &mut Vec<FoundFile>, videos: &Path) {
             }
             "radeon relive" => walk(out, &d, &d, "amd", 2),
             "nvidia" => walk(out, &d, &d, "nvidia", 2),
+            // GMID'in kendi ekran görüntüleri: Videolar\GMID\<oyun>\…
+            "gmid" => walk(out, &d, &d, "gmid", 2),
             _ => {
                 // Oyun adlı klasör: NVIDIA'nın adlandırmasına uyanlar (ya da içindeki "Desktop" gibi alt klasörler).
                 let folder = folder_name(&d);

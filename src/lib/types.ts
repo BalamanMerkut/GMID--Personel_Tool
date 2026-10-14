@@ -552,7 +552,7 @@ export interface Clip {
   /** Dosya adı (uzantısız). */
   name: string;
   kind: "clip" | "shot";
-  source: "nvidia" | "xbox" | "amd" | "obs" | "steam" | "medal" | "folder";
+  source: "nvidia" | "xbox" | "amd" | "obs" | "steam" | "medal" | "folder" | "gmid";
   gameId: string | null;
   gameHint: string | null;
   title: string | null;
