@@ -5,6 +5,7 @@
   import { api } from "../api";
   import { emitAll, on } from "../bus";
   import AppMixer from "../components/AppMixer.svelte";
+  import NoteEditor from "../components/NoteEditor.svelte";
   import PowerWarn from "../components/PowerWarn.svelte";
   import Icon from "../Icon.svelte";
   import { msText, summary, tone } from "../ping";
@@ -34,6 +35,8 @@
   let noteId: string | null = $state(null);
   let noteText = $state("");
   let noteSaved = $state(true);
+  /** Her yüklemede artar: düzenleyici yeni içeriği alsın. */
+  let noteLoads = $state(0);
   let now = $state(Date.now());
   let msg = $state("");
   let perf = $state<PerfSample | null>(null);
@@ -187,8 +190,12 @@
     const list: NoteSummary[] = await api.notes.list().catch(() => []);
     const found = list.find((n) => n.title === noteTitle);
     noteId = found?.id ?? null;
-    noteText = found ? ((await api.notes.get(found.id).catch(() => null))?.body ?? "") : "";
+    const body = found ? ((await api.notes.get(found.id).catch(() => null))?.body ?? "") : "";
+    // Yazarken panel tazelenirse yazılan kaybolmasın.
+    if (!noteSaved) return;
+    noteText = body;
     noteSaved = true;
+    noteLoads++;
   }
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -568,7 +575,10 @@
 
       <section class="card wide">
         <h3><Icon name="note" size={17} />{game ? `${game.name} notu` : "Not"}<span class="sub small saved">{noteSaved ? "kaydedildi" : "yazılıyor…"}</span></h3>
-        <textarea value={noteText} onpointerdown={() => api.panel.focus()} onfocus={() => api.panel.focus()} oninput={(e) => onNote(e.currentTarget.value)} onblur={saveNote} placeholder="Build, kod, nerede kaldın… (Notlar'da da görünür)"></textarea>
+        <!-- Zengin not: ekran görüntüsü Ctrl+V ile yapıştırılır (Notlar ekranındakiyle aynı düzenleyici). -->
+        <div class="pnote" role="presentation" onpointerdown={() => api.panel.focus()} onfocusin={() => api.panel.focus()} onfocusout={saveNote}>
+          <NoteEditor docKey={`${noteTitle}#${noteLoads}`} value={noteText} toolbar={false} placeholder="Build, kod, nerede kaldın… Ekran görüntüsünü Ctrl+V ile yapıştır (Notlar'da da görünür)" onchange={onNote} />
+        </div>
       </section>
 
       <section class="card">
@@ -709,7 +719,9 @@
   .ping .cd b.bad { color: var(--bad); }
   .ping .fade { opacity: 0.45; }
   .cd span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  textarea { flex: 1; min-height: 120px; resize: none; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 10px; padding: 10px; color: var(--text); font: inherit; font-size: 14px; }
+  .pnote { flex: 1; min-height: 120px; max-height: 340px; display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 14px; cursor: text; }
+  .pnote :global(.editor) { font-size: 14px; }
+  .pnote :global(.editor img) { max-height: 220px; }
   .clip { display: flex; flex-direction: column; gap: 6px; }
   .clip img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; }
   .clip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

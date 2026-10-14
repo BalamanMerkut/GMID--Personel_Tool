@@ -23,6 +23,7 @@
     font = "inter",
     toolbar = true,
     autofocus = false,
+    placeholder = "Yazmaya başla… (- [ ] yazınca yapılacak kutusu olur)",
     onchange,
   }: {
     /** Hangi not açık; değişince içerik yeniden yüklenir. */
@@ -31,6 +32,7 @@
     font?: string;
     toolbar?: boolean;
     autofocus?: boolean;
+    placeholder?: string;
     onchange: (markdown: string) => void;
   } = $props();
 
@@ -140,7 +142,7 @@
         StarterKit.configure({ link: false }),
         TaskList,
         TaskItem.configure({ nested: true }),
-        Placeholder.configure({ placeholder: "Yazmaya başla… (- [ ] yazınca yapılacak kutusu olur)" }),
+        Placeholder.configure({ placeholder }),
         Markdown,
       ],
       content: value,
