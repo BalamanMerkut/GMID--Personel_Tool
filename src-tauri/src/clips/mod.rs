@@ -404,25 +404,32 @@ impl Clips {
     }
 
     /// Küçük resmi olmayanlar için ffmpeg (tur başına en çok 12). ffmpeg yoksa (Video İndirici'nin araçları hiç
-    /// kurulmadıysa) arka planda yalnızca ffmpeg indirilir, bitince kapaklar çıkarılır. Çıkarılamayanlar 6 saat
-    /// sonra yeniden denenir; yazılması süren dosyalar (son 2 dk'da değişmiş) sonraki tura kalır.
+    /// kurulmadıysa) arka planda yalnızca ffmpeg indirilir, bitince kapaklar çıkarılır. Çıkarılamayanlar yeni
+    /// kliplerde (son 1 saat) 2 dk, eskilerde 6 saat sonra yeniden denenir; yazılması süren dosyalar (son 20 sn'de
+    /// değişmiş) sonraki tura kalır.
     fn thumbs(&self, app: &AppHandle) {
         let dir = app.state::<DataDir>();
         let db = app.state::<Db>();
-        let retry_before = now_ms() - 6 * 3600 * 1000;
+        let now = now_ms();
+        let retry_old = now - 6 * 3600 * 1000;
+        let retry_new = now - 2 * 60 * 1000;
+        let recent = now - 3600 * 1000;
         let todo: Vec<(String, String, String)> = {
             let conn = db.conn();
             let mut stmt = match conn.prepare(
                 "SELECT id, path, kind FROM captures
-                 WHERE thumb_at IS NULL OR (thumb IS NULL AND thumb_at < ?1)
+                 WHERE thumb_at IS NULL
+                    OR (thumb IS NULL AND thumb_at < CASE WHEN created_at > ?3 THEN ?2 ELSE ?1 END)
                  ORDER BY created_at DESC LIMIT 12",
             ) {
                 Ok(s) => s,
                 Err(_) => return,
             };
-            stmt.query_map([retry_before], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
-                .map(|rows| rows.filter_map(Result::ok).collect())
-                .unwrap_or_default()
+            stmt.query_map([retry_old, retry_new, recent], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default()
         };
         if todo.is_empty() {
             return;
@@ -458,7 +465,7 @@ impl Clips {
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|t| t.elapsed().ok())
-                .is_some_and(|age| age < std::time::Duration::from_secs(120))
+                .is_some_and(|age| age < std::time::Duration::from_secs(20))
         };
         let mut any = false;
         for (id, path, kind) in todo {

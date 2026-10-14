@@ -76,7 +76,7 @@
       <b>Aynı anda indirme</b>
       <span class="sub small">Fazlası sırada bekler. İnternetin yavaşsa 1–2 iyi.</span>
     </div>
-    <div class="seg">
+    <div class="seg grid2">
       {#each [1, 2, 3, 4] as n (n)}
         <button aria-pressed={parallel === n} onclick={() => { parallel = n; void setJson("videos.parallel", n); }}>{n}</button>
       {/each}
@@ -118,21 +118,33 @@
 </section>
 
 <section class="panel">
-  <h3 class="h2"><Icon name="film" />Film ve dizi: dublaj ve altyazı</h3>
+  <h3 class="h2"><Icon name="film" />Ses dili (dublaj) ve altyazı</h3>
   <p class="sub small">
-    Sitede birden çok ses dili ya da altyazı varsa hangisinin seçili geleceği. Uygulamada indirirken değiştirebilirsin;
-    tarayıcı eklentisinden indirilenlerde bu tercih kullanılır.
+    Bazı videoların içinde birden çok <b>ses parçası</b> olur: dizi/film sitelerindeki dublajlar ya da YouTube'un
+    kendiliğinden yaptığı <b>yapay zekâ dublajları</b> (videoyu başka dile çevrilmiş sesle okur). Burada hangisinin
+    ineceğini seçersin. Bu, sitenin kendi ses parçalarından seçimdir; <b>Whisper ile ilgisi yoktur</b> (Whisper yalnız
+    şarkı sözü ve konuşmaları yazıya döker, sesi değiştirmez). Seçtiğin dil videoda yoksa her zaman orijinal ses iner.
+    Uygulamada indirirken video başına değiştirebilirsin; tarayıcı eklentisi bu tercihi kullanır.
   </p>
   <div class="line">
-    <div><b>Ses dili</b><span class="sub small">Türkçe dublaj varsa o iner.</span></div>
+    <div>
+      <b>Ses dili</b>
+      <span class="sub small">
+        {audioLang === "orig"
+          ? "Videonun kendi sesi; dublaj parçaları yok sayılır. Arkadaşına atacaksan en güvenlisi."
+          : audioLang === "tr"
+            ? "Türkçe ses parçası varsa o iner (YouTube'un yapay zekâ dublajı da olabilir), yoksa orijinali."
+            : "İngilizce ses parçası varsa o iner (Türkçe bir video bile İngilizce dublajla inebilir), yoksa orijinali."}
+      </span>
+    </div>
     <div class="seg">
-      {#each [["tr", "Türkçe dublaj"], ["en", "İngilizce"], ["orig", "Orijinal"]] as [v, l] (v)}
+      {#each [["orig", "Orijinal"], ["tr", "Türkçe dublaj"], ["en", "İngilizce"]] as [v, l] (v)}
         <button aria-pressed={audioLang === v} onclick={() => ((audioLang = v), void setJson("videos.audioLang", v))}>{l}</button>
       {/each}
     </div>
   </div>
   <div class="line">
-    <div><b>Altyazı</b><span class="sub small">Videonun yanına iner; oynatıcıda CC ile açılır.</span></div>
+    <div><b>Altyazı</b><span class="sub small">Sitenin altyazısı varsa ayrı dosya olarak videonun yanına iner; videoya gömülmez, oynatıcıda CC ile açılır.</span></div>
     <div class="seg">
       {#each [["tr", "Türkçe"], ["tr,en", "Türkçe + İngilizce"], ["none", "İndirme"]] as [v, l] (v)}
         <button aria-pressed={subLangs === v} onclick={() => ((subLangs = v), void setJson("videos.subLangs", v))}>{l}</button>
@@ -198,6 +210,9 @@
 </section>
 
 <style>
+  /* 1 2 / 3 4: toplu dursun. */
+  .grid2 { display: grid; grid-template-columns: repeat(2, 40px); gap: 6px; flex: none; }
+  .grid2 button { padding: 6px 0; border-radius: 10px; text-align: center; font-weight: 600; }
   .panel { display: flex; flex-direction: column; gap: 14px; }
   .line { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   .line > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 240px; }

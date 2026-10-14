@@ -76,6 +76,8 @@
   function navigate(target: string) {
     const [id, sub] = target.split("/");
     route = findScreen(id) ? id : "home";
+    // Açık oynatıcı menüden başka ekrana geçince küçülür (çalmaya devam eder).
+    if (player.item && player.open) player.open = false;
     if (route === "settings" && sub) settingsTab = sub;
     try {
       history.replaceState(null, "", `#${route === "settings" ? `settings/${settingsTab}` : route}`);

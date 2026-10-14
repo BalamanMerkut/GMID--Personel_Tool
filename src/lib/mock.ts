@@ -90,13 +90,13 @@ const games: GameInfo[] = (
 
 const servers: Server[] = [
   { id: "r-cod2", name: "GMID · Call of Duty 2", game: "cod2", host: "cod2.gmid.gg", port: 28960, queryPort: null, logo: null,
-    description: "Her akşam 21:00'de TDM. Toujane, Carentan, Dawnville dönüyor.", connectNotes: "Şifre Discord'da #sunucular kanalında.", remote: true, createdAt: 1 },
+    description: "Her akşam 21:00'de TDM. Toujane, Carentan, Dawnville dönüyor.", connectNotes: "Şifre Discord'da #sunucular kanalında.", remote: true, createdAt: 1, password: "" },
   { id: "r-mc", name: "GMID Survival", game: "minecraft", host: "mc.gmid.gg", port: 25565, queryPort: null, logo: null,
-    description: "1.21 hayatta kalma, beyaz liste var. Discord'dan isim yaz, eklensin.", connectNotes: "", remote: true, createdAt: 2 },
+    description: "1.21 hayatta kalma, beyaz liste var. Discord'dan isim yaz, eklensin.", connectNotes: "", remote: true, createdAt: 2, password: "" },
   { id: "r-cs", name: "GMID · CS 1.6 Public", game: "cs16", host: "cs.gmid.gg", port: 27015, queryPort: null, logo: null,
-    description: "Klasik haritalar, 5v5 hafta sonu.", connectNotes: "", remote: true, createdAt: 3 },
+    description: "Klasik haritalar, 5v5 hafta sonu.", connectNotes: "", remote: true, createdAt: 3, password: "" },
   { id: "l-1", name: "Kuzenlerle Valheim", game: "valheim", host: "88.231.14.7", port: 2456, queryPort: null, logo: null,
-    description: "", connectNotes: "Şifre: kahve", remote: false, createdAt: 4 },
+    description: "", connectNotes: "", password: "kahve", remote: false, createdAt: 4 },
 ];
 
 const P = (name: string, score: number, ping: number) => ({ name, score, ping });
@@ -309,7 +309,7 @@ const dictation: DictationStatus = {
   ],
 };
 let dictRules = [{ from: "GMI", to: "GMID", hits: 4 }];
-let dictLearn = [{ id: 1, from: "videoyu", to: "VDS" }];
+let dictLearn: { id: number; from: string; to: string; added?: boolean }[] = [{ id: 1, from: "videoyu", to: "VDS", added: true }, { id: 2, from: "gmd", to: "GMID" }];
 
 // ---- Yazılar ----
 let unState = { running: false, removed: false };
@@ -695,7 +695,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       const srv: Server = {
         id: input.id ?? id(), name: input.name.trim() || `${game.name} sunucusu`, game: input.game, host: host.toLowerCase(),
         port: Number(port) || input.port || game.defaultPort, queryPort: input.queryPort, logo: input.logo,
-        description: input.description, connectNotes: input.connectNotes, remote: false, createdAt: now(),
+        description: input.description, connectNotes: input.connectNotes, password: input.password ?? "", remote: false, createdAt: now(),
       };
       const i = servers.findIndex((x) => x.id === srv.id);
       if (i >= 0) servers[i] = srv;
@@ -842,6 +842,17 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         goals: [L("Victor Osimhen", "Galatasaray", 9), L("Edin Dzeko", "Fenerbahçe", 7), L("Ciro Immobile", "Beşiktaş", 6), L("Paul Onuachu", "Trabzonspor", 5), L("Romulo", "Göztepe", 5)],
         assists: [L("Dušan Tadić", "Fenerbahçe", 6), L("Gabriel Sara", "Galatasaray", 5), L("Rafa Silva", "Beşiktaş", 4)],
       };
+    }
+    case "backgrounds_list":
+      return [];
+    case "background_remove":
+      return null;
+    case "backup_policy": {
+      const st = JSON.parse(localStorage.getItem("gmid.settings") ?? "{}");
+      const keep = Number(a.keep ?? st["backup.keep"] ?? 3);
+      const every = a.every ?? JSON.parse(st["backup.every"] ?? '"day"');
+      const all = [["2026-10-14 00:10", 736e3], ["2026-10-13 00:55", 548e3], ["2026-10-12 00:04", 556e3]] as const;
+      return { policy: { keep, every }, backups: all.slice(0, keep).map(([created, size]) => ({ name: created, created, size })) };
     }
     case "football_refresh_live":
       return null;

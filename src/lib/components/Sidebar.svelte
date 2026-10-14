@@ -9,6 +9,7 @@
   import { on } from "../bus";
   import type { UpdateStatus } from "../types";
   import { community, joinDiscord, startCommunity } from "../community.svelte";
+  import { dealsBadge, markDealsSeen, startDealsBadge } from "../dealsBadge.svelte";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
   const downloading = $derived(activeSummary().count);
@@ -18,9 +19,14 @@
   $effect(() => {
     if (currentGroup) last[currentGroup] = current;
   });
+  // Fırsatlar açıkken gelen yenilikler de görülmüş sayılır.
+  $effect(() => {
+    if (current === "deals" && dealsBadge.count) markDealsSeen();
+  });
   let update = $state<UpdateStatus | null>(null);
   onMount(() => {
     startCommunity();
+    startDealsBadge();
     void api.update.status().then((s) => (update = s)).catch(() => {});
     const stop = on<UpdateStatus>("update", (s) => (update = s));
     return () => void stop.then((f) => f());
@@ -48,6 +54,7 @@
           <Icon name={g.icon} />
           <span class="label">{g.label}</span>
           {#if g.id === "media" && player.item}<span class="eq" class:paused={!player.playing} title={player.playing ? "Çalıyor" : "Duraklatıldı"}><i></i><i></i><i></i></span>{/if}
+          {#if g.id === "deals" && dealsBadge.count}<span class="badge new tnum" title={dealsBadge.wish ? "İstek listende indirime giren oyun var" : "Yeni ücretsiz oyun var"}>{dealsBadge.count}</span>{/if}
           {#if g.id === "media" && downloading}<span class="badge tnum" title="{downloading} indirme sürüyor">{downloading}</span>{/if}
         </button>
       {/each}
@@ -98,6 +105,8 @@
   button[aria-current="page"] :global(svg) { filter: drop-shadow(0 0 6px rgba(227, 194, 112, 0.55)); }
   button.top { font-family: var(--f-display); font-weight: 700; }
   .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge.new { background: #e5484d; color: #fff; box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.18); animation: pop-badge 0.3s ease-out; }
+  @keyframes pop-badge { from { transform: scale(0.4); } }
   .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--teal); color: #071415; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
   .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
   .eq i { width: 3px; background: var(--gold); border-radius: 1px; animation: eq 0.9s ease-in-out infinite; }

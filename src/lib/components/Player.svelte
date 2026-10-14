@@ -1113,6 +1113,9 @@
   .full.isvideo.idle .ctl { display: none; }
   .hot { position: fixed; left: 0; right: 0; bottom: 0; height: 140px; z-index: 40; }
 
+  /* Açık oynatıcı sol menüyü örtmez: menüden başka ekrana geçilince oynatıcı küçülür, çalmaya devam eder. */
+  .player:not(.mini):not(.full) { left: var(--side-w); border-left: 1px solid var(--line); }
+
   /* Küçültülmüş: uygulamanın altında çalma çubuğu, video köşede */
   .mini { inset: auto 0 0 var(--side-w); z-index: 20; grid-template-rows: auto; background: transparent; }
   .mini .bar, .mini .queue, .mini .text { display: none; }
@@ -1131,7 +1134,7 @@
   .vwrap:hover .minibtn { opacity: 1; }
 
   @media (max-width: 1100px) {
-    .mini { left: 76px; }
+    .mini, .player:not(.mini):not(.full) { left: 76px; }
   }
   @media (max-width: 900px) {
     .body, .body.v-list, .body.v-list.nostage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "stage" "text"; }

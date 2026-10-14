@@ -94,6 +94,12 @@ aynı yerde **Sorun bildir**: açıklaman, sürüm, Windows bilgisi ve günlükl
 - Yedeği uygulamanın içinden de geri yükleyebilirsin: **Kontrol Odası → Veri ve yedekler → Yedekten geri yükle**.
 
 
+### Yedekler
+
+- **Kontrol Odası → Veri ve yedekler:** otomatik yedek her gün / haftada bir / kapalı; en fazla 1–7 yedek tutulur
+  (varsayılan 3), dolunca yenisi en eskisinin yerine geçer. Yalnız GMID'in kendi bilgileri (`gmid.db`: ayarlar,
+  notlar, kütüphane, geçmiş…) yedeklenir; videolar, şarkılar ve klipler yedeğe girmez.
+
 ### Futbol
 
 - **Eğlence Salonu → Futbol:** Süper Lig, Avrupa kupaları ve büyük ligler: haftanın maçları, canlı skor ve dakika, golü

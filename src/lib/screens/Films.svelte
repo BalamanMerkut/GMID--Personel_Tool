@@ -108,6 +108,12 @@
       .sort((a, b) => (freq.get(b) ?? 0) - (freq.get(a) ?? 0) || a.localeCompare(b, "tr"))
       .map((g) => [g, countFor("genre", (i) => [...genres, g].every((x) => i.t.genres.includes(x)))] as [string, number]);
   });
+  /** Üstteki tür sekmeleri: arşivdeki bütün türler, en çok kayıt olandan aza. */
+  const genreTabs = $derived.by(() => {
+    const freq = new Map<string, number>();
+    for (const i of items) for (const g of i.t.genres) freq.set(g, (freq.get(g) ?? 0) + 1);
+    return [...freq].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "tr"));
+  });
   const genreList = $derived(allGenres ? genreCounts : genreCounts.filter(([g], i) => i < 8 || genres.includes(g)));
   // Yönetmenler: en az iki kayıtta geçenler ("Christopher Nolan filmleri").
   const directorList = $derived.by(() => {
@@ -219,6 +225,15 @@
           <button class="btn" onclick={() => ((adding = true), (addSearch = ""), (hits = []))}><Icon name="plus" size={17} />Film / dizi ekle</button>
         </div>
       </div>
+
+      {#if genreTabs.length}
+        <div class="gtabs" role="tablist" aria-label="Türler">
+          <button role="tab" aria-selected={!genres.length} onclick={() => (genres = [])}>Tümü <span class="tnum">{items.length}</span></button>
+          {#each genreTabs as [g, n] (g)}
+            <button role="tab" aria-selected={genres.length === 1 && genres[0] === g} onclick={() => (genres = genres.length === 1 && genres[0] === g ? [] : [g])}>{g} <span class="tnum">{n}</span></button>
+          {/each}
+        </div>
+      {/if}
 
       {#if active}
         <div class="active">
@@ -485,6 +500,12 @@
   .search.wide { width: 100%; }
   select { background: var(--coal-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; color: var(--text); }
   .filt { display: none; }
+  .gtabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  .gtabs button { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--coal-2); color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .gtabs button:hover { color: var(--text); }
+  .gtabs button span { font-size: 11px; color: var(--dim); font-weight: 700; }
+  .gtabs button[aria-selected="true"] { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
+  .gtabs button[aria-selected="true"] span { color: var(--gold-dim); }
   .active { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .ac { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.12); color: var(--gold-glow); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
   .ac:hover { border-color: var(--gold); }

@@ -269,6 +269,8 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE reviews ADD COLUMN extra TEXT;",
     // 16: afişi gelmeyen film/diziler yeni kaynaklarla (Türkçe Vikipedi, Commons, iTunes, TVmaze) yeniden denensin.
     "UPDATE titles SET meta_at = NULL WHERE poster IS NULL;",
+    // 17: kendi eklenen sunucuların şifresi (Oyna'da oyuna verilir).
+    "ALTER TABLE servers ADD COLUMN password TEXT NOT NULL DEFAULT '';",
 ];
 
 pub struct Db(Mutex<Connection>);

@@ -41,6 +41,8 @@ pub struct Server {
     pub logo: Option<String>,
     pub description: String,
     pub connect_notes: String,
+    /// Sunucu şifresi (yalnız kendi eklediklerinde; Oyna'da oyuna verilir).
+    pub password: String,
     /// Topluluk listesinden geldiyse `true` (düzenlenemez, silinemez).
     pub remote: bool,
     pub created_at: i64,
@@ -60,10 +62,12 @@ pub struct ServerInput {
     pub description: String,
     #[serde(default)]
     pub connect_notes: String,
+    #[serde(default)]
+    pub password: String,
 }
 
 const COLUMNS: &str =
-    "id, name, game, host, port, query_port, logo, description, connect_notes, remote, created_at";
+    "id, name, game, host, port, query_port, logo, description, connect_notes, remote, created_at, password";
 
 fn from_row(r: &Row) -> rusqlite::Result<Server> {
     Ok(Server {
@@ -78,6 +82,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Server> {
         connect_notes: r.get(8)?,
         remote: r.get(9)?,
         created_at: r.get(10)?,
+        password: r.get(11)?,
     })
 }
 
@@ -101,6 +106,38 @@ pub fn get(db: &Db, id: &str) -> rusqlite::Result<Option<Server>> {
         .optional()
 }
 
+/// Yapıştırılan bağlanma satırını çözer: `connect 1.2.3.4:27015; password abc`, `steam://connect/1.2.3.4:27015/abc`
+/// ya da düz adres. (adres, şifre) döner.
+pub fn parse_paste(text: &str) -> (String, Option<String>) {
+    let t = text.trim().trim_matches('"').trim();
+    let lower = t.to_ascii_lowercase();
+    if let Some(i) = lower.find("steam://connect/") {
+        let rest = &t[i + "steam://connect/".len()..];
+        let rest = rest.trim_end_matches('/');
+        return match rest.split_once('/') {
+            Some((addr, pass)) if !pass.is_empty() => (addr.to_string(), Some(pass.to_string())),
+            Some((addr, _)) => (addr.to_string(), None),
+            None => (rest.to_string(), None),
+        };
+    }
+    let mut addr = None;
+    let mut pass = None;
+    for part in t.split(';') {
+        let part = part.trim();
+        let (cmd, arg) = part.split_once(char::is_whitespace).unwrap_or((part, ""));
+        let arg = arg.trim().trim_matches('"').trim();
+        match cmd.trim_start_matches('/').to_ascii_lowercase().as_str() {
+            "connect" if !arg.is_empty() => addr = Some(arg.to_string()),
+            "password" if !arg.is_empty() => pass = Some(arg.to_string()),
+            _ => {}
+        }
+    }
+    match addr {
+        Some(a) => (a, pass),
+        None => (t.to_string(), None),
+    }
+}
+
 /// Adresi `host:port` biçiminde de kabul eder ("185.1.2.3:28961").
 fn split_address(host: &str, port: Option<u16>) -> (String, Option<u16>) {
     let host = host.trim();
@@ -114,7 +151,16 @@ fn split_address(host: &str, port: Option<u16>) -> (String, Option<u16>) {
 
 pub fn save(db: &Db, logos: &Path, input: ServerInput) -> Result<Server, String> {
     let game = games::find(&input.game).ok_or("Bilinmeyen oyun")?;
-    let (host, typed_port) = split_address(&input.host, input.port);
+    let (pasted, pasted_pass) = parse_paste(&input.host);
+    let password: String = match input.password.trim() {
+        "" => pasted_pass.unwrap_or_default(),
+        p => p.to_string(),
+    }
+    .chars()
+    .filter(|c| !c.is_control() && *c != '"' && *c != ';')
+    .take(64)
+    .collect();
+    let (host, typed_port) = split_address(&pasted, input.port);
     let host = host.to_ascii_lowercase();
     if !games::valid_host(&host) {
         return Err("Adres geçersiz. Örnek: 185.12.34.56 ya da cod2.gmid.gg".into());
@@ -147,13 +193,13 @@ pub fn save(db: &Db, logos: &Path, input: ServerInput) -> Result<Server, String>
     db.conn()
         .execute(
             "INSERT INTO servers (id, name, game, host, port, query_port, logo, description,
-                                  connect_notes, remote, sort, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, ?10, ?10)
+                                  connect_notes, remote, sort, created_at, updated_at, password)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, ?10, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name, game = excluded.game, host = excluded.host,
                 port = excluded.port, query_port = excluded.query_port, logo = excluded.logo,
                 description = excluded.description, connect_notes = excluded.connect_notes,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at, password = excluded.password",
             params![
                 id,
                 name,
@@ -164,7 +210,8 @@ pub fn save(db: &Db, logos: &Path, input: ServerInput) -> Result<Server, String>
                 logo,
                 input.description.trim(),
                 input.connect_notes.trim(),
-                now
+                now,
+                password
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -632,7 +679,11 @@ pub fn exe_key(game: &str) -> String {
 /// Bağlanmak için açılacak adres ya da çalıştırılacak program.
 pub enum Launch {
     Url(String),
-    Exe { path: PathBuf, address: String },
+    Exe {
+        path: PathBuf,
+        address: String,
+        password: String,
+    },
     Copy(String),
 }
 
@@ -642,7 +693,13 @@ pub fn launch_plan(db: &Db, server: &Server) -> Result<Launch, String> {
         return Err("Sunucu adresi geçersiz.".into());
     }
     let address = format!("{}:{}", server.host, server.port);
+    let password = server.password.trim();
     Ok(match game.join {
+        // Steam oyunu açar (açık değilse) ve sunucuya bağlar; şifre adresin sonuna eklenir.
+        Join::Steam if !password.is_empty() => Launch::Url(format!(
+            "steam://connect/{address}/{}",
+            url_encode(password)
+        )),
         Join::Steam => Launch::Url(format!("steam://connect/{address}")),
         Join::Uri(t) => Launch::Url(
             t.replace("{host}", &server.host)
@@ -662,14 +719,21 @@ pub fn launch_plan(db: &Db, server: &Server) -> Result<Launch, String> {
                 None => return Err(format!("EXE_NEEDED:{}", game.id)),
             };
             let _ = db.set_setting(&exe_key(game.id), &path.to_string_lossy());
-            Launch::Exe { path, address }
+            Launch::Exe {
+                path,
+                address,
+                password: password.to_string(),
+            }
         }
     })
 }
 
-/// Oyunu `+connect adres` ile başlatır.
-pub fn run_exe(path: &Path, address: &str) -> Result<(), String> {
+/// Oyunu `+connect adres` ile başlatır (şifre varsa önce `+set password`).
+pub fn run_exe(path: &Path, address: &str, password: &str) -> Result<(), String> {
     let mut cmd = std::process::Command::new(path);
+    if !password.is_empty() {
+        cmd.args(["+set", "password", password]);
+    }
     cmd.args(["+connect", address]);
     if let Some(dir) = path.parent() {
         // Eski oyunlar dosyalarını çalışma klasöründe arar.
@@ -792,6 +856,7 @@ mod tests {
                 logo: None,
                 description: String::new(),
                 connect_notes: String::new(),
+                password: String::new(),
             },
         )
         .unwrap();
@@ -810,6 +875,7 @@ mod tests {
                 logo: None,
                 description: String::new(),
                 connect_notes: String::new(),
+                password: String::new(),
             },
         )
         .is_err());
@@ -844,6 +910,29 @@ mod tests {
     }
 
     #[test]
+    fn pasted_connect_lines() {
+        let p = |t: &str| parse_paste(t);
+        assert_eq!(p("185.1.2.3:27015"), ("185.1.2.3:27015".into(), None));
+        assert_eq!(
+            p("connect 185.1.2.3:27015; password abc"),
+            ("185.1.2.3:27015".into(), Some("abc".into()))
+        );
+        assert_eq!(
+            p("connect 185.1.2.3:27015;password \"a b\""),
+            ("185.1.2.3:27015".into(), Some("a b".into()))
+        );
+        assert_eq!(
+            p("steam://connect/cs.ornek.com:27016/sifre"),
+            ("cs.ornek.com:27016".into(), Some("sifre".into()))
+        );
+        assert_eq!(
+            p("steam://connect/cs.ornek.com:27016"),
+            ("cs.ornek.com:27016".into(), None)
+        );
+        assert_eq!(p("/connect 1.2.3.4:28960"), ("1.2.3.4:28960".into(), None));
+    }
+
+    #[test]
     fn join_plans() {
         let (db, dir) = temp_db("join");
         let mut s = Server {
@@ -856,6 +945,7 @@ mod tests {
             logo: None,
             description: String::new(),
             connect_notes: String::new(),
+            password: String::new(),
             remote: false,
             created_at: 0,
         };
@@ -870,6 +960,10 @@ mod tests {
         s.port = 27015;
         assert!(
             matches!(launch_plan(&db, &s).unwrap(), Launch::Url(u) if u == "steam://connect/mc.gmid.gg:27015")
+        );
+        s.password = "gizli 1".into();
+        assert!(
+            matches!(launch_plan(&db, &s).unwrap(), Launch::Url(u) if u == "steam://connect/mc.gmid.gg:27015/gizli%201")
         );
         s.game = "cod2".into();
         assert!(matches!(launch_plan(&db, &s), Err(e) if e == "EXE_NEEDED:cod2"));

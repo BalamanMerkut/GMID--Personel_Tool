@@ -104,7 +104,11 @@ pub fn server_join(app: AppHandle, db: State<'_, Db>, id: String) -> CmdResult<J
                 "Oyun açılamadı. Oyun (ya da Steam) bu bilgisayarda kurulu mu?".to_string()
             })?;
         }
-        Launch::Exe { path, address } => servers::run_exe(&path, &address)?,
+        Launch::Exe {
+            path,
+            address,
+            password,
+        } => servers::run_exe(&path, &address, &password)?,
         Launch::Copy(address) => {
             return Ok(JoinResult {
                 kind: "copy",

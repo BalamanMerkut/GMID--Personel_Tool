@@ -34,14 +34,27 @@
 
 <div class="stack" bind:this={box}>
   {#each alerts.words as w (w.id)}
-    <div class="card">
-      <div class="top"><span class="ic"><Icon name="mic" size={18} /></span><b>Bunu böyle mi yazayım?</b></div>
-      <span class="meta">Duyunca <s>{w.from}</s> yerine <b class="to">{w.to}</b> yazayım mı? (Sesle yazma sözlüğü)</span>
-      <div class="acts">
-        <button class="ghost" onclick={() => act(api.dictation.learn(w.id, false))}>Hayır</button>
-        <button class="ok" onclick={() => act(api.dictation.learn(w.id, true))}>Evet, öğren</button>
+    {#if w.added}
+      <!-- Düzeltmeden kendiliğinden öğrenildi; 10 sn içinde geri alınmazsa kalır. -->
+      <div class="card learned">
+        <div class="top"><span class="ic"><Icon name="check" size={18} /></span><b>Sözlüğe ekledim</b></div>
+        <span class="meta">Bundan sonra <s>{w.from}</s> duyunca <b class="to">{w.to}</b> yazacağım.</span>
+        <div class="acts">
+          <button class="ghost" onclick={() => act(api.dictation.learn(w.id, false))}>Geri al</button>
+          <button class="ok" onclick={() => act(api.dictation.learn(w.id, true))}>Tamam</button>
+        </div>
+        <i class="undo-bar"></i>
       </div>
-    </div>
+    {:else}
+      <div class="card">
+        <div class="top"><span class="ic"><Icon name="mic" size={18} /></span><b>Bunu böyle mi yazayım?</b></div>
+        <span class="meta">Duyunca <s>{w.from}</s> yerine <b class="to">{w.to}</b> yazayım mı? (Sesle yazma sözlüğü)</span>
+        <div class="acts">
+          <button class="ghost" onclick={() => act(api.dictation.learn(w.id, false))}>Hayır</button>
+          <button class="ok" onclick={() => act(api.dictation.learn(w.id, true))}>Evet, öğren</button>
+        </div>
+      </div>
+    {/if}
   {/each}
   {#each alerts.games as g (g.path)}
     <div class="card game">
@@ -78,6 +91,9 @@
 </div>
 
 <style>
+  .learned { position: relative; overflow: hidden; }
+  .undo-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--gold); transform-origin: left; animation: undo 10s linear forwards; }
+  @keyframes undo { to { transform: scaleX(0); } }
   :global(html), :global(body) { background: transparent !important; overflow: hidden; }
   .stack { position: fixed; left: 6px; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 8px; }
   .card {

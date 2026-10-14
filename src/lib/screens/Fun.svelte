@@ -87,8 +87,11 @@
     if (busy) return;
     mode = m;
     tool = null;
+    // Sekme değişince çark baştan: son kazanan/elenenler kalmaz (Son sonuçlar listesi korunur).
     result = null;
     lastOut = null;
+    out = [];
+    pendingRemove = null;
     auto = false;
     void setJson("fun.mode", m);
   }
@@ -773,44 +776,62 @@
           <button class="btn go" disabled={busy || items.length < 2} onclick={newCup}><Icon name="flag" size={18} />{cup.length ? "Yeni eşleşme çek" : "Eşleşmeleri çek"}</button>
           {#if cup.length && !champion}<button class="btn ghost sm" disabled={busy} onclick={() => void autoCup()}><Icon name="dice" size={14} />Kalanları rastgele oynat</button>{/if}
           {#if cup.length}<button class="btn ghost sm" onclick={() => copy(cupText())}><Icon name="copy" size={14} />Yazı olarak kopyala</button>{/if}
+          {#if cup.length}<button class="btn ghost sm" disabled={busy} onclick={() => ((cup = []), saveCup())}><Icon name="trash" size={14} />Turnuvayı temizle</button>{/if}
           <label class="cupname">Turnuva adı <input bind:value={cupName} maxlength="50" placeholder="ör. LoL 1v1 Turnuvası" onchange={() => void setJson("fun.cupName", cupName)} /></label>
           {#if items.length < 2}<span class="sub small">Önce listeye en az iki isim ekle.</span>{/if}
         </div>
         {#if cup.length}
           <p class="sub small">Maçın kazananına tıkla; yanlış tıkladıysan aynı isme yeniden tıkla. 🎲: o maçı rastgele bitir. Kişi sayısı 2, 4, 8, 16 değilse ilk turda bazıları <b>bay</b> geçer.</p>
+          <!-- İki taraflı ağaç: ilk turlar iki kenarda, maçlar ortadaki finale doğru akar, şampiyon ortada. -->
+          {@const last = cup.length - 1}
+          <div class="bracket">
+            {#each [0, 1] as side (side)}
+              {#if side === 1}
+                <div class="col bmid">
+                  <span class="rname">{roundName(1, last)}</span>
+                  <div class="matches">
+                    <div class="bslot fin">
+                      <div class="crown" class:won={!!champion}>
+                        <span class="medal">🏆</span>
+                        <b>{champion ?? "?"}</b>
+                        <span class="place">{champion ? "Şampiyon" : "Şampiyon kim olacak?"}</span>
+                      </div>
+                      {@render matchBox(cup[last][0], last, 0)}
+                      {#if champion && (places.second || places.thirds.length)}
+                        <div class="runners sub small">
+                          {#if places.second}<span>🥈 {places.second}</span>{/if}
+                          {#if places.thirds.length}<span>🥉 {places.thirds.join(" · ")}</span>{/if}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/if}
+              {#each side === 0 ? cup.slice(0, last).map((_, r) => r) : cup.slice(0, last).map((_, r) => last - 1 - r) as r (r)}
+                {@const half = cup[r].length / 2}
+                {@const mine = cup[r].map((m, k) => [m, k] as const).slice(side === 0 ? 0 : half, side === 0 ? half : cup[r].length)}
+                <div class="col" class:left={side === 0} class:right={side === 1} class:outer={r === 0}>
+                  <span class="rname">{roundName(cup[r].length, r)}</span>
+                  <div class="matches">
+                    {#each mine as _, pi (pi)}
+                      {#if pi % 2 === 0}
+                        <div class="pair" class:single={mine.length === 1}>
+                          {#each mine.slice(pi, pi + 2) as [m, k] (k)}<div class="bslot">{@render matchBox(m, r, k)}</div>{/each}
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            {/each}
+          </div>
           {#if champion}
-            <div class="podium">
-              {#if places.second}<div class="step s2"><span class="medal">🥈</span><b>{places.second}</b><span class="place">2.</span></div>{/if}
-              <div class="step s1"><span class="medal">🏆</span><b>{champion}</b><span class="place">Şampiyon</span></div>
-              {#if places.thirds.length}<div class="step s3"><span class="medal">🥉</span><b>{places.thirds.join(" · ")}</b><span class="place">3.</span></div>{/if}
-            </div>
             <div class="row center">
               <button class="btn go" onclick={() => void copyCard()}><Icon name="discord" size={18} />Şampiyon kartını Discord'a kopyala</button>
               <span class="sub small">Görsel panoya gelir: Discord'da Ctrl+V.</span>
             </div>
             <canvas bind:this={cardCanvas} hidden></canvas>
           {/if}
-          <div class="bracket">
-            {#each cup as round, r (r)}
-              <div class="col">
-                <span class="rname">{roundName(round.length, r)}</span>
-                <div class="matches">
-                  {#each round as m, k (k)}
-                    <div class="match" class:done={!!m.winner}>
-                      {#each [m.a, m.b] as p, side (side)}
-                        <button class="pl" class:won={!!p && m.winner === p} class:lost={!!m.winner && !!p && m.winner !== p} class:bye={!p} disabled={busy || !m.a || !m.b} onclick={() => p && pick(r, k, p)}>
-                          {p ?? (r === 0 ? "bay" : "—")}
-                        </button>
-                      {/each}
-                      {#if m.a && m.b && !m.winner}
-                        <button class="rnd" disabled={busy} title="Rastgele kazanan" onclick={() => pick(r, k, randInt(2) ? m.a! : m.b!)}><Icon name="dice" size={13} /></button>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {/each}
-          </div>
         {:else}
           <p class="sub">Listeye katılanları yaz (2–64 kişi), sonra <b>Eşleşmeleri çek</b>. 1v1 turnuvalar için: FIFA, CS2 aim, satranç…</p>
         {/if}
@@ -942,6 +963,19 @@
   </div>
 {/if}
 
+{#snippet matchBox(m: Match, r: number, k: number)}
+  <div class="match" class:done={!!m.winner}>
+    {#each [m.a, m.b] as p, side (side)}
+      <button class="pl" class:won={!!p && m.winner === p} class:lost={!!m.winner && !!p && m.winner !== p} class:bye={!p} disabled={busy || !m.a || !m.b} onclick={() => p && pick(r, k, p)}>
+        {p ?? (r === 0 ? "bay" : "—")}
+      </button>
+    {/each}
+    {#if m.a && m.b && !m.winner}
+      <button class="rnd" disabled={busy} title="Rastgele kazanan" onclick={() => pick(r, k, randInt(2) ? m.a! : m.b!)}><Icon name="dice" size={13} /></button>
+    {/if}
+  </div>
+{/snippet}
+
 <style>
   .fun { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 16px; max-width: 1500px; margin: 0 auto; align-items: start; }
   .fun.big { grid-template-columns: minmax(0, 1fr); }
@@ -1021,16 +1055,6 @@
   .inf:hover .bubble { opacity: 1; transform: translateX(-50%) translateY(0); }
   .cupname { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-left: auto; }
   .cupname input { width: 220px; }
-  .podium { display: flex; justify-content: center; align-items: flex-end; gap: 12px; padding: 8px 0 4px; }
-  .step { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px 10px; min-width: 150px; max-width: 260px; border-radius: 14px 14px 6px 6px; text-align: center; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); animation: pop 0.4s ease-out both; }
-  .step b { font-family: var(--f-display); font-size: 17px; overflow-wrap: anywhere; }
-  .step .medal { font-size: 30px; line-height: 1; }
-  .step .place { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
-  .step.s1 { min-height: 170px; justify-content: center; border-color: var(--gold); background: linear-gradient(180deg, rgba(227, 194, 112, 0.22), rgba(227, 194, 112, 0.05)); }
-  .step.s1 b { font-size: 26px; color: var(--gold-glow); }
-  .step.s1 .medal { font-size: 46px; }
-  .step.s2 { min-height: 130px; justify-content: center; animation-delay: 0.1s; }
-  .step.s3 { min-height: 105px; justify-content: center; animation-delay: 0.2s; }
   .hint { margin-top: -2px; }
   .wheelbox { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 24px; align-items: center; padding: 8px 0; }
   .big .wheelbox { grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); }
@@ -1128,10 +1152,43 @@
   .pow { margin-left: 8px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
 
   .cup { display: flex; flex-direction: column; gap: 12px; padding: 6px 0; }
-  .bracket { display: flex; gap: 22px; overflow-x: auto; padding: 4px 2px 10px; }
-  .col { display: flex; flex-direction: column; min-width: 170px; flex: 1 0 170px; }
-  .rname { font-family: var(--f-display); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 8px; }
-  .matches { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 10px; }
+  /* Kolonlar arası 28 px; bağlantı çizgileri bu boşluğun yarısında (14 px) birleşir. */
+  .bracket { --gap: 22px; --ln: rgba(227, 194, 112, 0.35); display: flex; gap: var(--gap); overflow-x: auto; padding: 4px 2px 10px; }
+  .col { display: flex; flex-direction: column; min-width: 92px; flex: 1 1 0; }
+  .col.bmid { min-width: 150px; flex: 1.3 1 0; }
+  .rname { font-family: var(--f-display); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 8px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .matches { flex: 1; display: flex; flex-direction: column; }
+  .pair { position: relative; flex: 1; display: flex; flex-direction: column; }
+  .bslot { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 5px 0; }
+  .bslot > .match { width: 100%; }
+  /* Maçtan merkeze doğru kısa çizgi, çiftin iki maçını birleştiren dikey çizgi ve sonraki kolonda gelen çizgi. */
+  .left .bslot::after, .right .bslot::after, .bmid .bslot::before, .bmid .bslot::after,
+  .left:not(.outer) .bslot::before, .right:not(.outer) .bslot::before { content: ""; position: absolute; top: 50%; width: calc(var(--gap) / 2); border-top: 1px solid var(--ln); }
+  .left .bslot::after { right: calc(var(--gap) / -2); }
+  .left:not(.outer) .bslot::before { left: calc(var(--gap) / -2); }
+  .right .bslot::after { left: calc(var(--gap) / -2); }
+  .right:not(.outer) .bslot::before { right: calc(var(--gap) / -2); }
+  .bmid .bslot::before { left: calc(var(--gap) / -2); }
+  .bmid .bslot::after { right: calc(var(--gap) / -2); }
+  .pair:not(.single)::after { content: ""; position: absolute; top: 25%; bottom: 25%; border-left: 1px solid var(--ln); }
+  .left .pair::after { right: calc(var(--gap) / -2); }
+  .right .pair::after { left: calc(var(--gap) / -2); }
+  /* Tek kolonluk turnuvada (2 kişi) yan çizgi olmasın. */
+  .bracket > .bmid:only-child .bslot::before, .bracket > .bmid:only-child .bslot::after { display: none; }
+  /* Final ortada; kupa üstünde, 2./3. altında durur (çizgiler finalin ortasına gelsin diye akışın dışında). */
+  .bracket { min-height: 380px; }
+  .crown, .runners { position: absolute; left: 0; right: 0; }
+  .crown { bottom: calc(50% + 52px); }
+  .runners { top: calc(50% + 52px); }
+  .crown { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 10px 10px; border-radius: 14px; text-align: center; border: 1px dashed var(--line-2); color: var(--dim); }
+  .crown .medal { font-size: 30px; line-height: 1; filter: grayscale(1) opacity(0.5); }
+  .crown b { font-family: var(--f-display); font-size: 18px; overflow-wrap: anywhere; }
+  .crown .place { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  .crown.won { border: 1px solid var(--gold); background: linear-gradient(180deg, rgba(227, 194, 112, 0.24), rgba(227, 194, 112, 0.05)); color: var(--gold-glow); animation: pop 0.4s ease-out both; box-shadow: 0 0 30px rgba(227, 194, 112, 0.18); }
+  .crown.won .medal { filter: none; font-size: 40px; }
+  .crown.won b { font-size: 24px; }
+  .runners { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+  .bracket .match .pl { padding-right: 28px; font-size: 13px; }
   .match { position: relative; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); overflow: hidden; }
   .match.done { border-color: rgba(227, 194, 112, 0.45); }
   .pl { text-align: left; padding: 8px 34px 8px 12px; background: none; border: 0; color: var(--text); font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

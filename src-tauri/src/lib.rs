@@ -203,7 +203,7 @@ pub fn run() {
             let h = handle.clone();
             std::thread::spawn(move || {
                 let (db, dir) = (h.state::<db::Db>(), h.state::<paths::DataDir>());
-                if let Err(e) = backup::daily_if_needed(&db, &dir.backups()) {
+                if let Err(e) = backup::auto_if_needed(&db, &dir.backups()) {
                     log!("{e}");
                 }
             });
@@ -233,6 +233,9 @@ pub fn run() {
             commands::football_leaders,
             commands::open_log,
             commands::backup_now,
+            commands::backup_policy,
+            commands::backgrounds_list,
+            commands::background_remove,
             commands::import_background,
             commands::open_url,
             commands::report_create,

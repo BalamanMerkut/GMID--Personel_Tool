@@ -17,6 +17,7 @@
   let lang = $state(getJson<string>("dictation.lang", "tr"));
   let gpu = $state(getJson("dictation.gpu", true));
   let tidy = $state(getJson("dictation.tidy", false));
+  let autoLearn = $state(getJson("dictation.autoLearn", true));
   let words = $state(getJson<string>("dictation.words", ""));
   let sounds = $state(getJson("dictation.sounds", true));
   let preload = $state(getJson("dictation.preload", true));
@@ -296,11 +297,31 @@
     <div>
       <h3 class="h2"><Icon name="book" />3 · Sözlük (kullandıkça öğrenir)</h3>
       <span class="sub small">
-        Whisper bazı sözcükleri hep yanlış yazıyorsa (“GMID” yerine “GMD”, “VDS” yerine “videoyu”) burada düzelt. Dikteden
-        sonra yazıyı yapıştırıldığı yerde düzeltirsen GMID fark eder ve sağ altta <b>“Bunu böyle mi yazayım?”</b> diye sorar;
-        aşağıdaki son diktelerden de düzeltebilirsin. Doğru yazılışlar Whisper'a ipucu olarak da verilir.
+        Whisper bazı sözcükleri hep yanlış yazıyorsa (“GMID” yerine “GMD”, “VDS” yerine “videoyu”) sözlük düzeltir. En kolayı:
+        yazı yapıştırıldıktan sonra yanlış sözcüğü sil, doğrusunu yaz, mesajı gönder. GMID farkı görür.
       </span>
     </div>
+    <div class="learnrow">
+      <div>
+        <b>Düzeltmelerimden kendiliğinden öğren</b>
+        <span class="sub small">
+          {autoLearn
+            ? "Açık: düzelttiğin sözcük sözlüğe hemen eklenir, sağ altta 10 sn “Geri al” görünür; dokunmazsan kalır."
+            : "Kapalı: her düzeltmede sağ altta “Bunu böyle mi yazayım?” diye sorar."}
+        </span>
+      </div>
+      <Switch label="Düzeltmelerimden kendiliğinden öğren" checked={autoLearn} onchange={(v) => ((autoLearn = v), void setJson("dictation.autoLearn", v))} />
+    </div>
+    <details class="how">
+      <summary>Nasıl çalışıyor, neyi öğrenmez?</summary>
+      <ul class="sub small">
+        <li>Yalnız <b>bir dikteyi yapıştırdıktan sonra</b>, en çok 2 dakika ve yalnız o yazı kutusuna bakar. Sürekli dinlemez, klavyeni kaydetmez, yazı hiçbir yere gönderilmez ya da saklanmaz.</li>
+        <li>Windows'un erişilebilirlik özelliğiyle (ekran okuyucuların kullandığı) okunur; şifre kutularına hiç bakılmaz.</li>
+        <li><b>Silmek öğrenilmez:</b> cümleden vazgeçip silersen ya da yazının çoğunu değiştirirsen bir şey eklenmez.</li>
+        <li><b>Başka söz söylemek öğrenilmez:</b> “nasılsın”ı “naber” yapmak gibi. Yalnız yanlış duyulmuşa benzeyenler öğrenilir: yazılışı yakın sözcükler (“Esad” → “Esat”), kısaltmalar ve adlar (“videoyu” → “VDS”, “gmd” → “GMID”), sayılar.</li>
+        <li>Aşağıdaki <b>Son dikteler</b>den de düzeltebilirsin; eklenen her kuralı buradan silebilirsin.</li>
+      </ul>
+    </details>
     <div class="rules">
       {#each rules as r (r.from)}
         <span class="rule"><s>{r.from}</s><Icon name="arrow" size={12} /><b>{r.to}</b>{#if r.hits}<i class="tnum">{r.hits}×</i>{/if}<button title="Sil" onclick={() => removeRule(r.from)}><Icon name="x" size={12} /></button></span>
@@ -354,6 +375,10 @@
 {/if}
 
 <style>
+  .learnrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+  .learnrow > div { display: flex; flex-direction: column; gap: 2px; }
+  .how summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--gold); }
+  .how ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; line-height: 1.5; }
   .panel { display: flex; flex-direction: column; gap: 14px; }
   .hero { border-color: rgba(227, 194, 112, 0.35); transition: box-shadow 0.3s; }
   .hero.live { box-shadow: 0 0 0 1px var(--gold), 0 0 30px rgba(227, 194, 112, 0.2); }

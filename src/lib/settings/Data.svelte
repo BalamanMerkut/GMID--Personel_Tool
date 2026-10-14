@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, formatSize, type AppInfo, type BackupInfo } from "../api";
+  import { api, formatSize, type AppInfo, type BackupEvery, type BackupInfo } from "../api";
   import Icon from "../Icon.svelte";
   import { notify } from "../toast.svelte";
   import type { BackupManifest } from "../types";
@@ -11,6 +11,29 @@
   $effect(() => {
     if (info) backups = info.backups;
   });
+
+  // Kaç yedek tutulsun, ne sıklıkla alınsın. Sınır dolunca yeni yedek en eskisinin yerini alır.
+  let keep = $state(3);
+  let every = $state<BackupEvery>("day");
+  const KEEPS = [1, 3, 5, 7];
+  const EVERY: [BackupEvery, string][] = [["day", "Her gün"], ["week", "Haftada bir"], ["off", "Kapalı"]];
+  $effect(() => {
+    void api.backupPolicy().then((r) => {
+      keep = r.policy.keep;
+      every = r.policy.every;
+    }).catch(() => {});
+  });
+  async function setPolicy(k?: number, e?: BackupEvery) {
+    try {
+      const r = await api.backupPolicy(k, e);
+      keep = r.policy.keep;
+      every = r.policy.every;
+      backups = r.backups;
+    } catch (err) {
+      notify(String(err), "info");
+    }
+  }
+  const total = $derived(backups.reduce((n, b) => n + b.size, 0));
 
   async function backupNow() {
     busy = true;
@@ -80,7 +103,27 @@
       </div>
     </div>
     <div class="field">
-      <span class="label">Yedekler <span class="sub small">· her gün otomatik, son 7 tanesi saklanır</span></span>
+      <span class="label">Otomatik yedek</span>
+      <span class="sub small">
+        Yalnız GMID'in kendi bilgileri yedeklenir: ayarlar, notlar, hatırlatıcılar, oyun kütüphanesi listesi, oturum
+        geçmişi, sunucular, indirme kayıtları. <b>Videolar, şarkılar, klipler ve resimler yedeğe girmez</b>; onlar yerinde
+        durur. Bu yüzden bir yedek birkaç yüz KB tutar.
+      </span>
+      <div class="pol">
+        <div class="pr">
+          <span>Ne sıklıkla</span>
+          <div class="seg">
+            {#each EVERY as [v, l] (v)}<button aria-pressed={every === v} onclick={() => setPolicy(undefined, v)}>{l}</button>{/each}
+          </div>
+        </div>
+        <div class="pr">
+          <span>En fazla kaç yedek <span class="sub small">· dolunca yenisi en eskisinin yerine geçer</span></span>
+          <div class="seg">
+            {#each KEEPS as k (k)}<button class="tnum" aria-pressed={keep === k} onclick={() => setPolicy(k)}>{k}</button>{/each}
+          </div>
+        </div>
+      </div>
+      <span class="label">Yedekler <span class="sub small tnum">· {backups.length} tane, toplam {formatSize(total)}</span></span>
       {#if backups.length}
         <ul class="backups">
           {#each backups as b (b.name)}
@@ -131,6 +174,8 @@
   .panel { display: flex; flex-direction: column; gap: 16px; }
   .field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .label { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
+  .pol { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+  .pr { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13.5px; }
   .backups { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   .backups li { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); }
   code { padding: 1px 6px; }

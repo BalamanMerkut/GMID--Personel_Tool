@@ -293,7 +293,7 @@
                 title={`${label(c)} · çift tıkla aç · sürükleyip Discord'a ya da bir klasöre bırakabilirsin`}
               >
                 <div class="th">
-                  {#if c.thumb && !broken[c.id]}<img src={src(c.thumb)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else if c.kind === "shot" && !broken[c.id]}<img src={src(c.path)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else}<span class="noth"><Icon name="play" size={22} /></span>{/if}
+                  {#if c.thumb && !broken[c.id]}<img src={src(c.thumb)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else if c.kind === "shot" && !broken[c.id]}<img src={src(c.path)} alt="" loading="lazy" onerror={() => (broken = { ...broken, [c.id]: true })} />{:else if c.kind === "clip" && !broken[c.id]}<!-- Kapak henüz yoksa (klip yeni yazıldı) videonun bir karesi gösterilir. --><video class="still" src={`${src(c.path)}#t=1`} preload="metadata" muted playsinline onerror={() => (broken = { ...broken, [c.id]: true })}></video>{:else}<span class="noth"><Icon name="play" size={22} /></span>{/if}
                   {#if hover === c.id}<video class="prev" src={src(c.path)} muted autoplay loop playsinline></video>{/if}
                   <span class="srcb">{SOURCES[c.source]}</span>
                   {#if c.kind === "clip" && c.duration}<span class="dur tnum">{dur(c.duration)}</span>{/if}
@@ -369,16 +369,23 @@
       </div>
       <div class="foot">
         <div class="row">
-          <button class="btn ghost sm" onclick={() => act(api.clips.setFavorite(c.id, !c.favorite))}>{c.favorite ? "★ Favoride" : "☆ Favori"}</button>
           {#if c.kind === "clip"}
             <button class="btn sm" disabled={c.id in fitting} onclick={() => ((trim = c), (view = null))}>
               <Icon name="clip" size={15} />{c.id in fitting ? `Hazırlanıyor %${Math.round(fitting[c.id] * 100)}` : "Kırp ve Discord'a hazırla"}
             </button>
           {/if}
-          <button class="btn ghost sm" onclick={() => act(api.clips.open(c.id))}><Icon name="play" size={15} />Aç</button>
-          <button class="btn ghost sm" onclick={() => act(api.clips.reveal(c.id))}><Icon name="folder" size={15} />Klasörde göster</button>
+          <button class="btn ghost sm favb" class:on={c.favorite} onclick={() => act(api.clips.setFavorite(c.id, !c.favorite))}>
+            <Icon name="star" size={15} />{c.favorite ? "Favoride" : "Favori"}
+          </button>
         </div>
-        <button class="link danger" onclick={() => remove(c)}>{armedDelete ? "Emin misin? Geri Dönüşüm Kutusu'na gider" : "Sil"}</button>
+        <div class="tools">
+          <button class="ib" onclick={() => act(api.clips.open(c.id))} title="Windows'un oynatıcısında aç"><Icon name="play" size={17} /><span>Oynatıcıda aç</span></button>
+          <button class="ib" onclick={() => act(api.clips.reveal(c.id))} title="Dosyanın durduğu klasörü aç"><Icon name="folder" size={17} /><span>Klasörü aç</span></button>
+          <i class="sep"></i>
+          <button class="ib del" class:armed={armedDelete} onclick={() => remove(c)} title="Sil (Geri Dönüşüm Kutusu'na gider)">
+            <Icon name="trash" size={17} />{#if armedDelete}<span>Emin misin? Tekrar bas</span>{/if}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -415,7 +422,7 @@
   .card { display: flex; flex-direction: column; gap: 3px; min-width: 0; cursor: pointer; outline: none; }
   .th { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: var(--coal-2); border: 1px solid var(--line); transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .card:hover .th, .card:focus-visible .th { border-color: var(--gold-dim); transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); }
-  .th img, .prev { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .th img, .prev, .still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
   .prev { background: #000; }
   .noth { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
   .srcb { position: absolute; left: 6px; top: 6px; background: rgba(12, 14, 17, 0.82); color: var(--muted); font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 5px; }
@@ -440,8 +447,6 @@
   .nm { font-weight: 600; font-size: 13.5px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link { border: 0; background: none; padding: 0; color: var(--teal); font-weight: 600; align-self: flex-start; }
   .link:hover { color: var(--neon); }
-  .link.danger { color: var(--dim); align-self: center; }
-  .link.danger:hover { color: var(--bad); }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 40px 20px; color: var(--muted); }
   .empty h3 { margin: 0; color: var(--text); font-family: var(--f-display); }
   .empty p { max-width: 600px; margin: 0; }
@@ -464,6 +469,14 @@
   .meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .gsel { display: flex; align-items: center; gap: 8px; }
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .favb.on { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
+  .tools { display: flex; align-items: center; gap: 4px; }
+  .tools .ib { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 11px; border-radius: 10px; border: 1px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .tools .ib:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+  .tools .sep { width: 1px; height: 22px; background: var(--line-2); margin: 0 6px; }
+  .tools .del { padding: 0 9px; }
+  .tools .del:hover { color: #ff9a9a; background: rgba(224, 106, 106, 0.1); }
+  .tools .del.armed { color: #fff; background: var(--bad); border-color: var(--bad); }
   .sm { padding: 6px 11px; font-size: 13px; }
   @media (max-width: 700px) {
     .grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }

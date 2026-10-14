@@ -46,14 +46,21 @@ pub struct Entry {
     pub tidied: bool,
 }
 
-/// "Bunu böyle mi yazayım?" sorusu (sağ alttaki kartta).
+/// Sağ alttaki sözlük kartı: `added` ise kural kendiliğinden eklendi ("Geri al" birkaç saniye görünür),
+/// değilse "Bunu böyle mi yazayım?" diye sorulur.
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Learn {
     pub id: u64,
     pub from: String,
     pub to: String,
+    pub added: bool,
 }
+
+/// Düzeltmelerden kendiliğinden öğren (varsayılan açık); kapalıysa her seferinde sorulur.
+pub const AUTO_LEARN_KEY: &str = "dictation.autoLearn";
+/// Kendiliğinden eklenen kuralın "Geri al" kartı bu kadar saniye durur.
+const UNDO_SECS: u64 = 10;
 
 #[derive(Default)]
 pub struct Dictation {
@@ -158,12 +165,19 @@ impl Dictation {
             .clone()
     }
 
-    /// Yapıştırılan yazı sonradan düzeltildiyse: değişen parçaları sor (sağ altta kart).
+    /// Yapıştırılan yazı sonradan düzeltildiyse: yanlış duyulmuşa benzeyen parçalar kendiliğinden sözlüğe eklenir
+    /// ("Geri al" kartıyla); kendiliğinden öğrenme kapalıysa sorulur.
     pub fn propose(&self, app: &AppHandle, pasted: &str, edited: &str) {
-        let pairs = vocab::fresh(&app.state::<Db>(), vocab::suggest(pasted, edited));
+        let db = app.state::<Db>();
+        let auto = db.setting_json::<bool>(AUTO_LEARN_KEY).unwrap_or(true);
+        let pairs: Vec<(String, String)> = vocab::fresh(&db, vocab::suggest(pasted, edited))
+            .into_iter()
+            .filter(|(f, t)| !auto || vocab::plausible(f, t))
+            .collect();
         if pairs.is_empty() {
             return;
         }
+        let mut added = Vec::new();
         let mut p = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         for (from, to) in pairs {
             if p.iter()
@@ -171,11 +185,36 @@ impl Dictation {
             {
                 continue;
             }
-            crate::log!("Sesle yazma: düzeltme görüldü ({from} → {to})");
+            let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+            let learned = auto && vocab::add(&db, &from, &to).is_ok();
+            crate::log!(
+                "Sesle yazma: düzeltme görüldü ({from} → {to}){}",
+                if learned { ", sözlüğe eklendi" } else { "" }
+            );
+            if learned {
+                added.push(id);
+            }
             p.push(Learn {
-                id: self.next_id.fetch_add(1, Ordering::Relaxed) + 1,
+                id,
                 from,
                 to,
+                added: learned,
+            });
+        }
+        if !added.is_empty() {
+            let _ = app.emit("dictation-rules", ());
+            // Geri alınmazsa kart kendiliğinden kapanır, kural kalır.
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(UNDO_SECS));
+                let d = app.state::<Dictation>();
+                let mut p = d.pending.lock().unwrap_or_else(|e| e.into_inner());
+                let before = p.len();
+                p.retain(|l| !added.contains(&l.id));
+                if p.len() != before {
+                    drop(p);
+                    let _ = app.emit("alerts-changed", ());
+                }
             });
         }
         let n = p.len();
@@ -194,10 +233,17 @@ impl Dictation {
             p.remove(i)
         };
         let db = app.state::<Db>();
-        if accept {
-            vocab::add(&db, &item.from, &item.to)?;
-        } else {
-            vocab::reject(&db, &item.from, &item.to);
+        match (item.added, accept) {
+            // Kendiliğinden eklenmişti: "Tamam" bir şey değiştirmez, "Geri al" kuralı siler.
+            (true, true) => {}
+            (true, false) => {
+                vocab::remove(&db, &item.from)?;
+                vocab::reject(&db, &item.from, &item.to);
+            }
+            (false, true) => {
+                vocab::add(&db, &item.from, &item.to)?;
+            }
+            (false, false) => vocab::reject(&db, &item.from, &item.to),
         }
         let _ = app.emit("alerts-changed", ());
         let _ = app.emit("dictation-rules", ());

@@ -202,6 +202,28 @@ pub fn backup_now(
     Ok(backup::list(&dir.backups()))
 }
 
+/// Yedek ayarı: kaç yedek tutulsun, ne sıklıkla alınsın. Fazlası hemen silinir.
+#[tauri::command]
+pub fn backup_policy(
+    db: State<'_, Db>,
+    dir: State<'_, DataDir>,
+    keep: Option<usize>,
+    every: Option<String>,
+) -> CmdResult<serde_json::Value> {
+    let cur = backup::Policy::of(&db);
+    let p = if keep.is_some() || every.is_some() {
+        backup::set_policy(
+            &db,
+            &dir.backups(),
+            keep.unwrap_or(cur.keep),
+            &every.unwrap_or(cur.every),
+        )?
+    } else {
+        cur
+    };
+    Ok(serde_json::json!({ "policy": p, "backups": backup::list(&dir.backups()) }))
+}
+
 /// Seçilen resmi/GIF'i/videoyu `Arkaplanlar` klasörüne kopyalar; orijinal silinse de arka plan bozulmaz.
 #[tauri::command]
 pub fn import_background(dir: State<'_, DataDir>, source: String) -> CmdResult<String> {
@@ -234,6 +256,52 @@ pub fn import_background(dir: State<'_, DataDir>, source: String) -> CmdResult<S
     let dest = dir.backgrounds().join(name);
     std::fs::copy(src, &dest).map_err(|e| format!("Dosya kopyalanamadı: {e}"))?;
     Ok(dest.to_string_lossy().into_owned())
+}
+
+/// `Arkaplanlar` klasöründeki arka planlar (en yeni başta): önceden seçilenlere tek tıkla dönülsün.
+#[tauri::command]
+pub fn backgrounds_list(dir: State<'_, DataDir>) -> Vec<serde_json::Value> {
+    let mut files: Vec<(String, u64)> = std::fs::read_dir(dir.backgrounds())
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let p = e.path();
+                    let ext = p.extension()?.to_string_lossy().to_lowercase();
+                    let meta = e.metadata().ok()?;
+                    (meta.is_file() && BACKGROUND_EXTENSIONS.contains(&ext.as_str()))
+                        .then(|| (p.to_string_lossy().into_owned(), meta.len()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files
+        .into_iter()
+        .map(|(path, size)| serde_json::json!({ "path": path, "size": size }))
+        .collect()
+}
+
+/// `Arkaplanlar` klasöründeki bir kopyayı siler (yalnız o klasördekiler; kullanılan arka plan silinmez).
+#[tauri::command]
+pub fn background_remove(
+    db: State<'_, Db>,
+    dir: State<'_, DataDir>,
+    path: String,
+) -> CmdResult<()> {
+    let p = std::path::Path::new(&path);
+    let root = dir.backgrounds();
+    let inside = p.parent().is_some_and(|d| d == root)
+        && p.extension().is_some_and(|e| {
+            BACKGROUND_EXTENSIONS.contains(&e.to_string_lossy().to_lowercase().as_str())
+        });
+    if !inside {
+        return Err("Yalnız GMID'in arka plan klasöründeki dosyalar silinebilir.".into());
+    }
+    let current: Option<String> = db.setting_json("theme.bg.path");
+    if current.as_deref() == Some(path.as_str()) {
+        return Err("Şu an kullanılan arka plan silinemez.".into());
+    }
+    std::fs::remove_file(p).map_err(|e| format!("Silinemedi: {e}"))
 }
 
 #[tauri::command]

@@ -213,13 +213,13 @@
   // ---- ekle / düzenle ----
 
   function openAdd() {
-    form = { id: null, name: "", game: "cod2", host: "", port: null, queryPort: null, logo: null, description: "", connectNotes: "" };
+    form = { id: null, name: "", game: "cod2", host: "", port: null, queryPort: null, logo: null, description: "", connectNotes: "", password: "" };
   }
 
   function openEdit(s: Server) {
     form = {
       id: s.id, name: s.name, game: s.game, host: s.host, port: s.port, queryPort: s.queryPort, logo: s.logo,
-      description: s.description, connectNotes: s.connectNotes,
+      description: s.description, connectNotes: s.connectNotes, password: s.password,
     };
   }
 
@@ -232,6 +232,19 @@
     } catch (e) {
       notify(String(e), "info");
     }
+  }
+
+  /** Sunucunun verdiği satır yapıştırılınca (connect 1.2.3.4:27015; password x · steam://connect/…) alanlar dolar. */
+  function onHostInput() {
+    if (!form) return;
+    const t = form.host.trim();
+    let m = t.match(/steam:\/\/connect\/([^/\s]+)(?:\/([^\s]+))?/i);
+    if (!m) m = t.match(/^\/?connect\s+([^;\s]+)\s*(?:;\s*password\s+"?([^";]+)"?)?/i);
+    if (!m) return;
+    form.host = m[1];
+    if (m[2]) form.password = decodeURIComponent(m[2].trim());
+    const steam = ["cs2", "cs16", "source"];
+    if (/steam:|connect/i.test(t) && !steam.includes(form.game) && !form.game.startsWith("cod")) form.game = "cs2";
   }
 
   async function save(e: SubmitEvent) {
@@ -383,7 +396,7 @@
 
         <div class="acts">
           <button class="btn" onclick={() => join(s)} disabled={state === "offline" && !st?.stale && g?.join === "copy"}>
-            <Icon name={g?.join === "copy" ? "copy" : "play"} size={17} />{g?.join === "copy" ? "Adresi kopyala" : "Bağlan"}
+            <Icon name={g?.join === "copy" ? "copy" : "play"} size={17} />{g?.join === "copy" ? "Adresi kopyala" : "Oyna"}
           </button>
           <button class="btn ghost sm" aria-expanded={open[s.id] === "how"} onclick={() => toggle(s.id, "how")}>Nasıl bağlanırım?</button>
           {#if state !== "unknown"}
@@ -418,7 +431,7 @@
           <div class="drawer">
             <p>{fill(g?.howTo ?? "Adres: {host}:{port}", s)}</p>
             {#if g?.join === "exe"}
-              <p class="sub small">Bağlan'a ilk bastığında oyunun yerini bir kez göstermen gerekebilir; sonra tek tıkla girer.</p>
+              <p class="sub small">Oyna'ya ilk bastığında oyunun yerini bir kez göstermen gerekebilir; sonra tek tıkla girer.</p>
             {/if}
             {#if s.connectNotes}<p class="note"><Icon name="info" size={15} />{s.connectNotes}</p>{/if}
           </div>
@@ -492,13 +505,21 @@
       <div class="two">
         <label class="field grow">
           <span>Adres (IP ya da alan adı)</span>
-          <input type="text" bind:value={form.host} placeholder="ör. 185.12.34.56 ya da cod2.gmid.gg" required />
+          <input type="text" bind:value={form.host} oninput={onHostInput} placeholder="ör. 185.12.34.56:27015" required />
         </label>
         <label class="field port">
           <span>Port</span>
           <input type="number" min="1" max="65535" bind:value={form.port} placeholder={String(gameOf(form.game)?.defaultPort || "")} />
         </label>
       </div>
+      <p class="sub small tip">
+        <Icon name="info" size={14} />Sunucunun sitesinde/Discord'unda verdiği <code>connect 1.2.3.4:27015; password abc</code> ya da
+        <code>steam://connect/…</code> satırını olduğu gibi adres kutusuna yapıştırabilirsin; adres ve şifre kendiliğinden ayrılır.
+      </p>
+      <label class="field">
+        <span>Şifre (varsa)</span>
+        <input type="text" maxlength="64" bind:value={form.password} placeholder="Şifresiz sunucuda boş bırak" autocomplete="off" />
+      </label>
       <label class="field">
         <span>Ad</span>
         <input type="text" maxlength="80" bind:value={form.name} placeholder="ör. Kuzenlerle CoD2" />
@@ -508,7 +529,7 @@
         <textarea rows="2" maxlength="300" bind:value={form.description}></textarea>
       </label>
       <label class="field">
-        <span>Bağlanma notu (şifre vb., isteğe bağlı)</span>
+        <span>Not (isteğe bağlı)</span>
         <input type="text" maxlength="200" bind:value={form.connectNotes} />
       </label>
       <div class="field">
@@ -534,7 +555,7 @@
     <div class="panel dialog">
       <h3 class="h2"><Icon name="play" />{needExe.game.name} nerede?</h3>
       <p>
-        Bağlan'ın oyunu açıp seni doğrudan sunucuya sokabilmesi için <b>{needExe.game.exe}</b> dosyasını bir kez göster.
+        Oyna'nın oyunu açıp seni doğrudan sunucuya sokabilmesi için <b>{needExe.game.exe}</b> dosyasını bir kez göster.
         Bir dahakine sormaz.
       </p>
       <p class="sub small">Steam'den kurduysan genelde şu klasördedir:</p>
@@ -548,6 +569,9 @@
 {/if}
 
 <style>
+  .tip { margin: -4px 0 0; line-height: 1.6; }
+  .tip :global(svg) { vertical-align: -2px; margin-right: 4px; }
+  .tip code { font-size: 11.5px; white-space: nowrap; }
   .srv { display: flex; flex-direction: column; gap: 16px; max-width: 1500px; margin: 0 auto; }
   .top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
   .summary { display: flex; flex-direction: column; gap: 2px; }

@@ -21,6 +21,8 @@
   function apply(s: TimersSnapshot) {
     snap = s;
     offset = s.now - Date.now();
+    // Duraklatılmışken `now` donuk kalır; devam edilince ilk kare eski saatle hesaplanıp "00:00" göstermesin.
+    now = Date.now() + offset;
   }
 
   async function refresh() {
@@ -41,7 +43,14 @@
     };
   });
 
-  const elapsed = $derived.by(() => (snap ? snap.stopwatch.elapsedMs + (snap.stopwatch.running ? now - snap.now : 0) : 0));
+  /** Gösterilen son süre: yeni anlık görüntüyle saat birkaç ms geri kayarsa saniye hanesi boşuna geri-ileri kaymasın. */
+  let shown = 0;
+  const elapsed = $derived.by(() => {
+    if (!snap) return 0;
+    const v = snap.stopwatch.elapsedMs + (snap.stopwatch.running ? now - snap.now : 0);
+    if (snap.stopwatch.running && v < shown && shown - v < 400) return shown;
+    return (shown = v);
+  });
   const remaining = (c: Countdown) => (c.endsAt ? Math.max(0, c.endsAt - now) : c.remainingMs);
 
   async function add(ms: number, name = label) {

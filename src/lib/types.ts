@@ -109,7 +109,7 @@ export interface Alerts {
   /** "Kütüphaneye ekleyeyim mi?" kartları. */
   games: GameSuggestion[];
   /** Sesle yazma: "Bunu böyle mi yazayım?" kartları. */
-  words: { id: number; from: string; to: string }[];
+  words: { id: number; from: string; to: string; added?: boolean }[];
 }
 
 /** Sesle yazma sözlüğü: `from` duyulunca `to` yazılır. */
@@ -158,6 +158,8 @@ export interface Server {
   logo: string | null;
   description: string;
   connectNotes: string;
+  /** Sunucu şifresi (Oyna'da oyuna verilir). */
+  password: string;
   /** Topluluk listesinden geldi (düzenlenemez). */
   remote: boolean;
   createdAt: number;
@@ -173,6 +175,7 @@ export interface ServerInput {
   logo: string | null;
   description: string;
   connectNotes: string;
+  password: string;
 }
 
 export interface Player {

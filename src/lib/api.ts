@@ -4,6 +4,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+export type BackupEvery = "day" | "week" | "off";
+
 export interface BackupInfo {
   name: string;
   size: number;
@@ -99,7 +101,13 @@ export const api = {
   openLog: (): Promise<void> => (inTauri ? invoke("open_log") : Promise.resolve()),
 
   backupNow: (): Promise<BackupInfo[]> => (inTauri ? invoke("backup_now") : api.appInfo().then((i) => i.backups)),
+  /** Yedek ayarı (kaç yedek, ne sıklıkla); argümansız çağrılırsa yalnız okur. */
+  backupPolicy: (keep?: number, every?: BackupEvery) =>
+    call<{ policy: { keep: number; every: BackupEvery }; backups: BackupInfo[] }>("backup_policy", { keep, every }),
 
+  /** `Arkaplanlar` klasöründeki arka planlar (en yeni başta). */
+  backgrounds: () => call<{ path: string; size: number }[]>("backgrounds_list"),
+  removeBackground: (path: string) => call<void>("background_remove", { path }),
   /** Dosya seçtirir ve `Arkaplanlar` klasörüne kopyalar. Vazgeçilirse `null`. */
   pickBackground: async (): Promise<string | null> => {
     if (!inTauri) return null;

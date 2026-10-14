@@ -4,7 +4,9 @@
 //! - Kurallar her diktede uygulanır (büyük/küçük harf fark etmez, sözcük sınırında; "GMD'ye" gibi eklerde ek
 //!   korunur) ve doğru sözcükler Whisper'a ipucu olarak da verilir.
 //! - Öğrenme: dikteden sonra yazıyı düzeltirsen (yapıştırılan yerde ya da Kontrol Odası'ndaki "Son dikteler"de)
-//!   eski ve yeni yazı karşılaştırılır; değişen kısa parçalar "Bunu böyle mi yazayım?" diye sorulur.
+//!   eski ve yeni yazı karşılaştırılır. Değişen kısa parça yanlış duyulmuşa benziyorsa (yazılışı yakın, ya da
+//!   doğrusu kısaltma/marka/sayı) kendiliğinden kural olur ve birkaç saniye "Geri al" gösterilir; cümleyi
+//!   başka türlü söylemek (sözcüğü bambaşka bir sözcükle değiştirmek) ve silmek öğrenilmez.
 
 use crate::db::Db;
 use serde::{Deserialize, Serialize};
@@ -202,6 +204,42 @@ pub fn overlap(pasted: &str, text: &str) -> f32 {
     a.iter().filter(|t| b.contains(&t.0)).count() as f32 / a.len() as f32
 }
 
+/// Düzeltme yanlış duyulmuş bir sözcüğe benziyor mu? Yalnız harf düzeltmesi, kısaltma/marka ("videoyu" → "VDS",
+/// "gmd" → "GMID"), sayı ya da yazılışı yakın bir sözcük ("Esad" → "Esat"). "nasılsın" → "naber" gibi cümleyi
+/// başka türlü söylemek düzeltme sayılmaz.
+pub fn plausible(from: &str, to: &str) -> bool {
+    let (f, t) = (fold(from), fold(to));
+    if f == t {
+        return true;
+    }
+    if to.chars().filter(|c| c.is_uppercase()).count() >= 2
+        || to.chars().any(|c| c.is_ascii_digit())
+    {
+        return true;
+    }
+    similarity(&f, &t) >= 0.5
+}
+
+/// 1 − (düzenleme uzaklığı / uzun olanın harf sayısı).
+fn similarity(a: &str, b: &str) -> f32 {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let n = a.len().max(b.len());
+    if n == 0 {
+        return 1.0;
+    }
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut cur = vec![i + 1; b.len() + 1];
+        for (j, cb) in b.iter().enumerate() {
+            cur[j + 1] = (prev[j] + usize::from(ca != cb))
+                .min(prev[j + 1] + 1)
+                .min(cur[j] + 1);
+        }
+        prev = cur;
+    }
+    1.0 - prev[b.len()] as f32 / n as f32
+}
+
 /// "GMD'ye" / "GMID'ye" → "GMD" / "GMID": aynı ek iki tarafta da varsa atılır.
 fn strip_common_suffix(a: &str, b: &str) -> (String, String) {
     for sep in ['\'', '’'] {
@@ -355,6 +393,18 @@ mod tests {
             &[rule("gmd", "GMID"), rule("gmd tool", "GMID Tool")],
         );
         assert_eq!(t, "GMID Tool aç");
+    }
+
+    #[test]
+    fn only_mishearings_are_learned() {
+        assert!(plausible("videoyu", "VDS"));
+        assert!(plausible("gmd", "GMID"));
+        assert!(plausible("Esad", "Esat"));
+        assert!(plausible("gmid", "GMID"));
+        assert!(plausible("iki", "2"));
+        assert!(!plausible("nasılsın", "naber"));
+        assert!(!plausible("elma", "armut"));
+        assert!(!plausible("yarın gelirim", "bugün"));
     }
 
     #[test]
