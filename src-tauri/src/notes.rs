@@ -153,9 +153,112 @@ pub fn purge_trash(db: &Db) -> rusqlite::Result<usize> {
     )
 }
 
+// ---- not resimleri ----
+//
+// Yapıştırılan / eklenen resimler `Notlar\Resimler` klasörüne kopyalanır; notta Markdown olarak
+// `![](Resimler/ad.png)` durur. Not dosyaları da `Notlar` klasöründe olduğundan başka bir Markdown
+// programında açınca resimler yine görünür.
+
+pub const IMAGES: &str = "Resimler";
+const IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
+const MAX_IMAGE: usize = 25 * 1024 * 1024;
+
+/// Dosyanın baştaki baytlarından resim türü (uzantıya güvenilmez).
+fn image_kind(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        Some("png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else if bytes.starts_with(b"GIF8") {
+        Some("gif")
+    } else if bytes.len() > 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("webp")
+    } else {
+        None
+    }
+}
+
+/// Resmi kaydeder, notta kullanılacak göreli yolu döner ("Resimler/20261014-213005-ab12.png").
+pub fn save_image(notes_dir: &Path, bytes: &[u8]) -> Result<String, String> {
+    if bytes.len() > MAX_IMAGE {
+        return Err("Resim çok büyük (en fazla 25 MB).".into());
+    }
+    let ext =
+        image_kind(bytes).ok_or("Bu dosya bir resim değil (PNG, JPG, GIF ya da WebP olmalı).")?;
+    let dir = notes_dir.join(IMAGES);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let name = format!(
+        "{}-{}.{ext}",
+        chrono::Local::now().format("%Y%m%d-%H%M%S"),
+        crate::util::new_id()
+            .chars()
+            .rev()
+            .take(6)
+            .collect::<String>()
+    );
+    std::fs::write(dir.join(&name), bytes).map_err(|e| format!("Resim kaydedilemedi: {e}"))?;
+    Ok(format!("{IMAGES}/{name}"))
+}
+
+/// Bilgisayardaki bir resmi nota ekler (kopyalanır; orijinali silinse de notta kalır).
+pub fn import_image(notes_dir: &Path, source: &Path) -> Result<String, String> {
+    let ext = source
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if !IMAGE_EXTS.contains(&ext.as_str()) {
+        return Err("Resim seç: PNG, JPG, GIF ya da WebP.".into());
+    }
+    let bytes = std::fs::read(source).map_err(|e| format!("Dosya okunamadı: {e}"))?;
+    save_image(notes_dir, &bytes)
+}
+
+/// Hiçbir notta (çöp kutusundakiler dahil) geçmeyen, bir günden eski resimler silinir.
+pub fn cleanup_images(db: &Db, notes_dir: &Path) -> usize {
+    let Ok(rd) = std::fs::read_dir(notes_dir.join(IMAGES)) else {
+        return 0;
+    };
+    let bodies: String = db
+        .conn()
+        .prepare("SELECT body FROM notes")
+        .and_then(|mut st| {
+            st.query_map([], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .map(|v| v.join("\n"))
+        .unwrap_or_default();
+    // Notlar okunamadıysa hiçbir şeye dokunma.
+    if bodies.is_empty()
+        && db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM notes", [], |r| r.get::<_, i64>(0))
+            .unwrap_or(1)
+            > 0
+    {
+        return 0;
+    }
+    let mut n = 0;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let old = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|a| a.as_secs() > 24 * 3600);
+        let ours = name
+            .rsplit_once('.')
+            .is_some_and(|(_, x)| IMAGE_EXTS.contains(&x.to_lowercase().as_str()));
+        if ours && old && !bodies.contains(&name) && std::fs::remove_file(e.path()).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
 /// Listede görünen kısa önizleme: Markdown işaretleri ayıklanmış ilk satırlar.
 pub fn preview(body: &str) -> String {
-    let text: String = body
+    let text: String = strip_images(body)
         .lines()
         .map(|l| {
             l.trim()
@@ -170,6 +273,28 @@ pub fn preview(body: &str) -> String {
         .collect::<Vec<_>>()
         .join(" · ");
     text.chars().take(140).collect()
+}
+
+/// `![…](…)` resimleri önizlemede "🖼" olur.
+fn strip_images(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(i) = rest.find("![") {
+        let after = &rest[i..];
+        match after
+            .find("](")
+            .and_then(|j| after[j..].find(')').map(|k| j + k))
+        {
+            Some(end) => {
+                out.push_str(&rest[..i]);
+                out.push('🖼');
+                rest = &after[end + 1..];
+            }
+            None => break,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Windows'ta dosya adında kullanılamayan karakterleri ayıklar.
@@ -268,6 +393,19 @@ mod tests {
         assert_eq!(slug("   "), "Başlıksız not");
         assert_eq!(slug("a/b\\c"), "a b c");
         assert_eq!(slug("son nokta..."), "son nokta");
+    }
+
+    #[test]
+    fn images_are_checked_and_saved() {
+        let dir = std::env::temp_dir().join(format!("gmid-noteimg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let png = [0x89, b'P', b'N', b'G', 13, 10, 26, 10, 0, 0];
+        let rel = save_image(&dir, &png).unwrap();
+        assert!(rel.starts_with("Resimler/") && rel.ends_with(".png"));
+        assert!(dir.join(&rel).is_file());
+        assert!(save_image(&dir, b"MZ not an image").is_err());
+        assert_eq!(preview("Bak: ![](Resimler/a.png) güzel"), "Bak: 🖼 güzel");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

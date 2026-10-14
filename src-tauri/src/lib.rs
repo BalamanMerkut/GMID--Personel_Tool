@@ -126,6 +126,15 @@ pub fn run() {
             if let Err(e) = notes::purge_trash(&db) {
                 log!("Çöp kutusu temizlenemedi: {e}");
             }
+            // Not resimleri: gösterilebilsin; hiçbir notta geçmeyen eskiler temizlensin.
+            let note_images = dir.folder(Some("Notlar")).join(notes::IMAGES);
+            let _ = std::fs::create_dir_all(&note_images);
+            app.asset_protocol_scope()
+                .allow_directory(&note_images, false)?;
+            let n = notes::cleanup_images(&db, &dir.folder(Some("Notlar")));
+            if n > 0 {
+                log!("{n} kullanılmayan not resmi silindi");
+            }
 
             downloader::recover(&db);
             app.manage(db);
@@ -278,6 +287,9 @@ pub fn run() {
             commands::tools::note_trash,
             commands::tools::note_restore,
             commands::tools::note_delete,
+            commands::tools::note_image_paste,
+            commands::tools::note_image_import,
+            commands::tools::notes_folder,
             commands::tools::open_quick_note,
             commands::tools::open_sticky,
             commands::tools::close_sticky,

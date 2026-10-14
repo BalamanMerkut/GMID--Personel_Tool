@@ -83,6 +83,29 @@ pub fn note_delete(
     Ok(())
 }
 
+/// Panodan yapıştırılan resim (base64): `Notlar\Resimler`e kaydedilir, notta kullanılacak yol döner.
+#[tauri::command]
+pub fn note_image_paste(dir: State<'_, DataDir>, data: String) -> CmdResult<String> {
+    use base64::Engine;
+    let raw = data.split_once(',').map_or(data.as_str(), |(_, b)| b);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(raw.trim())
+        .map_err(|_| "Resim okunamadı".to_string())?;
+    notes::save_image(&notes_dir(&dir), &bytes)
+}
+
+/// Bilgisayardan seçilen resmi nota kopyalar.
+#[tauri::command]
+pub fn note_image_import(dir: State<'_, DataDir>, path: String) -> CmdResult<String> {
+    notes::import_image(&notes_dir(&dir), std::path::Path::new(&path))
+}
+
+/// Not resimlerinin bulunduğu `Notlar` klasörü (göreli yolları göstermek için).
+#[tauri::command]
+pub fn notes_folder(dir: State<'_, DataDir>) -> String {
+    notes_dir(&dir).to_string_lossy().into_owned()
+}
+
 #[tauri::command]
 pub fn open_quick_note(app: AppHandle) {
     window::open_quick_note(&app);

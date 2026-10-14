@@ -173,6 +173,17 @@ export const api = {
     openQuick: () => call<void>("open_quick_note"),
     openSticky: (id: string) => call<void>("open_sticky", { id }),
     closeSticky: (id: string) => call<void>("close_sticky", { id }),
+    /** Panodaki resim (base64 / data URL) kaydedilir; notta kullanılacak göreli yol döner. */
+    pasteImage: (data: string) => call<string>("note_image_paste", { data }),
+    importImage: (path: string) => call<string>("note_image_import", { path }),
+    /** Resim seçtirir ve nota kopyalar; vazgeçilirse `null`. */
+    pickImage: async (): Promise<string | null> => {
+      if (!inTauri) return null;
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ multiple: false, directory: false, title: "Nota resim ekle", filters: [{ name: "Resim", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }] });
+      return typeof picked === "string" ? call<string>("note_image_import", { path: picked }) : null;
+    },
+    folder: () => call<string>("notes_folder"),
   },
 
   reminders: {

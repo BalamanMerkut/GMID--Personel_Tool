@@ -4,13 +4,16 @@
   import "@fontsource/jetbrains-mono/latin-ext-400.css";
   import "@fontsource/caveat/latin-500.css";
   import "@fontsource/caveat/latin-ext-500.css";
-  import { Editor } from "@tiptap/core";
+  import { Editor, mergeAttributes } from "@tiptap/core";
+  import Image from "@tiptap/extension-image";
   import { TaskItem, TaskList } from "@tiptap/extension-list";
   import { Placeholder } from "@tiptap/extensions";
   import { Markdown } from "@tiptap/markdown";
   import StarterKit from "@tiptap/starter-kit";
   import { onMount } from "svelte";
+  import { api, inTauri } from "../api";
   import Icon from "../Icon.svelte";
+  import { notify } from "../toast.svelte";
   import type { IconName } from "../icons";
   import { fontOf } from "../notestyle";
 
@@ -31,15 +34,109 @@
     onchange: (markdown: string) => void;
   } = $props();
 
+  // Resimler `Notlar\Resimler`de durur; notta göreli yol ("Resimler/x.png") yazılır, gösterirken tam yola çevrilir.
+  let base = "";
+  const ready = api.notes.folder().then((f) => (base = f)).catch(() => {});
+  const resolveSrc = (src: string | null) => {
+    if (!src || /^(https?:|data:|blob:|asset:)/i.test(src) || !base) return src;
+    return api.fileSrc(`${base}\\${src.replace(/\//g, "\\")}`);
+  };
+  /** Düzenleyiciden kopyalanan resmin tam yolu yeniden göreli yola döner. */
+  const unresolve = (src: string | null) => {
+    if (!src) return src;
+    let s = src;
+    try {
+      s = decodeURIComponent(src);
+    } catch {
+      /* olduğu gibi */
+    }
+    const m = s.match(/Resimler[\\/]([^\\/?#"]+)$/);
+    return m ? `Resimler/${m[1]}` : src;
+  };
+  const NoteImage = Image.extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        src: { default: null, parseHTML: (el) => unresolve(el.getAttribute("src")) },
+      };
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src: resolveSrc(HTMLAttributes.src as string | null) })];
+    },
+  }).configure({ inline: true, allowBase64: true });
+
+  /** Panodan ya da sürüklenerek gelen resim dosyası kaydedilip imlecin yerine (ya da `pos`a) eklenir. */
+  async function insertFile(file: File, pos?: number) {
+    if (file.size > 25 * 1024 * 1024) return notify("Resim çok büyük (en fazla 25 MB)", "info");
+    const data = await new Promise<string>((ok, no) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result));
+      r.onerror = () => no(r.error);
+      r.readAsDataURL(file);
+    });
+    try {
+      const src = await api.notes.pasteImage(data);
+      insertImage(src, pos);
+    } catch (e) {
+      notify(String(e), "info");
+    }
+  }
+  function insertImage(src: string, pos?: number) {
+    if (!editor) return;
+    const node = { type: "image", attrs: { src } };
+    if (pos == null) editor.chain().focus().insertContent(node).run();
+    else editor.chain().focus().insertContentAt(pos, node).run();
+  }
+  async function pickImage() {
+    if (!inTauri) return notify("Resim seçmek masaüstü uygulamasında çalışır; ekran görüntüsünü Ctrl+V ile yapıştırabilirsin", "info");
+    try {
+      const src = await api.notes.pickImage();
+      if (src) insertImage(src);
+    } catch (e) {
+      notify(String(e), "info");
+    }
+  }
+  const imageFiles = (list: FileList | null | undefined) => [...(list ?? [])].filter((f) => f.type.startsWith("image/"));
+
   let host: HTMLDivElement;
   let editor: Editor | undefined = $state();
   let tick = $state(0); // araç çubuğu durumlarını güncellemek için
   let loadedKey = "";
 
   onMount(() => {
+    let gone = false;
+    void ready.then(() => {
+      if (!gone) create();
+    });
+    return () => {
+      gone = true;
+      editor?.destroy();
+    };
+  });
+
+  function create() {
     editor = new Editor({
       element: host,
+      editorProps: {
+        // Ekran görüntüsü (Win+Shift+S, PrtSc) ya da kopyalanan resim Ctrl+V ile nota gelir.
+        handlePaste: (_view, event) => {
+          const files = imageFiles(event.clipboardData?.files);
+          if (!files.length) return false;
+          event.preventDefault();
+          for (const f of files) void insertFile(f);
+          return true;
+        },
+        handleDrop: (view, event, _slice, moved) => {
+          const files = moved ? [] : imageFiles(event.dataTransfer?.files);
+          if (!files.length) return false;
+          event.preventDefault();
+          const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          for (const f of files) void insertFile(f, pos);
+          return true;
+        },
+      },
       extensions: [
+        NoteImage,
         StarterKit.configure({ link: false }),
         TaskList,
         TaskItem.configure({ nested: true }),
@@ -53,8 +150,7 @@
       onTransaction: () => tick++,
     });
     loadedKey = docKey;
-    return () => editor?.destroy();
-  });
+  }
 
   // Başka bir nota geçildiyse içeriği değiştir (kaydetme olayı tetiklemeden).
   $effect(() => {
@@ -95,6 +191,9 @@
         <Icon name={t.icon} size={17} />
       </button>
     {/each}
+    <button title="Resim ekle (ya da ekran görüntüsünü Ctrl+V ile yapıştır)" aria-label="Resim ekle" onmousedown={(e) => e.preventDefault()} onclick={pickImage}>
+      <Icon name="image" size={17} />
+    </button>
   </div>
 {/if}
 <div class="editor" class:hand={font === "hand"} style:font-family={fontOf(font).family} bind:this={host}></div>
@@ -122,5 +221,7 @@
   .editor :global(ul[data-type="taskList"] li > div) { flex: 1; min-width: 0; }
   .editor :global(ul[data-type="taskList"] input[type="checkbox"]) { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
   .editor :global(li[data-checked="true"] > div) { color: var(--dim); text-decoration: line-through; }
+  .editor :global(img) { display: block; max-width: 100%; max-height: 520px; height: auto; margin: 6px 0; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); cursor: default; }
+  .editor :global(img.ProseMirror-selectednode) { outline: 2px solid var(--gold); outline-offset: 2px; }
   .editor :global(.is-editor-empty:first-child::before) { content: attr(data-placeholder); color: var(--dim); float: left; height: 0; pointer-events: none; }
 </style>

@@ -843,6 +843,12 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
         assists: [L("Dušan Tadić", "Fenerbahçe", 6), L("Gabriel Sara", "Galatasaray", 5), L("Rafa Silva", "Beşiktaş", 4)],
       };
     }
+    case "note_image_paste":
+      return a.data;
+    case "note_image_import":
+      return null;
+    case "notes_folder":
+      return "C:\\Users\\Sen\\Documents\\GMID Tool\\Notlar";
     case "backgrounds_list":
       return [];
     case "background_remove":
