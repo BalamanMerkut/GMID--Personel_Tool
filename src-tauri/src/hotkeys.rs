@@ -82,7 +82,7 @@ pub const ACTIONS: &[Action] = &[
         id: "screen.shot",
         group: "Oyun",
         label: "Ekran görüntüsü al (panoya kopyalanır, oyundan çıkmaz)",
-        default: "PrintScreen",
+        default: "Ctrl+Alt+P",
     },
     Action {
         id: "videos.clipboard",
@@ -144,14 +144,11 @@ fn overrides(app: &AppHandle) -> HashMap<String, String> {
 pub fn register_all(app: &AppHandle) {
     let custom = overrides(app);
     for a in ACTIONS {
-        let custom_accel = custom.get(a.id).cloned();
-        let fallback = custom_accel.is_none() && a.id == "screen.shot";
-        let accel = custom_accel.unwrap_or_else(|| a.default.into());
+        let accel = custom
+            .get(a.id)
+            .cloned()
+            .unwrap_or_else(|| a.default.into());
         bind(app, a.id, accel);
-        // Print Screen'i Windows (Ekran Alıntısı Aracı) tutuyorsa Ctrl+Print Screen denenir.
-        if fallback && failed(app, a.id) {
-            bind(app, a.id, "Ctrl+PrintScreen".into());
-        }
     }
 }
 
@@ -176,12 +173,6 @@ fn bind(app: &AppHandle, id: &'static str, accel: String) {
         }
     }
     map.insert(id, bound);
-}
-
-fn failed(app: &AppHandle, id: &str) -> bool {
-    let state = app.state::<Hotkeys>();
-    let map = state.0.lock().unwrap_or_else(|e| e.into_inner());
-    map.get(id).is_some_and(|b| b.error.is_some())
 }
 
 pub fn list(app: &AppHandle) -> Vec<HotkeyStatus> {
@@ -302,13 +293,26 @@ pub fn lock_target(app: &AppHandle) -> f32 {
 
 pub fn mic(app: &AppHandle, op: MicOp) {
     let was_lock_op = matches!(op, MicOp::ToggleLock(_));
+    let op_kind = if matches!(op, MicOp::ToggleMute) {
+        OpKind::Mute
+    } else {
+        OpKind::Other
+    };
     match app.state::<Audio>().mic(op) {
         Ok(s) => {
+            if !was_lock_op && matches!(op_kind, OpKind::Mute) {
+                crate::chime::mic(app, s.muted);
+            }
             let (icon, text) = mic_message(&s, was_lock_op);
             show_osd(app, icon, text);
         }
         Err(e) => show_osd(app, "info", e),
     }
+}
+
+enum OpKind {
+    Mute,
+    Other,
 }
 
 fn mic_message(s: &MicStatus, lock_op: bool) -> (&'static str, String) {

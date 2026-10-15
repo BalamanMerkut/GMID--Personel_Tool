@@ -20,8 +20,22 @@ pub fn audio_set_volume(audio: State<'_, Audio>, id: String, level: f32) -> Resu
 }
 
 #[tauri::command]
-pub fn audio_set_mute(audio: State<'_, Audio>, id: String, muted: bool) -> Result<(), String> {
-    audio.set_mute(id, muted)
+pub fn audio_set_mute(
+    app: tauri::AppHandle,
+    audio: State<'_, Audio>,
+    id: String,
+    muted: bool,
+) -> Result<(), String> {
+    // Mikrofonsa kısa açma/kapama sesi.
+    let is_mic = audio
+        .state()
+        .map(|s| s.inputs.iter().any(|d| d.id == id))
+        .unwrap_or(false);
+    audio.set_mute(id, muted)?;
+    if is_mic {
+        crate::chime::mic(&app, muted);
+    }
+    Ok(())
 }
 
 /// Ses karıştırıcısı: varsayılan çıkıştaki uygulamalar.

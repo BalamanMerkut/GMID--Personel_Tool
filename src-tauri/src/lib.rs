@@ -2,6 +2,7 @@ mod alarm;
 mod audio;
 mod backup;
 mod borderless;
+mod chime;
 mod clips;
 mod commands;
 mod db;

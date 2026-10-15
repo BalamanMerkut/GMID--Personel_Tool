@@ -105,6 +105,7 @@
   // ---- Ses & Mikrofon / Bildirimler ----
   let lockLevel = $state(getJson<number>("audio.micLockLevel", 1));
   let osd = $state(getJson("ui.osd", true));
+  let micSound = $state(getJson("audio.micSound", true));
   let reminderSound = $state(getJson("reminders.sound", true));
   let reminderToast = $state(getJson("reminders.toast", true));
   let reminderPopup = $state(getJson("reminders.popup", true));
@@ -219,6 +220,13 @@
             <span class="sub small">"Mikrofon kapalı", "Ses çıkışı: Kulaklık" gibi. Odağı çalmaz, tıklamaları geçirir.</span>
           </div>
           <Switch label="Ekran göstergesi" checked={osd} onchange={(v) => toggle("ui.osd", v, (x) => (osd = x))} />
+        </div>
+        <div class="line">
+          <div>
+            <b>Mikrofon açılıp kapanınca kısa ses</b>
+            <span class="sub small">Açılınca yükselen, kapanınca alçalan iki kısa, kısık nota (kısayol, tepsi ya da uygulamadan).</span>
+          </div>
+          <Switch label="Mikrofon sesi" checked={micSound} onchange={(v) => toggle("audio.micSound", v, (x) => (micSound = x))} />
         </div>
       </section>
       <section class="panel">
