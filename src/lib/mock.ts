@@ -309,6 +309,7 @@ const dictation: DictationStatus = {
   ],
 };
 let dictRules = [{ from: "GMI", to: "GMID", hits: 4 }];
+let mockDns: string | null = null;
 let dictLearn: { id: number; from: string; to: string; added?: boolean }[] = [{ id: 1, from: "videoyu", to: "VDS", added: true }, { id: 2, from: "gmd", to: "GMID" }];
 
 // ---- Yazılar ----
@@ -849,6 +850,22 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return null;
     case "notes_folder":
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Notlar";
+    case "dns_status":
+    case "dns_set": {
+      const P = [
+        { id: "cloudflare", name: "Cloudflare", detail: "Çoğu yerde en hızlılardan; sorgu kaydı tutmaz.", servers: ["1.1.1.1", "1.0.0.1"] },
+        { id: "google", name: "Google", detail: "Hızlı ve çok kararlı.", servers: ["8.8.8.8", "8.8.4.4"] },
+        { id: "quad9", name: "Quad9", detail: "Bilinen zararlı (virüs, dolandırıcılık) siteleri açmaz.", servers: ["9.9.9.9", "149.112.112.112"] },
+        { id: "adguard", name: "AdGuard", detail: "Reklam ve izleyici sitelerini engeller.", servers: ["94.140.14.14", "94.140.15.15"] },
+        { id: "cloudflare-family", name: "Cloudflare Aile", detail: "Zararlı ve yetişkin içerikli siteleri açmaz.", servers: ["1.1.1.3", "1.0.0.3"] },
+      ];
+      if (cmd === "dns_set") mockDns = a.id === "auto" ? null : String(a.id);
+      const cur = P.find((p) => p.id === mockDns);
+      return { servers: cur ? cur.servers : ["192.168.1.1"], adapters: ["Ethernet"], preset: mockDns, presets: P };
+    }
+    case "dns_bench":
+      await wait(900);
+      return [{ id: "cloudflare", ms: 9 }, { id: "google", ms: 14 }, { id: "quad9", ms: 22 }, { id: "adguard", ms: 41 }, { id: "cloudflare-family", ms: 10 }, { id: "current", ms: 18 }];
     case "backgrounds_list":
       return [];
     case "background_remove":

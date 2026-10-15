@@ -8,6 +8,7 @@ mod commands;
 mod db;
 mod deals;
 mod dictation;
+mod dns;
 mod downloader;
 mod dragout;
 mod drivers;
@@ -402,6 +403,9 @@ pub fn run() {
             commands::tools::power_now,
             commands::tools::power_dismiss,
             commands::tools::net_test,
+            commands::tools::dns_status,
+            commands::tools::dns_bench,
+            commands::tools::dns_set,
             commands::tools::media_now,
             commands::tools::presence_refresh,
             commands::tools::media_control,

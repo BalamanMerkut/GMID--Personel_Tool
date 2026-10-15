@@ -371,6 +371,43 @@ pub async fn media_control(action: String) -> CmdResult<()> {
 }
 
 /// Bağlantı testi (ping): modem, internet, GMID sunucuları, Steam. `quick`: oyun içi panel için kısa test.
+/// DNS: şu an kullanılanlar.
+#[tauri::command]
+pub async fn dns_status() -> crate::dns::Status {
+    tauri::async_runtime::spawn_blocking(crate::dns::status)
+        .await
+        .unwrap_or_default()
+}
+
+/// DNS seçeneklerinin yanıt süreleri (birkaç saniye).
+#[tauri::command]
+pub async fn dns_bench() -> Vec<crate::dns::Bench> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let current = crate::dns::status()
+            .servers
+            .into_iter()
+            .find(|s| s.parse::<std::net::Ipv4Addr>().is_ok());
+        crate::dns::bench(current)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// DNS'i değiştirir ("auto": internet sağlayıcısınınki). Oyun açıkken değiştirilmez: oyun sırasında ağ
+/// ayarlarının değişmesini bazı oyunların koruma sistemleri olağandışı sayabilir.
+#[tauri::command]
+pub async fn dns_set(app: AppHandle, id: String) -> CmdResult<crate::dns::Status> {
+    if !app.state::<crate::games::Games>().running_ids().is_empty() {
+        return Err("Oyun açıkken DNS değiştirilmez. Oyunu kapatıp tekrar dene.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::dns::set(&id)?;
+        Ok(crate::dns::status())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn net_test(app: AppHandle, quick: bool) -> CmdResult<crate::nettest::Report> {
     tauri::async_runtime::spawn_blocking(move || {

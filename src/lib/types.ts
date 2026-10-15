@@ -1203,3 +1203,8 @@ export interface FootballFav {
   name: string;
   logo: string;
 }
+
+/** DNS seçici. */
+export interface DnsPreset { id: string; name: string; detail: string; servers: string[] }
+export interface DnsStatus { servers: string[]; adapters: string[]; preset: string | null; presets: DnsPreset[] }
+export interface DnsBench { id: string; ms: number | null }

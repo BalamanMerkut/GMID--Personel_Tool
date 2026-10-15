@@ -7,7 +7,7 @@
   import Icon from "../Icon.svelte";
   import { GROUPS, msText, tone } from "../ping";
   import { notify } from "../toast.svelte";
-  import type { NetProbe, NetReport } from "../types";
+  import type { DnsBench, DnsStatus, NetProbe, NetReport } from "../types";
 
   let report = $state<NetReport | null>(null);
   let busy = $state(false);
@@ -26,7 +26,39 @@
     }
   }
 
-  onMount(() => void run());
+  onMount(() => {
+    void run();
+    void api.net.dns().then((d) => (dns = d)).catch(() => {});
+  });
+
+  // ---- DNS seçici ----
+  let dns = $state<DnsStatus | null>(null);
+  let bench = $state<DnsBench[]>([]);
+  let benching = $state(false);
+  let setting = $state<string | null>(null);
+  async function measure() {
+    benching = true;
+    try {
+      bench = await api.net.dnsBench();
+    } finally {
+      benching = false;
+    }
+  }
+  const msOf = (id: string) => bench.find((b) => b.id === id)?.ms;
+  const fastest = $derived(
+    bench.filter((b) => b.id !== "current" && b.ms != null).sort((a, b) => (a.ms ?? 0) - (b.ms ?? 0))[0]?.id ?? null,
+  );
+  async function useDns(id: string) {
+    setting = id;
+    try {
+      dns = await api.net.setDns(id);
+      notify(id === "auto" ? "DNS otomatiğe döndü" : `DNS: ${dns.presets.find((p) => p.id === id)?.name}`, "check");
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      setting = null;
+    }
+  }
 
   const grouped = $derived(GROUPS.map((g) => ({ ...g, list: (report?.probes ?? []).filter((p) => p.group === g.id) })).filter((g) => g.list.length));
   const peak = (p: NetProbe) => Math.max(40, ...p.samples.map((s) => s ?? 0));
@@ -100,6 +132,45 @@
     </section>
   {/each}
 
+  <section class="panel dns">
+    <div class="ghead">
+      <h3 class="h2"><Icon name="network" size={18} />DNS</h3>
+      <span class="sub small">
+        Şu an: <b>{dns ? (dns.preset ? dns.presets.find((p) => p.id === dns!.preset)?.name : "Otomatik (internet sağlayıcın)") : "…"}</b>
+        {#if dns?.servers.length}<span class="tnum"> · {dns.servers.filter((s) => !s.includes(":")).join(", ")}</span>{/if}
+        {#if msOf("current") != null}<span class="tnum"> · {msOf("current")} ms</span>{/if}
+      </span>
+      <button class="btn ghost sm" disabled={benching} onclick={measure}><Icon name="refresh" size={14} />{benching ? "Ölçülüyor…" : "Hızlarını ölç"}</button>
+    </div>
+    <div class="dlist">
+      {#each dns?.presets ?? [] as p (p.id)}
+        {@const ms = msOf(p.id)}
+        <div class="drow" class:on={dns?.preset === p.id}>
+          <div class="who">
+            <b>{p.name}{#if fastest === p.id}<span class="best">en hızlı</span>{/if}</b>
+            <span class="sub small">{p.detail}</span>
+          </div>
+          <span class="tnum dms" class:none={ms === null}>{ms === undefined ? "" : ms === null ? "yanıt yok" : `${ms} ms`}</span>
+          {#if dns?.preset === p.id}
+            <span class="cur"><Icon name="check" size={14} />Kullanılıyor</span>
+          {:else}
+            <button class="btn sm" disabled={!!setting} onclick={() => useDns(p.id)}>{setting === p.id ? "Uygulanıyor…" : "Kullan"}</button>
+          {/if}
+        </div>
+      {/each}
+    </div>
+    <div class="dfoot">
+      <span class="sub small">
+        Bütün bilgisayara uygulanır ve Windows yeniden açılınca da kalır; her seferinde açıp kapatmana gerek yok. Yönetici
+        izni ister. <b>Oyun açıkken değiştirilmez.</b> DNS yalnız site ve sunucu adlarının adrese çevrilmesini etkiler; oyun
+        sunucusuna giden bağlantıyı ve ping'i değiştirmez.
+      </span>
+      {#if dns?.preset}
+        <button class="btn ghost sm" disabled={!!setting} onclick={() => useDns("auto")}>{setting === "auto" ? "Uygulanıyor…" : "Otomatiğe dön"}</button>
+      {/if}
+    </div>
+  </section>
+
   <p class="sub small foot">
     50 ms altı çok iyi, 50–100 ms oynanır, 100 ms üstü gecikme hissedilir. <b>Titreme</b> (ping'in oynaması) ve <b>kayıp</b>,
     ping'in kendisinden bile önemlidir: takılma ve ışınlanma bunlardan olur. Oyundayken Oyun İçi Panel'deki
@@ -108,6 +179,20 @@
 </div>
 
 <style>
+  .dns { display: flex; flex-direction: column; gap: 10px; }
+  .dns .ghead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .dns .ghead .sub { flex: 1; }
+  .dlist { display: flex; flex-direction: column; gap: 6px; }
+  .drow { display: grid; grid-template-columns: minmax(0, 1fr) 90px 130px; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid transparent; }
+  .drow.on { border-color: var(--gold); background: rgba(227, 194, 112, 0.07); }
+  .drow .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .best { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--good); background: rgba(92, 192, 138, 0.14); }
+  .dms { text-align: right; font-weight: 700; }
+  .dms.none { color: var(--dim); font-weight: 500; font-size: 12px; }
+  .drow .btn, .cur { justify-self: end; }
+  .cur { display: inline-flex; align-items: center; gap: 5px; color: var(--gold-glow); font-weight: 700; font-size: 13px; }
+  .dfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .dfoot .sub { flex: 1 1 320px; line-height: 1.5; }
   .ping { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; margin: 0 auto; }
   .hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; border-width: 1px; }
   .hero.good { border-color: rgba(92, 192, 138, 0.55); background: linear-gradient(120deg, rgba(92, 192, 138, 0.1), rgba(34, 37, 42, 0.72) 60%); }
