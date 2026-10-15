@@ -18,6 +18,7 @@
   let gpu = $state(getJson("dictation.gpu", true));
   let tidy = $state(getJson("dictation.tidy", false));
   let autoLearn = $state(getJson("dictation.autoLearn", true));
+  let learnNotify = $state(getJson("dictation.learnNotify", true));
   let words = $state(getJson<string>("dictation.words", ""));
   let sounds = $state(getJson("dictation.sounds", true));
   let preload = $state(getJson("dictation.preload", true));
@@ -43,6 +44,18 @@
 
   async function removeRule(from: string) {
     rules = await api.dictation.ruleRemove(from).catch(() => rules);
+  }
+
+  let confirmClear = $state(false);
+  async function clearRules() {
+    if (!confirmClear) {
+      confirmClear = true;
+      setTimeout(() => (confirmClear = false), 4000);
+      return;
+    }
+    confirmClear = false;
+    for (const r of [...rules]) rules = await api.dictation.ruleRemove(r.from).catch(() => rules);
+    notify("Sözlük temizlendi", "check");
   }
 
   function startEdit(h: DictationEntry) {
@@ -306,12 +319,25 @@
         <b>Düzeltmelerimden kendiliğinden öğren</b>
         <span class="sub small">
           {autoLearn
-            ? "Açık: düzelttiğin sözcük sözlüğe hemen eklenir, sağ altta 10 sn “Geri al” görünür; dokunmazsan kalır."
+            ? "Açık: düzelttiğin sözcük sözlüğe hemen eklenir, tek tıkla “Geri al” 20 sn sağ altta durur; dokunmazsan kalır."
             : "Kapalı: her düzeltmede sağ altta “Bunu böyle mi yazayım?” diye sorar."}
         </span>
       </div>
       <Switch label="Düzeltmelerimden kendiliğinden öğren" checked={autoLearn} onchange={(v) => ((autoLearn = v), void setJson("dictation.autoLearn", v))} />
     </div>
+    {#if autoLearn}
+      <div class="learnrow">
+        <div>
+          <b>Öğrenince haber ver</b>
+          <span class="sub small">
+            {learnNotify
+              ? "Açık: sağ üstte “Sözlüğe eklendi: … → …” yazar, sağ altta Geri al çıkar."
+              : "Kapalı: sessizce öğrenir; eklenenleri aşağıdan görüp silebilirsin."}
+          </span>
+        </div>
+        <Switch label="Öğrenince haber ver" checked={learnNotify} onchange={(v) => ((learnNotify = v), void setJson("dictation.learnNotify", v))} />
+      </div>
+    {/if}
     <details class="how">
       <summary>Nasıl çalışıyor, neyi öğrenmez?</summary>
       <ul class="sub small">
@@ -319,6 +345,7 @@
         <li>Windows'un erişilebilirlik özelliğiyle (ekran okuyucuların kullandığı) okunur; şifre kutularına hiç bakılmaz.</li>
         <li><b>Silmek öğrenilmez:</b> cümleden vazgeçip silersen ya da yazının çoğunu değiştirirsen bir şey eklenmez.</li>
         <li><b>Başka söz söylemek öğrenilmez:</b> “nasılsın”ı “naber” yapmak gibi. Yalnız yanlış duyulmuşa benzeyenler öğrenilir: yazılışı yakın sözcükler (“Esad” → “Esat”), kısaltmalar ve adlar (“videoyu” → “VDS”, “gmd” → “GMID”), sayılar.</li>
+        <li><b>Yalnız tek sözcük:</b> iki sözcüğü birleştiren (“bedava.QR”), boşluklu ya da yalnız eki değişen (“telefon” → “telefonlar”) düzeltmeler öğrenilmez.</li>
         <li>Aşağıdaki <b>Son dikteler</b>den de düzeltebilirsin; eklenen her kuralı buradan silebilirsin.</li>
       </ul>
     </details>
@@ -328,6 +355,9 @@
       {:else}
         <span class="sub small">Henüz kural yok.</span>
       {/each}
+      {#if rules.length > 1}
+        <button class="btn ghost clearall" onclick={clearRules}>{confirmClear ? "Emin misin? Tekrar bas" : "Hepsini sil"}</button>
+      {/if}
     </div>
     <div class="addrule">
       <input bind:value={newFrom} placeholder="Yanlış yazdığı: videoyu" aria-label="Yanlış yazılan" />
@@ -376,6 +406,7 @@
 
 <style>
   .learnrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+  .clearall { margin-left: auto; }
   .learnrow > div { display: flex; flex-direction: column; gap: 2px; }
   .how summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--gold); }
   .how ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; line-height: 1.5; }

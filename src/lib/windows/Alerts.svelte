@@ -92,7 +92,7 @@
 
 <style>
   .learned { position: relative; overflow: hidden; }
-  .undo-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--gold); transform-origin: left; animation: undo 10s linear forwards; }
+  .undo-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--gold); transform-origin: left; animation: undo 20s linear forwards; }
   @keyframes undo { to { transform: scaleX(0); } }
   :global(html), :global(body) { background: transparent !important; overflow: hidden; }
   .stack { position: fixed; left: 6px; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 8px; }

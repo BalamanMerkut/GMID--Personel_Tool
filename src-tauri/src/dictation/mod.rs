@@ -60,7 +60,9 @@ pub struct Learn {
 /// Düzeltmelerden kendiliğinden öğren (varsayılan açık); kapalıysa her seferinde sorulur.
 pub const AUTO_LEARN_KEY: &str = "dictation.autoLearn";
 /// Kendiliğinden eklenen kuralın "Geri al" kartı bu kadar saniye durur.
-const UNDO_SECS: u64 = 10;
+const UNDO_SECS: u64 = 20;
+/// Öğrenince haber ver (sağ altta kart + sağ üstte kısa yazı); varsayılan açık.
+pub const LEARN_NOTIFY_KEY: &str = "dictation.learnNotify";
 
 #[derive(Default)]
 pub struct Dictation {
@@ -174,9 +176,12 @@ impl Dictation {
         let pairs: Vec<(String, String)> = found
             .iter()
             .filter(|(f, t)| {
-                let ok = !auto || vocab::plausible(f, t);
+                // Sorulacaksa da kendiliğinden eklenecekse de: yalnız tek sözcük, birleşik/ekli değil.
+                let ok = vocab::acceptable(f, t);
                 if !ok {
-                    crate::log!("Sesle yazma: {f} → {t} öğrenilmedi (yanlış duyulmuşa benzemiyor)");
+                    crate::log!(
+                        "Sesle yazma: {f} → {t} öğrenilmedi (tek sözcük düzeltmesine benzemiyor)"
+                    );
                 }
                 ok
             })
@@ -209,8 +214,21 @@ impl Dictation {
                 added: learned,
             });
         }
+        let notify = db.setting_json::<bool>(LEARN_NOTIFY_KEY).unwrap_or(true);
         if !added.is_empty() {
             let _ = app.emit("dictation-rules", ());
+            if notify {
+                if let Some(l) = p.iter().rev().find(|l| l.added) {
+                    crate::overlay::show_osd(
+                        app,
+                        "book",
+                        format!("Sözlüğe eklendi: {} → {} · sağ altta Geri al", l.from, l.to),
+                    );
+                }
+            } else {
+                // Haber verilmeyecekse kart hiç gösterilmez (kural yine eklenir; Kontrol Odası'ndan silinebilir).
+                p.retain(|l| !added.contains(&l.id));
+            }
             // Geri alınmazsa kart kendiliğinden kapanır, kural kalır.
             let app = app.clone();
             std::thread::spawn(move || {
@@ -318,6 +336,22 @@ impl Dictation {
 
 /// Ayarlar değişince (ve açılışta): açıksa klavye dinlemeyi başlatır.
 pub fn apply(app: &AppHandle) {
+    // Bir kez: eski sürümün yanlış öğrendiği kurallar ("bedava.QR", "telefon → telefonlar") temizlenir.
+    {
+        let db = app.state::<Db>();
+        if db
+            .setting("dictation.rulesCleaned")
+            .ok()
+            .flatten()
+            .is_none()
+        {
+            let n = vocab::clean_bad_rules(&db);
+            if n > 0 {
+                crate::log!("Sesle yazma: {n} hatalı sözlük kuralı silindi");
+            }
+            let _ = db.set_setting("dictation.rulesCleaned", "true");
+        }
+    }
     let d = app.state::<Dictation>();
     let enabled = app
         .state::<Db>()

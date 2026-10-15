@@ -181,9 +181,29 @@ fn boundary_after(c: Option<char>) -> bool {
     c.map_or(true, |c| !is_word(c) || c == '\'' || c == '’')
 }
 
+/// "bedava.QR", "kurdum.İnternetten": yazı alanından okunurken satır/cümle arasındaki boşluk kaybolabiliyor;
+/// harf + noktalama + harf/rakam gördüğü yerden böler ("4.5" gibi sayılar bölünmez).
+fn split_joined(w: &str) -> Vec<&str> {
+    let chars: Vec<(usize, char)> = w.char_indices().collect();
+    let mut out = Vec::new();
+    let mut start = 0;
+    for k in 1..chars.len().saturating_sub(1) {
+        let (i, c) = chars[k];
+        let prev = chars[k - 1].1;
+        let next = chars[k + 1].1;
+        if ".?!,;:".contains(c) && prev.is_alphanumeric() && next.is_alphabetic() {
+            out.push(&w[start..i + c.len_utf8()]);
+            start = i + c.len_utf8();
+        }
+    }
+    out.push(&w[start..]);
+    out
+}
+
 /// Noktalamadan arınmış sözcük (karşılaştırmada kullanılır) ve asıl hali.
 fn tokens(s: &str) -> Vec<(String, String)> {
     s.split_whitespace()
+        .flat_map(split_joined)
         .map(|w| {
             let core = w.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '’');
             let core = core.trim_end_matches(['\'', '’']);
@@ -218,6 +238,49 @@ pub fn plausible(from: &str, to: &str) -> bool {
         return true;
     }
     similarity(&f, &t) >= 0.5
+}
+
+/// Kendiliğinden öğrenilebilecek bir düzeltme mi: tek sözcükten tek sözcüğe, içinde noktalamayla birleşmiş
+/// sözcük yok ("bedava.QR"), yalnız ek farkı değil ("telefon" → "telefonlar") ve yanlış duyulmuşa benziyor.
+pub fn acceptable(from: &str, to: &str) -> bool {
+    let (f, t) = (fold(from), fold(to));
+    if from.contains(char::is_whitespace) || to.contains(char::is_whitespace) {
+        return false;
+    }
+    if joined(from) || joined(to) {
+        return false;
+    }
+    if f != t && (t.starts_with(&f) || f.starts_with(&t)) {
+        return false;
+    }
+    plausible(from, to)
+}
+
+/// Sözcüğün içinde (başında/sonunda değil) noktalama: "bedava.QR", "mi?Screenshot".
+fn joined(s: &str) -> bool {
+    let core = s.trim_matches(|c: char| !c.is_alphanumeric());
+    core.chars().any(|c| ".?!,;:/@".contains(c))
+}
+
+/// Eski sürümlerin yanlışlıkla öğrendiği kurallar (noktalamayla birleşmiş sözcükler, yalnız ek farkı) silinir.
+/// Silinen kural sayısı döner.
+pub fn clean_bad_rules(db: &Db) -> usize {
+    let v = rules(db);
+    let keep: Vec<Rule> = v
+        .iter()
+        .filter(|r| {
+            let (f, t) = (fold(&r.from), fold(&r.to));
+            let inflection =
+                f != t && !r.to.contains(' ') && (t.starts_with(&f) || f.starts_with(&t));
+            !(joined(&r.to) || joined(&r.from) || inflection)
+        })
+        .cloned()
+        .collect();
+    let n = v.len() - keep.len();
+    if n > 0 {
+        let _ = save(db, &keep);
+    }
+    n
 }
 
 /// 1 − (düzenleme uzaklığı / uzun olanın harf sayısı).
@@ -393,6 +456,46 @@ mod tests {
             &[rule("gmd", "GMID"), rule("gmd tool", "GMID Tool")],
         );
         assert_eq!(t, "GMID Tool aç");
+    }
+
+    #[test]
+    fn joined_words_and_suffixes_are_not_learned() {
+        // Satır sonu okunurken boşluk kaybolunca önceki cümlenin son sözcüğüyle birleşiyordu.
+        assert!(suggest("Bu ay bedava. QR kod okut", "Bu ay bedava.QR kod okut").is_empty());
+        assert!(suggest(
+            "Kurulumu yaptım kurdum. İnternetten baktım",
+            "Kurulumu yaptım kurdum.İnternetten baktım"
+        )
+        .is_empty());
+        assert!(!acceptable("Ayrıca", "mola.Ayrıca"));
+        assert!(!acceptable("QR", "bedava.QR"));
+        assert!(!acceptable("telefon", "telefonlar"));
+        assert!(!acceptable("cevaplar", "cevapla"));
+        assert!(!acceptable("telefonlar", "telefon şartı"));
+        assert!(acceptable("videoyu", "VDS"));
+        assert!(acceptable("gmd", "GMID"));
+        assert!(acceptable("Esad", "Esat"));
+    }
+
+    #[test]
+    fn old_bad_rules_are_cleaned() {
+        let dir = std::env::temp_dir().join(format!("gmid-vocab-clean-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        for (f, t) in [
+            ("Ayrıca", "mola.Ayrıca"),
+            ("telefon", "telefonlar"),
+            ("videoyu", "VDS"),
+            ("Ikea", "kurulumu.2"),
+            ("GMD", "GMID Tool"),
+        ] {
+            add(&db, f, t).unwrap();
+        }
+        assert_eq!(clean_bad_rules(&db), 3);
+        let left: Vec<String> = rules(&db).into_iter().map(|r| r.to).collect();
+        assert_eq!(left, vec!["VDS".to_string(), "GMID Tool".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
