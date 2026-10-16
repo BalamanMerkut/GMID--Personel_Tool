@@ -7,6 +7,7 @@
   import Icon from "../Icon.svelte";
   import { save, settings, type BgFocus, type BgKind, type Quality } from "../settings.svelte";
   import { notify } from "../toast.svelte";
+  import type { Download } from "../types";
 
   let { onreplay }: { onreplay: () => void } = $props();
 
@@ -39,6 +40,7 @@
   onMount(() => void loadLibrary());
 
   const src = (p: string) => (p ? api.fileSrc(p) : "");
+  const thumbSrc = (t: string) => (/^(https?:|data:)/.test(t) ? t : api.fileSrc(t));
   const fileName = (p: string) => (p.split(/[\\/]/).pop() ?? "").replace(/^\d{8}-\d{6}-/, "");
   const isGif = (p: string) => /\.gif$/i.test(p);
   const current = $derived(settings.bgKind === "file" ? settings.bgPath : "");
@@ -55,6 +57,31 @@
       notify("Arka plan değişti", "image");
     } catch (e) {
       notify(String(e), "info");
+    }
+  }
+
+  /** Videolarım'dan arka plan: indirilmiş MP4/WebM videolar (müzikler ve MKV olmaz). */
+  let mediaOpen = $state(false);
+  let media = $state<Download[]>([]);
+  let importing = $state<string | null>(null);
+  async function openMedia() {
+    mediaOpen = !mediaOpen;
+    if (!mediaOpen) return;
+    const all = await api.videos.list().catch(() => [] as Download[]);
+    media = all.filter((d) => d.status === "done" && !d.audioOnly && d.filePath && isVideo(d.filePath));
+  }
+  async function fromMedia(d: Download) {
+    if (!d.filePath || importing) return;
+    importing = d.id;
+    try {
+      await use(await api.importBackground(d.filePath));
+      await loadLibrary();
+      mediaOpen = false;
+      notify("Arka plan değişti", "image");
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      importing = null;
     }
   }
 
@@ -166,6 +193,9 @@
         <button class="tile add" onclick={pickFile} title="Resim (JPG, PNG, WebP), GIF ya da video (MP4, WebM)">
           <Icon name="plus" size={22} /><span>Yeni ekle</span>
         </button>
+        <button class="tile add" class:open={mediaOpen} onclick={openMedia} title="İndirdiğin videolardan birini arka plan yap">
+          <Icon name="film" size={22} /><span>Videolarımdan</span>
+        </button>
         {#each library as b (b.path)}
           <div class="tile" class:on={current === b.path}>
             <button class="pick" onclick={() => use(b.path)} title={fileName(b.path)}>
@@ -186,6 +216,28 @@
           </div>
         {/each}
       </div>
+      {#if mediaOpen}
+        <div class="media">
+          <div class="media-head">
+            <b>Videolarım</b>
+            <span class="sub small">· birine tıkla, arka plan olsun</span>
+            <button class="x" onclick={() => (mediaOpen = false)} aria-label="Kapat"><Icon name="x" size={14} /></button>
+          </div>
+          {#if media.length}
+            <div class="lib">
+              {#each media as d (d.id)}
+                <button class="tile mtile" disabled={importing !== null} onclick={() => fromMedia(d)} title={d.title}>
+                  {#if d.thumbnail}<img src={thumbSrc(d.thumbnail)} alt="" loading="lazy" />{:else}<video src={`${src(d.filePath ?? "")}#t=1`} muted playsinline preload="metadata"></video>{/if}
+                  <span class="mt">{importing === d.id ? "Kopyalanıyor…" : d.title}</span>
+                  {#if d.size}<span class="tag">{d.quality} · {formatSize(d.size)}</span>{/if}
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <p class="sub small">Videolarım'da arka plan olabilecek video yok (MP4 ya da WebM; müzikler olmaz). Video İndirici'den bir video indirince burada görünür.</p>
+          {/if}
+        </div>
+      {/if}
       <span class="sub small">
         Seçtiğin dosya GMID'in <code>Arkaplanlar</code> klasörüne kopyalanır; orijinalini silsen de bozulmaz. Hareketli
         arka plan için <b>MP4 video</b>, GIF'ten çok daha küçük ve akıcıdır; GIF'e çevirmene gerek yok. GIF ve videolar
@@ -291,7 +343,16 @@
   .tile { position: relative; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; border: 1px solid var(--line-2); background: var(--coal-2); }
   .tile.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 194, 112, 0.35); }
   .tile.add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-style: dashed; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
-  .tile.add:hover { color: var(--gold-glow); border-color: var(--gold-dim); }
+  .tile.add:hover, .tile.add.open { color: var(--gold-glow); border-color: var(--gold-dim); }
+  .media { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border-radius: 12px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.025); }
+  .media-head { display: flex; align-items: baseline; gap: 6px; }
+  .media-head .x { margin-left: auto; align-self: center; display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+  .media-head .x:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+  .mtile { padding: 0; cursor: pointer; font: inherit; color: inherit; }
+  .mtile:hover:not(:disabled) { border-color: var(--gold-dim); }
+  .mtile:disabled { cursor: progress; opacity: 0.7; }
+  .mtile img, .mtile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mt { position: absolute; left: 0; right: 0; top: 0; padding: 6px 8px 14px; font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: linear-gradient(rgba(0, 0, 0, 0.7), transparent); }
   .pick { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: pointer; }
   .pick img, .pick video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .tag { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 10.5px; }

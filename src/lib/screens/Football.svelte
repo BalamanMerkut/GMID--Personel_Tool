@@ -103,7 +103,20 @@
     const d = new Date(+key.slice(0, 4), +key.slice(4, 6) - 1, +key.slice(6, 8), 12);
     return [WEEKDAY.format(d), `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}`];
   };
-  const leagueName = (id: string) => (id === "all" ? "Tüm maçlar" : (leagues.find(([s]) => s === id)?.[1] ?? id));
+  /** Kenar menüde olmayan, takım sayfasında görünen kupalar. */
+  const CUPS: Record<string, string> = {
+    "tur.cup": "Türkiye Kupası",
+    "eng.fa": "FA Cup",
+    "eng.league_cup": "Lig Kupası",
+    "esp.copa_del_rey": "Kral Kupası",
+    "ita.coppa_italia": "İtalya Kupası",
+    "ger.dfb_pokal": "Almanya Kupası",
+    "fra.coupe_de_france": "Fransa Kupası",
+    "ned.cup": "Hollanda Kupası",
+    "por.taca.portugal": "Portekiz Kupası",
+    "uefa.super_cup": "UEFA Süper Kupa",
+  };
+  const leagueName = (id: string) => (id === "all" ? "Tüm maçlar" : (leagues.find(([s]) => s === id)?.[1] ?? CUPS[id] ?? id));
 
   async function guard<T>(work: () => Promise<T>, apply: (v: T) => void, quiet = false) {
     const my = ++seq;
@@ -188,7 +201,14 @@
     teamOpen = { league: lg, team };
     teamPage = null;
     teamTab = "squad";
-    void guard(() => api.football.team(lg, team.id), (p) => (teamPage = p));
+    void guard(
+      () => api.football.team(lg, team.id),
+      (p) => {
+        teamPage = p;
+        // Kupa maçından açıldıysa takımın asıl ligi (favori ve başlık için).
+        if (teamOpen && p.league !== teamOpen.league) teamOpen = { ...teamOpen, league: p.league };
+      },
+    );
   }
   function closeTeam() {
     teamOpen = null;
@@ -341,10 +361,7 @@
             {/if}
           {/each}
         {:else}
-          {#if tp.fixtures.length}
-            <div class="lgh">Sıradaki maçlar</div>
-            {#each tp.fixtures as m (m.id)}{@render game(m, tp.team.id)}{/each}
-          {/if}
+          <!-- En son oynanan en üstte, aşağı indikçe eskiler; gelecek maçlar en altta. Lig, Avrupa ve kupa maçları bir arada. -->
           <div class="lgh">Son maçlar</div>
           {#if tp.results.length}
             <div class="form">
@@ -354,6 +371,10 @@
             {#each tp.results as m (m.id)}{@render game(m, tp.team.id)}{/each}
           {:else}
             <p class="sub empty">Bu sezon oynanan maç bulunamadı.</p>
+          {/if}
+          {#if tp.fixtures.length}
+            <div class="lgh">Sıradaki maçlar</div>
+            {#each tp.fixtures as m (m.id)}{@render game(m, tp.team.id)}{/each}
           {/if}
         {/if}
       </section>
@@ -511,7 +532,10 @@
     {@render teamBtn(m.league, m.home.team, true, m.home.winner)}
     <span class="score tnum sm-score">{#if m.home.score === null}<span class="vs">–</span>{:else}{m.home.score}<i>-</i>{m.away.score}{/if}</span>
     {@render teamBtn(m.league, m.away.team, false, m.away.winner)}
-    {#if o}<span class="res {o}">{o}</span>{:else if m.league !== teamOpen?.league}<span class="lgtag sub small">{leagueName(m.league)}</span>{:else}<span></span>{/if}
+    <span class="gend">
+      {#if m.league !== teamOpen?.league}<span class="lgtag sub small" title={leagueName(m.league)}>{leagueName(m.league)}</span>{/if}
+      {#if o}<span class="res {o}">{o}</span>{/if}
+    </span>
   </div>
 {/snippet}
 
@@ -644,9 +668,9 @@
   .res.G { background: rgba(92, 192, 138, 0.18); color: #7fe0a8; }
   .res.B { background: rgba(227, 194, 112, 0.16); color: var(--gold); }
   .res.M { background: rgba(224, 106, 106, 0.18); color: #ff9a9a; }
-  .lgtag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; justify-self: end; }
-  .game .res { justify-self: end; }
-  .game { display: grid; grid-template-columns: 110px minmax(0, 1fr) 64px minmax(0, 1fr) 120px; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
+  .lgtag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .gend { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+  .game { display: grid; grid-template-columns: 110px minmax(0, 1fr) 64px minmax(0, 1fr) 160px; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
   .sm-score { min-width: 54px; font-size: 15px; padding: 3px 8px; }
   .kings { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
   .king { display: flex; flex-direction: column; gap: 4px; }

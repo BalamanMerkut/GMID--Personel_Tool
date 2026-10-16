@@ -130,12 +130,28 @@ fn capture() -> Result<Shot, String> {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     let mon = unsafe { MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST) };
     match win::dxgi(mon) {
-        Ok(s) => Ok(s),
+        Ok(s) if !is_black(&s) => Ok(s),
+        Ok(s) => {
+            // Siyah kare: korumalı içerik, HDR ya da sürücü kareyi vermedi. Klasik kopya denenir;
+            // o da siyahsa ekran gerçekten siyahtır.
+            crate::log!("Ekran görüntüsü: DXGI karesi siyah, klasik yöntem deneniyor");
+            Ok(win::gdi(mon).unwrap_or(s))
+        }
         Err(e) => {
             crate::log!("Ekran görüntüsü: DXGI olmadı ({e}), klasik yöntem deneniyor");
             win::gdi(mon)
         }
     }
+}
+
+/// Görüntü baştan sona (neredeyse) siyah mı? Seyrek örneklenir: 1080p'de ~8 bin piksel.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_black(shot: &Shot) -> bool {
+    let px = shot.rgba.len() / 4;
+    let step = (px / 8192).max(1);
+    (0..px)
+        .step_by(step)
+        .all(|i| shot.rgba[i * 4..i * 4 + 3].iter().all(|&c| c < 8))
 }
 
 #[cfg(not(windows))]
@@ -228,13 +244,16 @@ mod win {
         let (device, ctx) = (device.ok_or("D3D11 yok")?, ctx.ok_or("D3D11 yok")?);
         let dup =
             unsafe { output.DuplicateOutput(&device) }.map_err(|e| format!("çoğaltma: {e}"))?;
-        // İlk kare genelde hemen gelir; ekran hiç değişmiyorsa birkaç kez beklenir.
+        // Çoğaltma yeni açıldığında gelen ilk kareler çoğu zaman yalnız fare imlecidir
+        // (`LastPresentTime` 0): dokusu henüz doldurulmamıştır ve görüntü simsiyah çıkar. Ekranın
+        // gerçekten çizildiği ilk kare beklenir; ekran hiç değişmiyorsa gelmez, o zaman GDI'ya geçilir.
         let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
         let mut res: Option<IDXGIResource> = None;
         let mut got = false;
-        for _ in 0..6 {
-            match unsafe { dup.AcquireNextFrame(150, &mut info, &mut res) } {
-                Ok(()) if res.is_some() => {
+        for _ in 0..8 {
+            res = None;
+            match unsafe { dup.AcquireNextFrame(100, &mut info, &mut res) } {
+                Ok(()) if res.is_some() && info.LastPresentTime != 0 => {
                     got = true;
                     break;
                 }
@@ -453,6 +472,19 @@ mod tests {
         assert_eq!(d.len(), 16); // 2*3=6 → 8 bayt satır
         assert_eq!(&d[0..6], &[255, 0, 0, 255, 255, 255]); // alt satır önce: mavi, beyaz (BGR)
         assert_eq!(&d[8..14], &[0, 0, 255, 0, 255, 0]); // üst: kırmızı, yeşil
+    }
+
+    #[test]
+    fn black_frames_are_detected() {
+        let black = Shot {
+            width: 4,
+            height: 2,
+            rgba: [0, 0, 0, 255].repeat(8),
+        };
+        assert!(is_black(&black));
+        let mut lit = black.rgba.clone();
+        lit[5 * 4 + 1] = 200;
+        assert!(!is_black(&Shot { rgba: lit, ..black }));
     }
 
     #[test]

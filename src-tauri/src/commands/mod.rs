@@ -226,7 +226,7 @@ pub fn backup_policy(
 
 /// Seçilen resmi/GIF'i/videoyu `Arkaplanlar` klasörüne kopyalar; orijinal silinse de arka plan bozulmaz.
 #[tauri::command]
-pub fn import_background(dir: State<'_, DataDir>, source: String) -> CmdResult<String> {
+pub async fn import_background(dir: State<'_, DataDir>, source: String) -> CmdResult<String> {
     let src = std::path::Path::new(&source);
     let ext = src
         .extension()
@@ -254,7 +254,12 @@ pub fn import_background(dir: State<'_, DataDir>, source: String) -> CmdResult<S
         chrono::Local::now().format("%Y%m%d-%H%M%S")
     );
     let dest = dir.backgrounds().join(name);
-    std::fs::copy(src, &dest).map_err(|e| format!("Dosya kopyalanamadı: {e}"))?;
+    // Büyük videolar (Videolarım'dan film) saniyeler sürebilir: kopya arayüzü dondurmasın.
+    let (from, to) = (src.to_path_buf(), dest.clone());
+    tauri::async_runtime::spawn_blocking(move || std::fs::copy(from, to))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Dosya kopyalanamadı: {e}"))?;
     Ok(dest.to_string_lossy().into_owned())
 }
 

@@ -827,6 +827,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
           pl("7", "Gabriel Sara", "8", "M", 26, "Brazil"), pl("8", "Barış Alper Yılmaz", "53", "F", 25, "Turkey"), pl("9", "Victor Osimhen", "45", "F", 26, "Nigeria"), pl("10", "Mauro Icardi", "9", "F", 32, "Argentina")],
         results: [
           { id: "r1", league: a.league, date: "2026-10-05T17:00Z", state: "post", status: "MS", home: side(t("1", "Galatasaray"), 3, true), away: side(t("2", "Konyaspor"), 1), events: [] },
+          { id: "r1e", league: "uefa.champions", date: "2026-10-01T19:00Z", state: "post", status: "MS", home: side(t("7", "Liverpool"), 1), away: side(t("1", "Galatasaray"), 2, true), events: [] },
           { id: "r2", league: a.league, date: "2026-09-28T17:00Z", state: "post", status: "MS", home: side(t("3", "Fenerbahçe"), 1), away: side(t("1", "Galatasaray"), 1), events: [] },
           { id: "r3", league: a.league, date: "2026-09-21T17:00Z", state: "post", status: "MS", home: side(t("1", "Galatasaray"), 0), away: side(t("4", "Beşiktaş"), 2, true), events: [] },
         ],
@@ -868,6 +869,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return [{ id: "cloudflare", ms: 9 }, { id: "google", ms: 14 }, { id: "quad9", ms: 22 }, { id: "adguard", ms: 41 }, { id: "cloudflare-family", ms: 10 }, { id: "current", ms: 18 }];
     case "backgrounds_list":
       return [];
+    case "import_background":
+      await wait(400);
+      return a.source;
     case "background_remove":
       return null;
     case "backup_policy": {

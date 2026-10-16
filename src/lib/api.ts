@@ -107,6 +107,8 @@ export const api = {
   /** `Arkaplanlar` klasöründeki arka planlar (en yeni başta). */
   backgrounds: () => call<{ path: string; size: number }[]>("backgrounds_list"),
   removeBackground: (path: string) => call<void>("background_remove", { path }),
+  /** Uygulamadaki bir dosyayı (ör. Videolarım'daki video) `Arkaplanlar` klasörüne kopyalar. */
+  importBackground: (source: string) => call<string>("import_background", { source }),
   /** Dosya seçtirir ve `Arkaplanlar` klasörüne kopyalar. Vazgeçilirse `null`. */
   pickBackground: async (): Promise<string | null> => {
     if (!inTauri) return null;

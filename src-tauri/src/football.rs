@@ -28,6 +28,39 @@ pub const LEAGUES: [(&str, &str); 11] = [
     ("por.1", "Liga Portugal"),
 ];
 
+/// Takım sayfasında ligin yanında bakılan kupalar (ESPN kısa adı, Türkçe adı). Kenar menüde yoklar;
+/// takımın Avrupa ve kupa maçları da "Maçlar"da görünsün diye.
+pub const CUPS: [(&str, &str); 10] = [
+    ("tur.cup", "Türkiye Kupası"),
+    ("eng.fa", "FA Cup"),
+    ("eng.league_cup", "Lig Kupası"),
+    ("esp.copa_del_rey", "Kral Kupası"),
+    ("ita.coppa_italia", "İtalya Kupası"),
+    ("ger.dfb_pokal", "Almanya Kupası"),
+    ("fra.coupe_de_france", "Fransa Kupası"),
+    ("ned.cup", "Hollanda Kupası"),
+    ("por.taca.portugal", "Portekiz Kupası"),
+    ("uefa.super_cup", "UEFA Süper Kupa"),
+];
+
+/// Bir takımın maçlarına bakılacak turnuvalar: kendi ligi, Avrupa kupaları, ülkesinin kupası.
+pub fn competitions(league: &str) -> Vec<&'static str> {
+    let country = league.split('.').next().unwrap_or_default();
+    let mut v: Vec<&'static str> = LEAGUES
+        .iter()
+        .chain(CUPS.iter())
+        .map(|(s, _)| *s)
+        .filter(|s| {
+            *s == league
+                || s.starts_with("uefa.")
+                || (country != "uefa" && s.starts_with(&format!("{country}.")))
+        })
+        .collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Team {
@@ -716,6 +749,22 @@ impl Football {
         Ok(parse_standings(&v))
     }
 
+    /// Adresleri aynı anda ister (önbellekli); sonuçlar aynı sırada.
+    fn get_all(&self, urls: &[String]) -> Vec<Result<Value, String>> {
+        std::thread::scope(|s| {
+            let hs: Vec<_> = urls
+                .iter()
+                .map(|u| s.spawn(move || self.get_cached(u, LONG)))
+                .collect();
+            hs.into_iter()
+                .map(|h| {
+                    h.join()
+                        .unwrap_or_else(|_| Err("İstek yarıda kaldı".into()))
+                })
+                .collect()
+        })
+    }
+
     fn get_cached(&self, url: &str, ttl: Duration) -> Result<Value, String> {
         if let Some(v) = self.cached(url) {
             return Ok(v);
@@ -727,28 +776,12 @@ impl Football {
 
     /// Takım sayfası: kadro, son maçlar ve fikstür aynı anda istenir; gelmeyen bölüm boş kalır.
     pub fn team(&self, league: &str, id: &str) -> Result<TeamPage, String> {
-        if !known(league) || id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+        let cup = CUPS.iter().any(|(s, _)| *s == league);
+        if !(known(league) || cup) || id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
             return Err("Bilinmeyen takım".into());
         }
         let base = format!("{SITE}/{league}/teams/{id}");
-        let urls = [
-            base.clone(),
-            format!("{base}/roster"),
-            format!("{base}/schedule"),
-            format!("{base}/schedule?fixture=true"),
-        ];
-        let got: Vec<Result<Value, String>> = std::thread::scope(|s| {
-            let hs: Vec<_> = urls
-                .iter()
-                .map(|u| s.spawn(move || self.get_cached(u, LONG)))
-                .collect();
-            hs.into_iter()
-                .map(|h| {
-                    h.join()
-                        .unwrap_or_else(|_| Err("İstek yarıda kaldı".into()))
-                })
-                .collect()
-        });
+        let got = self.get_all(&[base.clone(), format!("{base}/roster")]);
         if got.iter().all(|r| r.is_err()) {
             return Err(got
                 .into_iter()
@@ -758,22 +791,47 @@ impl Football {
         let empty = Value::Null;
         let val = |i: usize| got[i].as_ref().unwrap_or(&empty);
         let info = &val(0)["team"];
-        let (mut results, mut fixtures) = split_schedule(league, val(2));
-        let (r2, f2) = split_schedule(league, val(3));
-        for m in r2 {
-            if !results.iter().any(|x| x.id == m.id) {
-                results.push(m);
+        // Kupa sayfasından açıldıysa takımın kendi ligi bilgiden bulunur (Fenerbahçe: tur.1).
+        let home = text(&info["defaultLeague"]["slug"]);
+        let league = if !known(league) || league.starts_with("uefa.") {
+            if known(&home) && !home.starts_with("uefa.") {
+                home.as_str()
+            } else {
+                league
             }
-        }
-        for m in f2 {
-            if !fixtures.iter().any(|x| x.id == m.id) {
-                fixtures.push(m);
+        } else {
+            league
+        };
+        // Lig, Avrupa kupaları ve ülke kupası: her birinde biten (schedule) ve gelecek (fixture) maçlar.
+        // Takım o turnuvada yoksa ESPN boş liste ya da hata döner; o turnuva atlanır.
+        let comps = competitions(league);
+        let urls: Vec<String> = comps
+            .iter()
+            .flat_map(|c| {
+                let b = format!("{SITE}/{c}/teams/{id}/schedule");
+                [b.clone(), format!("{b}?fixture=true")]
+            })
+            .collect();
+        let sched = self.get_all(&urls);
+        let (mut results, mut fixtures) = (Vec::<Match>::new(), Vec::<Match>::new());
+        for (i, r) in sched.iter().enumerate() {
+            let Ok(v) = r else { continue };
+            let (r, f) = split_schedule(comps[i / 2], v);
+            for m in r {
+                if !results.iter().any(|x| x.id == m.id) {
+                    results.push(m);
+                }
+            }
+            for m in f {
+                if !fixtures.iter().any(|x| x.id == m.id) {
+                    fixtures.push(m);
+                }
             }
         }
         results.sort_by(|a, b| b.date.cmp(&a.date));
         fixtures.sort_by(|a, b| a.date.cmp(&b.date));
-        results.truncate(10);
-        fixtures.truncate(8);
+        results.truncate(20);
+        fixtures.truncate(10);
         let mut t = team(info);
         if t.id.is_empty() {
             t.id = id.to_string();
@@ -1299,6 +1357,26 @@ mod tests {
         ]});
         assert_eq!(parse_roster(&grouped)[0].pos, "M");
         assert!(parse_roster(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn team_pages_look_at_cups_too() {
+        let c = competitions("tur.1");
+        for want in [
+            "tur.1",
+            "tur.cup",
+            "uefa.champions",
+            "uefa.europa",
+            "uefa.europa.conf",
+        ] {
+            assert!(c.contains(&want), "{want} yok");
+        }
+        assert!(!c.contains(&"eng.fa"));
+        assert!(competitions("eng.1").contains(&"eng.league_cup"));
+        // Avrupa kupasından açılınca başka ülkelerin kupalarına bakılmaz.
+        assert!(competitions("uefa.europa")
+            .iter()
+            .all(|s| s.starts_with("uefa.")));
     }
 
     #[test]
