@@ -457,6 +457,12 @@ fn preload(_path: &Path) {
     }
 }
 
+/// Video İndirici'nin kurduğu FFmpeg (Ses Paneli de ses çözmek için kullanır).
+pub(crate) fn ffmpeg_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+    ffmpeg(app.state::<crate::paths::DataDir>().root())
+}
+
 fn ffmpeg(root: &Path) -> Result<PathBuf, String> {
     tools::ffmpeg_dir(root)
         .map(|d| {

@@ -416,8 +416,55 @@ let dealsSnap = {
 };
 let updateStatus = { current: 29 as number | null, latest: null as unknown, available: false, checkedAt: null as number | null, error: null as string | null, progress: null as number | null };
 
+const soundpad = {
+  config: {
+    enabled: true, soundVolume: 0.5, micVolume: 1, passthrough: true, monitor: true, monitorVolume: 0.5, micId: "", stopKey: "Numpad0", overlap: false,
+    pads: [
+      { id: "p1", key: "Numpad1", path: "C:\\Müzik\\Tarkan - Şımarık.mp3", name: "Tarkan - Şımarık", volume: 1 },
+      { id: "p2", key: "Numpad2", path: "C:\\Sesler\\bruh.wav", name: "bruh", volume: 1.4 },
+      { id: "p3", key: "Numpad3", path: "C:\\Sesler\\alkis.mp3", name: "alkış", volume: 1 },
+      { id: "p4", key: "", path: "C:\\Sesler\\silinmis.mp3", name: "silinmiş ses", volume: 1 },
+    ],
+  },
+  playing: [] as string[],
+};
+
 export async function handle(cmd: string, a: Record<string, unknown>): Promise<unknown> {
   switch (cmd) {
+    case "soundpad_status":
+    case "soundpad_save":
+    case "soundpad_add": {
+      if (cmd === "soundpad_save") soundpad.config = a.config as typeof soundpad.config;
+      if (cmd === "soundpad_add")
+        for (const p of a.paths as string[])
+          soundpad.config.pads.push({ id: String(Date.now()), key: "Numpad5", path: p, name: p.split(/[\\/]/).pop() ?? p, volume: 1 });
+      return {
+        supported: true, config: structuredClone(soundpad.config), running: soundpad.config.enabled, error: null, playing: [...soundpad.playing],
+        missing: ["p4"], keyErrors: {}, ffmpeg: true,
+        devices: {
+          cable: { id: "cable", name: "CABLE Input (VB-Audio Virtual Cable)", isDefault: false, virtualCable: true }, cableMic: "CABLE Output",
+          inputs: [
+            { id: "mic1", name: "Mikrofon (HyperX Cloud II)", isDefault: true, virtualCable: false },
+            { id: "mic2", name: "Mikrofon (Logitech C920)", isDefault: false, virtualCable: false },
+            { id: "cableout", name: "CABLE Output (VB-Audio Virtual Cable)", isDefault: false, virtualCable: true },
+          ],
+          defaultOutputIsCable: false, defaultInputIsCable: false, defaultOutputName: "Kulaklık (HyperX Cloud II)",
+        },
+      };
+    }
+    case "soundpad_toggle": {
+      const id = a.id as string;
+      soundpad.playing = soundpad.playing.includes(id) ? soundpad.playing.filter((x) => x !== id) : soundpad.config.overlap ? [...soundpad.playing, id] : [id];
+      emit("soundpad-changed");
+      return;
+    }
+    case "soundpad_stop":
+      soundpad.playing = [];
+      emit("soundpad-changed");
+      return;
+    case "soundpad_cable_page":
+      window.open("https://vb-audio.com/Cable/", "_blank");
+      return;
     case "audio_state":
       return { supported: true, outputs: outputs.map((d) => ({ ...d })), inputs: inputs.map((d) => ({ ...d })), lock };
     case "audio_set_default": {

@@ -132,6 +132,10 @@ pub fn plugin() -> TauriPlugin<Wry> {
                 let app = app.app_handle().clone();
                 // Kısayol işleyicisi beklemesin diye iş ayrı iş parçacığında.
                 std::thread::spawn(move || run(&app, action));
+            } else {
+                // Ses Paneli'nin tuşları (numpad…).
+                app.state::<crate::soundpad::Soundpad>()
+                    .on_shortcut(app.app_handle(), shortcut.id());
             }
         })
         .build()

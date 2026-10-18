@@ -39,6 +39,7 @@ mod scheduler;
 mod screenshot;
 mod search;
 mod servers;
+mod soundpad;
 mod sysinfo;
 mod timers;
 mod titles;
@@ -171,6 +172,7 @@ pub fn run() {
             app.manage(deals::Deals::default());
             app.manage(football::Football::default());
             app.manage(perf::Perf::default());
+            app.manage(soundpad::Soundpad::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -179,6 +181,7 @@ pub fn run() {
 
             tray::create(handle)?;
             hotkeys::register_all(handle);
+            soundpad::start_saved(handle);
             scheduler::start(handle.clone());
             downloader::bridge::start(handle.clone());
             dictation::apply(handle);
@@ -275,6 +278,12 @@ pub fn run() {
             commands::install::backup_restore_cancel,
             commands::install::backup_restore_apply,
             commands::sound::audio_state,
+            commands::soundpad::soundpad_status,
+            commands::soundpad::soundpad_save,
+            commands::soundpad::soundpad_add,
+            commands::soundpad::soundpad_toggle,
+            commands::soundpad::soundpad_stop,
+            commands::soundpad::soundpad_cable_page,
             commands::sound::audio_set_default,
             commands::sound::audio_set_volume,
             commands::sound::audio_set_mute,
@@ -467,6 +476,9 @@ pub fn run() {
                     }
                     if let Some(d) = app.try_state::<dictation::Dictation>() {
                         d.engine.shutdown();
+                    }
+                    if let Some(s) = app.try_state::<soundpad::Soundpad>() {
+                        s.shutdown();
                     }
                     if let (Some(g), Some(db)) =
                         (app.try_state::<games::Games>(), app.try_state::<db::Db>())

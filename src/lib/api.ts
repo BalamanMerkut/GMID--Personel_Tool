@@ -20,6 +20,7 @@ export interface AppInfo {
 }
 
 const BG_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "mp4", "webm"];
+const SOUND_EXTENSIONS = ["mp3", "wav", "ogg", "opus", "m4a", "aac", "flac", "wma", "mp4", "webm", "mkv", "mov"];
 
 function browserStore(): Record<string, string> {
   try {
@@ -38,7 +39,7 @@ import type {
   ProgramList, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
   Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
-  Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot, DnsBench, DnsStatus } from "./types";
+  Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot, DnsBench, DnsStatus, SoundpadConfig, SoundpadStatus } from "./types";
 
 /** Bir Rust komutunu çağırır; tarayıcıda taklit katmana gider. */
 export async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -143,6 +144,28 @@ export const api = {
     if (!inTauri) return () => {};
     const { listen } = await import("@tauri-apps/api/event");
     return listen<string>("navigate", (e) => cb(e.payload));
+  },
+
+  /** Ses Paneli: tuşa basınca ses mikrofondan çalar (sanal kablo üzerinden). */
+  soundpad: {
+    status: () => call<SoundpadStatus>("soundpad_status"),
+    save: (config: SoundpadConfig) => call<SoundpadStatus>("soundpad_save", { config }),
+    add: (paths: string[]) => call<SoundpadStatus>("soundpad_add", { paths }),
+    toggle: (id: string) => call<void>("soundpad_toggle", { id }),
+    stop: () => call<void>("soundpad_stop"),
+    cablePage: () => call<void>("soundpad_cable_page"),
+    /** Ses dosyaları seçtirir (birden çok). Vazgeçilirse boş. */
+    pick: async (): Promise<string[]> => {
+      if (!inTauri) return [];
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: true,
+        directory: false,
+        title: "Ses ya da şarkı seç",
+        filters: [{ name: "Ses ve video", extensions: SOUND_EXTENSIONS }],
+      });
+      return Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
+    },
   },
 
   audio: {

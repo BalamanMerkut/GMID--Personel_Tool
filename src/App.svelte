@@ -7,6 +7,7 @@
   import Toast from "./lib/components/Toast.svelte";
   import { findScreen, groupOf, roomOf, SCREENS } from "./lib/nav";
   import Audio from "./lib/screens/Audio.svelte";
+  import Soundpad from "./lib/screens/Soundpad.svelte";
   import Home from "./lib/screens/Home.svelte";
   import Placeholder from "./lib/screens/Placeholder.svelte";
   import Reminders from "./lib/screens/Reminders.svelte";
@@ -179,6 +180,8 @@
           <Settings {info} {refreshInfo} onreplay={replaySplash} onnavigate={navigate} bind:tab={settingsTab} />
         {:else if route === "audio"}
           <Audio onnavigate={navigate} />
+        {:else if route === "soundpad"}
+          <Soundpad onnavigate={navigate} />
         {:else if route === "reminders"}
           <Reminders />
         {:else if route === "videos"}

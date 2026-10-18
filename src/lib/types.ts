@@ -1208,3 +1208,38 @@ export interface FootballFav {
 export interface DnsPreset { id: string; name: string; detail: string; servers: string[] }
 export interface DnsStatus { servers: string[]; adapters: string[]; preset: string | null; presets: DnsPreset[] }
 export interface DnsBench { id: string; ms: number | null }
+
+/** Ses Paneli: bir tuşa atanmış ses. */
+export interface SoundPad { id: string; key: string; path: string; name: string; volume: number }
+export interface SoundpadConfig {
+  enabled: boolean;
+  pads: SoundPad[];
+  soundVolume: number;
+  micVolume: number;
+  passthrough: boolean;
+  monitor: boolean;
+  monitorVolume: number;
+  micId: string;
+  stopKey: string;
+  overlap: boolean;
+}
+export interface SoundEndpoint { id: string; name: string; isDefault: boolean; virtualCable: boolean }
+export interface SoundpadStatus {
+  supported: boolean;
+  config: SoundpadConfig;
+  devices: {
+    cable: SoundEndpoint | null;
+    cableMic: string;
+    inputs: SoundEndpoint[];
+    defaultOutputIsCable: boolean;
+    defaultInputIsCable: boolean;
+    defaultOutputName: string;
+  };
+  running: boolean;
+  error: string | null;
+  playing: string[];
+  missing: string[];
+  /** Ses kimliği ("stop": durdurma tuşu) → neden kaydedilemedi. */
+  keyErrors: Record<string, string>;
+  ffmpeg: boolean;
+}

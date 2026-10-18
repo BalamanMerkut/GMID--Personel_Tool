@@ -7,6 +7,7 @@ pub mod install;
 pub mod karaoke;
 pub mod servers;
 pub mod sound;
+pub mod soundpad;
 pub mod tools;
 pub mod transcripts;
 pub mod uninstall;

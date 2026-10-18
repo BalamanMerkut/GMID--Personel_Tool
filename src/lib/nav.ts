@@ -69,6 +69,8 @@ export const ROOMS: Room[] = [
         description: "Kronometre ve aynı anda birden çok geri sayım. Tepsiden ve Oyun İçi Panel'den başlatılabilir." },
       { id: "audio", label: "Ses & Mikrofon", icon: "speaker", phase: null,
         description: "Kulaklık ve hoparlör arasında tek tık geçiş, mikrofon seviyesi kilidi ve oyundan çıkmadan çalışan kısayollar." },
+      { id: "soundpad", label: "Ses Paneli", icon: "mic", phase: null,
+        description: "Soundpad gibi: numpad tuşlarına ses ya da şarkı ata, tuşa basınca mikrofondan çalsın; Discord'daki herkes duysun, sen de kulaklıktan duy." },
       { id: "install", label: "Format Sonrası Kurulum", icon: "install", phase: null,
         description: "Formattan sonra kurulacak programların listesi: tek tıkla hepsini kur ya da USB'ye bir Format Kiti çıkar: formattan sonra programlar ve GMID'in kendisi, ayarları ve geçmişiyle geri gelir." },
       { id: "uninstall", label: "Program Kaldırıcı", icon: "trash", phase: null,
@@ -158,7 +160,15 @@ export const NAV: NavRoom[] = [
           { id: "timer", label: "Sayaç" },
         ],
       },
-      { id: "audio", label: "Ses & Mikrofon", icon: "speaker", tabs: [{ id: "audio", label: "Ses & Mikrofon" }] },
+      {
+        id: "audio",
+        label: "Ses & Mikrofon",
+        icon: "speaker",
+        tabs: [
+          { id: "audio", label: "Ses & Mikrofon" },
+          { id: "soundpad", label: "Ses Paneli" },
+        ],
+      },
       {
         id: "programs",
         label: "Programlar",
