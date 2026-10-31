@@ -423,6 +423,8 @@
   .filters i { font-style: normal; color: var(--dim); font-size: 11px; }
 
   .items { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 5px; margin: 0 -6px; padding: 0 6px; }
+  /* Not çoksa kartlar sıkışmasın, liste kaysın. */
+  .items > :global(*) { flex: none; }
   .sec { margin: 8px 2px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); }
   .sec:first-child { margin-top: 2px; }
   .item { position: relative; display: flex; text-align: left; width: 100%; border: 1px solid transparent; background: rgba(255, 255, 255, 0.025); border-radius: 11px; padding: 9px 10px 9px 14px; overflow: hidden; }

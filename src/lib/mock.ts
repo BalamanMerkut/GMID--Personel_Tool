@@ -59,6 +59,11 @@ const notes: Note[] = [
   },
 ];
 
+// Çok notlu liste (sıkışma denemesi).
+for (let i = 0; i < 12; i++)
+  notes.push({ id: `nx${i}`, title: `Backlog not ${i + 1}`, color: ["default", "plum", "teal", "rose"][i % 4], font: "inter", pinned: false,
+    body: "Bir iki üç dört beş altı yedi sekiz dokuz on.\n\nİkinci paragraf burada.", createdAt: now() - (i + 3) * 86_400_000, updatedAt: now() - (i + 3) * 86_400_000, deletedAt: null });
+
 const reminders: Reminder[] = [
   { id: "r1", title: "Çay demle", note: "", dueAt: now() + 25 * 60_000, repeat: "none", notified: false, done: false, createdAt: now() },
   { id: "r2", title: "Epic ücretsiz oyun yenilendi", note: "Kütüphaneye eklemeyi unutma", dueAt: now() + 3 * 86_400_000, repeat: "weekly", notified: false, done: false, createdAt: now() },
