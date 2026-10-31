@@ -10,7 +10,7 @@ Son güncelleme: 31 Ekim 2026.
 ### 1.1 Yeni geleni ayır
 - Fırsatlar'a girince, son girişten beri gelen oyunlar ilk bakışta belli olsun. Örneğin kırmızı çerçeve ve köşede **YENİ** etiketi kullanılabilir.
 - "En son ne gelmiş" görünsün. Yeniler en üstte ayrı bir şerit olabilir ("Son gelenler · 3"). Her kartta ne zaman geldiği yazsın ("2 saat önce").
-- Etiket şu durumlarda kalksın: kart görülünce mi, sayfadan çıkınca mı, yoksa 24 saat sonra mı? Bu karar yapılırken verilecek.
+- **Karar:** Etiket Fırsatlar sayfasına girince kalkar. O girişte yeniler hâlâ işaretli görünür; bir sonraki girişte normal kart olurlar.
 - Kenar menüdeki kırmızı rozet (v0.6x) aynı "görülmedi" bilgisini kullansın. Böylece rozet sayısı ile sayfadaki YENİ etiketleri hep tutar.
 
 ### 1.2 Mağaza sırası
@@ -18,6 +18,17 @@ Son güncelleme: 31 Ekim 2026.
 - Sonrası için önerilen sıra: PlayStation, Xbox/Microsoft Store, Ubisoft, EA, Prime Gaming, diğerleri.
 - Bu sıra filtreden bağımsız. Filtre (Epic / Steam …) yalnız neyin görüneceğini seçer, sıralamayı değiştirmez.
 - Aynı mağaza içinde önce ücretsizler, sonra indirim oranı büyük olanlar gelsin.
+
+### 1.3 Mağazanın kendi uygulamasında aç
+- Karta tıklayınca o mağazanın uygulaması yüklüyse ürün sayfası doğrudan uygulamada açılsın, yüklü değilse tarayıcıda açılsın.
+- Uygulamanın yüklü olup olmadığı Windows kayıt defterinden anlaşılır: bağlantı türünün sahibi var mı?
+- Mağazalara göre durum:
+  - **Steam:** `steam://store/<appid>`. Kesin çalışır.
+  - **Epic:** `com.epicgames.launcher://store/p/<ürün>`. Kesin çalışır.
+  - **Microsoft Store / Xbox:** `ms-windows-store://pdp/?ProductId=<id>`. Kesin çalışır.
+  - **GOG Galaxy, Ubisoft Connect, EA app:** Bağlantıları var ama mağaza sayfası açmada güvenilir değil. Denenip çalışmazsa tarayıcıda açılır.
+  - **PlayStation, Prime Gaming:** Bilgisayarda mağaza uygulaması yok, tarayıcıda açılır.
+- Kartta küçük bir seçenek de olsun: "Tarayıcıda aç".
 
 ## 2. Sesle yazma
 
