@@ -565,43 +565,48 @@
 {#snippet matchRow(m: FootballMatch)}
   {@const live = m.state === "in"}
   {@const fav = isFav(m.home.team.id) || isFav(m.away.team.id)}
-  <article class="mc" class:live class:fav class:post={m.state === "post"}>
-    <div class="mc-top">
-      {#if live}
-        <span class="pill live"><span class="dot"></span>{m.status || "Canlı"}</span>
-      {:else if m.home.score === null}
-        <span class="pill">{m.status && m.status !== TIME.format(new Date(m.date)) ? m.status : TIME.format(new Date(m.date))}</span>
-      {:else}
-        <span class="pill done">{m.status || "MS"}</span>
-      {/if}
-      {#if fav}<span class="favtag" title="Favori takımın"><Icon name="star" size={12} /></span>{/if}
+  {@const played = m.home.score !== null && m.away.score !== null}
+  {@const hw = played && (m.home.winner || (m.state === "post" && m.home.score! > m.away.score!))}
+  {@const aw = played && (m.away.winner || (m.state === "post" && m.away.score! > m.home.score!))}
+  <article class="mc" class:live class:fav>
+    {#if fav}<span class="favtag" title="Favori takımın"><Icon name="star" size={12} /></span>{/if}
+    <div class="sb">
+      {@render side(m, m.home, hw, m.state === "post" && aw)}
+      <div class="mid">
+        {#if played}
+          <div class="mc-score tnum"><span class:dimmed={m.state === "post" && aw}>{m.home.score}</span><i>–</i><span class:dimmed={m.state === "post" && hw}>{m.away.score}</span></div>
+        {:else}
+          <div class="mc-score kick tnum">{TIME.format(new Date(m.date))}</div>
+        {/if}
+        {#if live}
+          <span class="pill live"><span class="dot"></span>{m.status || "Canlı"}</span>
+        {:else if played}
+          <span class="pill done">{m.status || "MS"}</span>
+        {:else if m.status && m.status !== TIME.format(new Date(m.date))}
+          <span class="pill">{m.status}</span>
+        {/if}
+      </div>
+      {@render side(m, m.away, aw, m.state === "post" && hw)}
     </div>
-    {@render side(m, m.home, m.away)}
-    {@render side(m, m.away, m.home)}
     {#if m.events.length}
       <div class="mc-ev">
-        {#each m.events as e, i (i)}
-          {@const t = e.side === "home" ? m.home.team : m.away.team}
-          <span class:red={e.kind === "red"} title={t.name}>
-            {#if t.logo}<img src={t.logo} alt="" loading="lazy" />{/if}
-            <i>{evIcon(e.kind)}</i>{e.player || "?"}{evNote(e.kind)}{#if e.minute}<b class="tnum">{e.minute}</b>{/if}
-          </span>
+        {#each ["home", "away"] as const as sd (sd)}
+          <ul class={sd}>
+            {#each m.events.filter((e) => e.side === sd) as e, i (i)}
+              <li class:red={e.kind === "red"}><i>{evIcon(e.kind)}</i><span>{e.player || "?"}{evNote(e.kind)}</span>{#if e.minute}<b class="tnum">{e.minute}</b>{/if}</li>
+            {/each}
+          </ul>
         {/each}
       </div>
     {/if}
   </article>
 {/snippet}
 
-{#snippet side(m: FootballMatch, s: FootballMatch["home"], o: FootballMatch["home"])}
-  {@const lose = m.state === "post" && s.score !== null && o.score !== null && s.score < o.score}
-  <div class="mc-row" class:win={s.winner || (m.state === "post" && s.score !== null && o.score !== null && s.score > o.score)} class:lose>
-    <button class="mc-team" onclick={() => openTeam(m.league, s.team)} title="{s.team.name} · kadro ve maçlar">
-      {#if s.team.logo}<img src={s.team.logo} alt="" loading="lazy" />{:else}<span class="ph">{initials(s.team.name)}</span>{/if}
-      <span class="nm">{s.team.name}</span>
-      {#if isFav(s.team.id)}<Icon name="star" size={11} />{/if}
-    </button>
-    <span class="mc-score tnum">{s.score ?? ""}</span>
-  </div>
+{#snippet side(m: FootballMatch, s: FootballMatch["home"], win: boolean, lose: boolean)}
+  <button class="mc-team" class:win class:lose onclick={() => openTeam(m.league, s.team)} title="{s.team.name} · kadro ve maçlar">
+    {#if s.team.logo}<img src={s.team.logo} alt="" loading="lazy" />{:else}<span class="ph">{initials(s.team.name)}</span>{/if}
+    <span class="nm">{s.team.name}{#if isFav(s.team.id)}<Icon name="star" size={11} />{/if}</span>
+  </button>
 {/snippet}
 
 {#snippet skel(kind: "matches" | "table" | "team")}
@@ -611,9 +616,11 @@
       <div class="cards">
         {#each Array(6) as _, i (i)}
           <div class="mc sk">
-            <div class="sk-line w20"></div>
-            <div class="sk-team"><span class="sk-dot"></span><span class="sk-line w60"></span><span class="sk-line w8"></span></div>
-            <div class="sk-team"><span class="sk-dot"></span><span class="sk-line w50"></span><span class="sk-line w8"></span></div>
+            <div class="sb">
+              <span class="sk-side"><span class="sk-dot big"></span><span class="sk-line w70"></span></span>
+              <span class="sk-side"><span class="sk-line w100 tall"></span><span class="sk-line w60"></span></span>
+              <span class="sk-side"><span class="sk-dot big"></span><span class="sk-line w70"></span></span>
+            </div>
           </div>
         {/each}
       </div>
@@ -802,35 +809,39 @@
   .mc:hover { border-color: var(--line-2); transform: translateY(-1px); }
   .mc.live { border-color: rgba(224, 106, 106, 0.45); background: linear-gradient(180deg, rgba(224, 106, 106, 0.08), rgba(255, 255, 255, 0.015)); }
   .mc.fav:not(.live) { border-color: rgba(227, 194, 112, 0.35); }
-  .mc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; background: rgba(255, 255, 255, 0.06); color: var(--muted); }
   .pill.done { color: var(--dim); }
   .pill.live { background: rgba(224, 106, 106, 0.16); color: #ff9a9a; }
   .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5f5f; animation: pulse 1.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: 0.35; } }
-  .favtag { color: var(--gold); display: grid; place-items: center; }
-  .mc-row { display: flex; align-items: center; gap: 8px; }
-  .mc-team { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 4px 4px; margin-left: -4px; border-radius: 8px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .favtag { position: absolute; top: 9px; right: 10px; color: var(--gold); display: grid; }
+  .sb { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+  .mid { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 76px; }
+  .mc-score { display: flex; align-items: baseline; gap: 7px; font-size: 24px; font-weight: 800; line-height: 1; letter-spacing: 0.01em; }
+  .mc-score i { font-style: normal; font-weight: 400; color: var(--dim); }
+  .mc-score .dimmed { color: var(--muted); }
+  .mc-score.kick { font-size: 18px; font-weight: 700; color: var(--text); padding: 3px 10px; border-radius: 9px; background: rgba(0, 0, 0, 0.25); }
+  .mc.live .mc-score { color: #ffd9d9; }
+  .mc-team { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: none; padding: 6px 4px; border-radius: 10px; color: inherit; font: inherit; cursor: pointer; }
   .mc-team:hover { background: rgba(255, 255, 255, 0.05); }
   .mc-team:hover .nm { color: var(--gold-glow); }
-  .mc-team img, .mc-team .ph { width: 22px; height: 22px; object-fit: contain; flex: none; }
-  .mc-team .ph { display: grid; place-items: center; border-radius: 50%; background: var(--coal); font-size: 10px; font-weight: 700; color: var(--muted); }
-  .mc-team .nm { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mc-team :global(svg) { color: var(--gold); flex: none; }
-  .mc-score { min-width: 26px; text-align: right; font-size: 17px; font-weight: 800; }
-  .mc-row.lose .nm, .mc-row.lose .mc-score { color: var(--dim); font-weight: 500; }
-  .mc-row.win .nm { font-weight: 700; }
-  .mc.live .mc-score { color: #ffd2d2; }
-  .mc-ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; padding-top: 7px; border-top: 1px dashed rgba(255, 255, 255, 0.08); font-size: 11.5px; color: var(--muted); }
-  .mc-ev span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-  .mc-ev img { width: 13px; height: 13px; object-fit: contain; }
-  .mc-ev i { font-style: normal; font-size: 10px; }
-  .mc-ev b { color: var(--text); font-weight: 600; margin-left: 2px; }
+  .mc-team img, .mc-team .ph { width: 36px; height: 36px; object-fit: contain; flex: none; }
+  .mc-team .ph { display: grid; place-items: center; border-radius: 50%; background: var(--coal); font-size: 12px; font-weight: 700; color: var(--muted); }
+  .mc-team .nm { max-width: 100%; font-size: 13.5px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+  .mc-team .nm :global(svg) { color: var(--gold); flex: none; }
+  .mc-team.win .nm { font-weight: 700; color: var(--text); }
+  .mc-team.lose .nm { color: var(--muted); font-weight: 500; }
+  .mc-ev { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 2px; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.08); font-size: 11.5px; color: var(--muted); }
+  .mc-ev ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .mc-ev li { display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .mc-ev .away li { flex-direction: row-reverse; text-align: right; }
+  .mc-ev li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mc-ev i { font-style: normal; font-size: 10px; flex: none; }
+  .mc-ev b { color: var(--text); font-weight: 600; flex: none; }
   .mc-ev .red { color: #ff8a8a; }
   .mc-ev .red i { color: #ff5f5f; }
   .cnt { font-size: 10.5px; color: var(--dim); font-weight: 600; }
   .dayh { display: flex; align-items: baseline; justify-content: space-between; }
-  .dayh i { font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--dim); }
+  .dayh i { text-transform: none; font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--dim); }
   .btn.spin :global(svg) { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -839,6 +850,8 @@
   .sk { pointer-events: none; }
   .sk-team { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .sk-team.row { padding: 8px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+  .sk-side { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; min-width: 60px; }
+  .sk-line.tall { height: 20px; }
   .sk-col { display: flex; flex-direction: column; gap: 6px; flex: 1; }
   .sk-line, .sk-dot {
     display: block; height: 11px; border-radius: 6px;
@@ -848,7 +861,7 @@
   .sk-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; }
   .sk-dot.big { width: 38px; height: 38px; }
   .w4 { width: 4%; } .w8 { width: 8%; margin-left: auto; } .w20 { width: 20%; } .w30 { width: 30%; } .w40 { width: 40%; }
-  .w50 { width: 50%; } .w60 { width: 60%; } .w70 { width: 70%; }
+  .w50 { width: 50%; } .w60 { width: 60%; } .w70 { width: 70%; } .w100 { width: 100%; }
   .sk-line.r { margin-left: auto; }
   @keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
   @media (prefers-reduced-motion: reduce) { .sk-line, .sk-dot, .pill .dot { animation: none; } }

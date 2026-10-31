@@ -131,6 +131,22 @@ pub fn foreground_is_ours() -> bool {
     }
 }
 
+/// Öndeki pencere GMID'in yazı yazılabilen bir penceresiyse (ana pencere, hızlı not, yapışkan not) etiketi.
+pub fn our_window(app: &tauri::AppHandle) -> Option<String> {
+    use tauri::Manager;
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let fg = unsafe { GetForegroundWindow() };
+    if fg.0.is_null() {
+        return None;
+    }
+    app.webview_windows().into_iter().find_map(|(label, w)| {
+        let writable = label == crate::window::MAIN
+            || label == crate::window::QUICK_NOTE
+            || label.starts_with("sticky-");
+        (writable && w.hwnd().is_ok_and(|h| h.0 == fg.0)).then_some(label)
+    })
+}
+
 /// Yazıyı odaktaki programa yapıştırır: panoya koyar, Ctrl+V gönderir, sonra panoyu eski haline getirir.
 pub fn paste(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;

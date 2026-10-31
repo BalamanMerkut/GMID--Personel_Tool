@@ -51,5 +51,6 @@ void root().then(({ component, props }) => mount(component, { target: document.g
 
 // Sesle yazma GMID'in kendi penceresindeyken: yazı (Ctrl+V yerine) imlecin olduğu yere doğrudan konur.
 if (["main", "quicknote", "sticky"].includes(view.kind)) {
-  void import("./lib/insert").then((m) => m.listenDictationInsert());
+  const label = view.kind === "sticky" ? `sticky-${view.id}` : view.kind;
+  void import("./lib/insert").then((m) => m.listenDictationInsert(label));
 }

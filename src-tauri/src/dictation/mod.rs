@@ -506,7 +506,8 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
         Idle,
         /// Tuşlar basılı, süre dolması bekleniyor (mikrofon erken açılmış olabilir).
         Armed(Instant, Option<win::Recorder>),
-        Recording(win::Recorder, Instant, u64),
+        /// Kayıt, başlangıç, gösterilen saniye, başladığında öndeki GMID penceresi (varsa).
+        Recording(win::Recorder, Instant, u64, Option<String>),
         /// Başka bir tuşa basıldı: Ctrl ve Alt bırakılana kadar bekle.
         Blocked,
     }
@@ -583,7 +584,8 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                             std::thread::sleep(Duration::from_millis(350));
                             warm_up(&app2);
                         });
-                        Mode::Recording(rec, Instant::now(), 0)
+                        // Hangi GMID penceresinde konuşulduğu şimdi alınır: gösterge açılınca odak kayabiliyor.
+                        Mode::Recording(rec, Instant::now(), 0, win::our_window(&app))
                     }
                 } else if rec.is_none() && t.elapsed() >= PRE_ROLL {
                     Mode::Armed(t, Some(win::Recorder::start()))
@@ -591,7 +593,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                     Mode::Armed(t, rec)
                 }
             }
-            Mode::Recording(rec, start, shown) => {
+            Mode::Recording(rec, start, shown, target) => {
                 if others {
                     let _ = rec.finish();
                     d.set_phase(&app, "idle", None);
@@ -603,7 +605,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                     }
                     crate::overlay::dictation_view(&app, "processing", 0);
                     let app2 = app.clone();
-                    std::thread::spawn(move || process(&app2, rec));
+                    std::thread::spawn(move || process(&app2, rec, target));
                     Mode::Idle
                 } else {
                     // Gösterge her saniye tazelenir (kaybolmasın, süre görünsün).
@@ -616,7 +618,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                         last_level = Instant::now();
                         crate::overlay::dictation_level(&app, rec.level());
                     }
-                    Mode::Recording(rec, start, secs.max(shown))
+                    Mode::Recording(rec, start, secs.max(shown), target)
                 }
             }
             Mode::Blocked => {
@@ -639,7 +641,7 @@ fn sounds_on(app: &AppHandle) -> bool {
 
 /// Kaydı bitirir, yazıya döker, (isteğe bağlı) toparlar ve yapıştırır.
 #[cfg(windows)]
-fn process(app: &AppHandle, rec: win::Recorder) {
+fn process(app: &AppHandle, rec: win::Recorder, target: Option<String>) {
     let d = app.state::<Dictation>();
     d.busy.store(true, Ordering::SeqCst);
     d.generation.fetch_add(1, Ordering::SeqCst);
@@ -648,7 +650,7 @@ fn process(app: &AppHandle, rec: win::Recorder) {
     std::thread::sleep(std::time::Duration::from_millis(200));
     let result = rec
         .finish()
-        .and_then(|samples| run(app, &samples, released));
+        .and_then(|samples| run(app, &samples, released, target));
     match result {
         Ok(Some(entry)) => {
             crate::overlay::dictation_view(app, "hidden", 0);
@@ -678,6 +680,7 @@ fn run(
     app: &AppHandle,
     samples: &[i16],
     released: std::time::Instant,
+    target: Option<String>,
 ) -> Result<Option<Entry>, String> {
     let d = app.state::<Dictation>();
     let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
@@ -761,7 +764,17 @@ fn run(
     vocab::count_hits(&db, &used);
     if win::foreground_is_ours() {
         // GMID'in kendi penceresi (Notlar, Dene kutusu…): sayfa yazıyı imlecin olduğu yere kendisi koyar.
-        let _ = app.emit("dictation-insert", &text);
+        // Konuşulan pencere öne alınır (gösterge odağı kaydırmış olabilir), yazı yalnız ona gider; sayfa
+        // odak kaçmışsa en son tıklanan yazı alanına döner.
+        let label = target.unwrap_or_else(|| crate::window::MAIN.to_string());
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.set_focus();
+        }
+        crate::log!("Sesle yazma: GMID penceresine ({label}) yazılıyor");
+        let _ = app.emit(
+            "dictation-insert",
+            serde_json::json!({ "text": &text, "window": label }),
+        );
     } else {
         win::paste(app, &text)?;
     }
