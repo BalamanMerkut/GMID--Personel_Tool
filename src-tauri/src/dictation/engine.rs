@@ -556,6 +556,20 @@ pub fn heard_words(v: &serde_json::Value) -> Vec<(String, f32)> {
     words
 }
 
+/// `verbose_json` yanıtının yazısı. Sunucu bu kipte parçaları ~60 harfte, gerekirse sözcüğün ortasından
+/// böler ve `text` alanında aralarına satır sonu koyar ("versene" → "vers\nene" → "vers ene"). Parçaların
+/// kendi yazıları uç uca eklenir: yeni sözcük zaten boşlukla başlar, sözcüğün devamı boşluksuz gelir.
+pub fn verbose_text(v: &serde_json::Value) -> String {
+    let joined: Option<String> = v["segments"]
+        .as_array()
+        .filter(|a| !a.is_empty())
+        .and_then(|a| a.iter().map(|s| s["text"].as_str()).collect());
+    joined
+        .unwrap_or_else(|| v["text"].as_str().unwrap_or_default().to_string())
+        .trim()
+        .to_string()
+}
+
 /// whisper-server'a WAV gönderir (multipart/form-data). Önce sözcük güvenleriyle (`verbose_json`); sunucu
 /// bunu desteklemiyorsa düz yazıyla.
 fn post_inference(
@@ -567,7 +581,7 @@ fn post_inference(
 ) -> Result<Heard, String> {
     match post_inference_as(port, wav, prompt, timeout, "verbose_json", careful) {
         Ok(v) => Ok(Heard {
-            text: v["text"].as_str().unwrap_or_default().to_string(),
+            text: verbose_text(&v),
             words: heard_words(&v),
         }),
         Err(e) if e.starts_with("sunucu ") => {
@@ -603,6 +617,8 @@ fn post_inference_as(
         field("best_of", "5");
     }
     field("response_format", format);
+    // Ayrıntılı yanıtta parçalar sözcük sınırında bölünsün (sözcük ortasından kesilmesin).
+    field("split_on_word", "true");
     if !prompt.trim().is_empty() {
         field("prompt", prompt.trim());
     }
@@ -847,6 +863,39 @@ HTTPServer(('127.0.0.1', port), H).serve_forever()
         assert_eq!(heard_words(&v2), vec![("vds".to_string(), 0.3)]);
         // Güven yoksa boş.
         assert!(heard_words(&serde_json::json!({ "text": "x" })).is_empty());
+    }
+
+    #[test]
+    fn verbose_text_does_not_split_words() {
+        // Sunucu parçayı sözcük ortasından bölüp `text`e satır sonu koyuyor: "vers\nene".
+        let v = serde_json::json!({
+            "text": " Bunlar çok daha iyiydi ama şöyle bir 5 tane daha örnek vers\nene ona göre seçeyim.\n",
+            "segments": [
+                { "text": " Bunlar çok daha iyiydi ama şöyle bir 5 tane daha örnek vers" },
+                { "text": "ene ona göre seçeyim." }
+            ]
+        });
+        assert_eq!(
+            verbose_text(&v),
+            "Bunlar çok daha iyiydi ama şöyle bir 5 tane daha örnek versene ona göre seçeyim."
+        );
+        // Parça yoksa düz yazı.
+        assert_eq!(
+            verbose_text(&serde_json::json!({ "text": " Merhaba.\n" })),
+            "Merhaba."
+        );
+        // Sözcük güvenleri de bölünmüş parçayı tek sözcük sayar.
+        let t = serde_json::json!({ "segments": [
+            { "tokens": [{ "text": " örnek", "p": 0.9 }, { "text": " vers", "p": 0.8 }] },
+            { "tokens": [{ "text": "ene", "p": 0.7 }, { "text": " ona", "p": 0.9 }] }
+        ]});
+        assert_eq!(
+            heard_words(&t)
+                .iter()
+                .map(|x| x.0.as_str())
+                .collect::<Vec<_>>(),
+            ["örnek", "versene", "ona"]
+        );
     }
 
     #[test]
