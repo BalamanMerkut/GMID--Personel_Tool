@@ -322,13 +322,22 @@ impl Engine {
         careful: bool,
     ) -> Result<Heard, String> {
         self.touch();
+        let limit = inference_limit(wav.len(), careful);
         let mut last = String::new();
-        // Sunucu kapanmışsa (çökme, uyku) bir kez yeniden başlatıp dener.
+        // Sunucu kapanmışsa (çökme, uyku) bir kez yeniden başlatıp dener. Yanıt vermiyorsa (takıldıysa)
+        // beklemeye devam edilmez: sunucu kapatılır, sonraki dikte temiz bir sunucuyla başlar.
         for _ in 0..2 {
             let port = self.whisper_port(root, cfg)?;
-            match post_inference(port, wav, prompt, Duration::from_secs(180), careful) {
+            let started = Instant::now();
+            match post_inference(port, wav, prompt, limit, careful) {
                 Ok(t) => return Ok(t),
                 Err(e) => {
+                    let hung = started.elapsed() + Duration::from_secs(1) >= limit;
+                    crate::log!(
+                        "Sesle yazma: Whisper isteği {:.1} sn sonra başarısız{}: {e}",
+                        started.elapsed().as_secs_f64(),
+                        if hung { " (yanıt vermedi)" } else { "" }
+                    );
                     last = e;
                     if let Some(s) = self
                         .whisper
@@ -337,6 +346,12 @@ impl Engine {
                         .take()
                     {
                         s.stop();
+                    }
+                    if hung {
+                        return Err(
+                            "Whisper yanıt vermedi; yeniden başlatılıyor, birazdan tekrar dene."
+                                .into(),
+                        );
                     }
                 }
             }
@@ -569,6 +584,16 @@ pub fn verbose_text(v: &serde_json::Value) -> String {
         .unwrap_or_else(|| v["text"].as_str().unwrap_or_default().to_string())
         .trim()
         .to_string()
+}
+
+/// Bir isteğin en çok ne kadar sürebileceği: kısa dikte için 30 sn + sesin 3 katı (işlemcide büyük model
+/// bile buna sığar), dikkatli okuma (ders) için 3 dk. Bundan uzunu sunucunun takıldığını gösterir.
+fn inference_limit(wav_len: usize, careful: bool) -> Duration {
+    if careful {
+        return Duration::from_secs(180);
+    }
+    let secs = wav_len.saturating_sub(44) as u64 / 32_000;
+    Duration::from_secs((30 + secs * 3).min(180))
 }
 
 /// whisper-server'a WAV gönderir (multipart/form-data). Önce sözcük güvenleriyle (`verbose_json`); sunucu
@@ -862,6 +887,19 @@ HTTPServer(('127.0.0.1', port), H).serve_forever()
         assert_eq!(heard_words(&v2), vec![("vds".to_string(), 0.3)]);
         // Güven yoksa boş.
         assert!(heard_words(&serde_json::json!({ "text": "x" })).is_empty());
+    }
+
+    #[test]
+    fn inference_limit_scales_with_audio() {
+        assert_eq!(
+            inference_limit(44 + 32_000 * 5, false),
+            Duration::from_secs(45)
+        );
+        assert_eq!(
+            inference_limit(44 + 32_000 * 600, false),
+            Duration::from_secs(180)
+        );
+        assert_eq!(inference_limit(100, true), Duration::from_secs(180));
     }
 
     #[test]

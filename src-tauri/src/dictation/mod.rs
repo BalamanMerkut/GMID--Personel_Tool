@@ -72,6 +72,8 @@ pub struct Dictation {
     hook: AtomicBool,
     enabled: AtomicBool,
     busy: AtomicBool,
+    /// Meşgul olmaya başladığı an (ms): bir dikte takılı kalırsa sonrakileri sonsuza dek engellemesin.
+    busy_since: AtomicU64,
     phase: Mutex<(&'static str, Option<String>)>,
     history: Mutex<VecDeque<Entry>>,
     /// Her dikte artırır: yapıştırılan yazının izlenmesi yeni diktede biter.
@@ -334,6 +336,23 @@ impl Dictation {
             .unwrap_or_default()
     }
 
+    /// Önceki dikte hâlâ işleniyor mu? 4 dakikadan uzun süren iş takılmış sayılır (yenisi engellenmez).
+    fn is_busy(&self) -> bool {
+        if !self.busy.load(Ordering::SeqCst) {
+            return false;
+        }
+        let age =
+            (crate::util::now_ms() as u64).saturating_sub(self.busy_since.load(Ordering::SeqCst));
+        if age > 240_000 {
+            crate::log!(
+                "Sesle yazma: önceki dikte {} sn'dir bitmedi, beklenmiyor",
+                age / 1000
+            );
+            return false;
+        }
+        true
+    }
+
     fn set_phase(&self, app: &AppHandle, phase: &'static str, error: Option<String>) {
         let _ = app.emit(
             "dictation-state",
@@ -564,7 +583,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                         Mode::Idle
                     }
                 } else if t.elapsed() >= ARM {
-                    if d.busy.load(Ordering::SeqCst) {
+                    if d.is_busy() {
                         if let Some(r) = rec {
                             std::thread::spawn(move || drop(r.finish()));
                         }
@@ -660,13 +679,29 @@ fn sounds_on(app: &AppHandle) -> bool {
 fn process(app: &AppHandle, rec: win::Recorder, target: Option<String>) {
     let d = app.state::<Dictation>();
     d.busy.store(true, Ordering::SeqCst);
+    d.busy_since
+        .store(crate::util::now_ms() as u64, Ordering::SeqCst);
     d.generation.fetch_add(1, Ordering::SeqCst);
     let released = std::time::Instant::now();
     // Son hece kesilmesin.
     std::thread::sleep(std::time::Duration::from_millis(200));
-    let result = rec
-        .finish()
-        .and_then(|samples| run(app, &samples, released, target));
+    let result = rec.finish().and_then(|samples| {
+        crate::log!(
+            "Sesle yazma: kayıt bitti ({:.1} sn ses, {} ms)",
+            samples.len() as f64 / 16_000.0,
+            released.elapsed().as_millis()
+        );
+        run(app, &samples, released, target)
+    });
+    crate::log!(
+        "Sesle yazma: bitti ({} ms, {})",
+        released.elapsed().as_millis(),
+        match &result {
+            Ok(Some(_)) => "yazıldı",
+            Ok(None) => "yazılacak bir şey yok",
+            Err(_) => "hata",
+        }
+    );
     match result {
         Ok(Some(entry)) => {
             crate::overlay::dictation_view(app, "hidden", 0);
@@ -736,6 +771,11 @@ fn run(
                 e
             }
         })?;
+    crate::log!(
+        "Sesle yazma: yazıya döküldü ({} ms{})",
+        released.elapsed().as_millis(),
+        if loading { ", model yüklendi" } else { "" }
+    );
     if loading {
         crate::overlay::dictation_view(app, "processing", 0);
     }

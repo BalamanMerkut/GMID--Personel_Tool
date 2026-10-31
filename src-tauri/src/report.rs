@@ -133,6 +133,19 @@ pub fn create(
             }
         }
     }
+    if with_logs {
+        // Whisper sunucusunun kendi günlüğü (sesle yazma takılırsa nedeni burada görünür).
+        let wlog = crate::downloader::tools::dir(root).join("whisper-sunucu.log");
+        if let Ok(log) = std::fs::read(&wlog) {
+            let log = String::from_utf8_lossy(&log);
+            let lines: Vec<&str> = log.lines().collect();
+            let tail = lines[lines.len().saturating_sub(400)..].join("\r\n");
+            z.start_file("whisper-sunucu.log", opts)
+                .map_err(|e| e.to_string())?;
+            z.write_all(redact(&tail, home).as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+    }
     z.finish().map_err(|e| e.to_string())?;
 
     let first = desc
