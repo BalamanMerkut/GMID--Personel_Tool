@@ -279,8 +279,9 @@ impl Engine {
     }
 
     /// Şu an NVIDIA ile mi çalışıyor? (`None`: sunucu kapalı)
+    /// Sunucu o an başlatılıyorsa beklemez (`None`): durum sorgusu yükleme bitene kadar takılmasın.
     pub fn running_on_gpu(&self) -> Option<bool> {
-        let mut guard = self.whisper.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.whisper.try_lock().ok()?;
         let s = guard.as_mut()?;
         s.alive().then_some(s.gpu)
     }
@@ -617,8 +618,6 @@ fn post_inference_as(
         field("best_of", "5");
     }
     field("response_format", format);
-    // Ayrıntılı yanıtta parçalar sözcük sınırında bölünsün (sözcük ortasından kesilmesin).
-    field("split_on_word", "true");
     if !prompt.trim().is_empty() {
         field("prompt", prompt.trim());
     }

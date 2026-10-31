@@ -404,7 +404,9 @@ pub fn apply(app: &AppHandle) {
         .unwrap_or(false);
     d.enabled.store(enabled, Ordering::SeqCst);
     if !enabled {
-        d.engine.shutdown();
+        // Sunucu o an yükleniyorsa kapatma bekler; çağıran (kısayol, düğme) takılmasın.
+        let app2 = app.clone();
+        std::thread::spawn(move || app2.state::<Dictation>().engine.shutdown());
         return;
     }
     // Gösterge penceresi önceden hazır olsun: ilk dikte gecikmeli görünmesin.
@@ -585,7 +587,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
                             warm_up(&app2);
                         });
                         // Hangi GMID penceresinde konuşulduğu şimdi alınır: gösterge açılınca odak kayabiliyor.
-                        Mode::Recording(rec, Instant::now(), 0, win::our_window(&app))
+                        Mode::Recording(rec, Instant::now(), 0, our_window_quick(&app))
                     }
                 } else if rec.is_none() && t.elapsed() >= PRE_ROLL {
                     Mode::Armed(t, Some(win::Recorder::start()))
@@ -630,6 +632,20 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
             }
         };
     }
+}
+
+/// Öndeki GMID penceresi; pencere sorgusu ana iş parçacığını bekler, o meşgulse klavye dinleyicisi
+/// takılmasın diye en çok 150 ms beklenir (bulunamazsa yazı ana pencereye gider).
+#[cfg(windows)]
+fn our_window_quick(app: &AppHandle) -> Option<String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(win::our_window(&app));
+    });
+    rx.recv_timeout(std::time::Duration::from_millis(150))
+        .ok()
+        .flatten()
 }
 
 #[cfg(windows)]

@@ -16,22 +16,27 @@ async fn blocking<T: Send + 'static>(
         .map_err(|e| e.to_string())
 }
 
+// Durum ve ayar uygulama ana iş parçacığında çalışmasın: Whisper yüklenirken (ekran kartında dakikaları
+// bulabilir) pencere donmasın.
 #[tauri::command]
-pub fn dictation_status(app: AppHandle) -> Status {
-    app.state::<Dictation>().status(&app)
+pub async fn dictation_status(app: AppHandle) -> CmdResult<Status> {
+    blocking(app, |app| app.state::<Dictation>().status(app)).await
 }
 
 /// Ayarlar kaydedildikten sonra çağrılır: açıp kapatır, sunucular yeni ayarla yeniden başlar.
 #[tauri::command]
-pub fn dictation_apply(app: AppHandle) -> Status {
-    dictation::apply(&app);
-    app.state::<Dictation>().status(&app)
+pub async fn dictation_apply(app: AppHandle) -> CmdResult<Status> {
+    blocking(app, |app| {
+        dictation::apply(app);
+        app.state::<Dictation>().status(app)
+    })
+    .await
 }
 
 /// Üst çubuktaki düğme: açar/kapatır, yeni durumu döner.
 #[tauri::command]
-pub fn dictation_toggle(app: AppHandle) -> bool {
-    dictation::toggle(&app)
+pub async fn dictation_toggle(app: AppHandle) -> CmdResult<bool> {
+    blocking(app, dictation::toggle).await
 }
 
 /// `part`: "whisper" (seçili model + program) | "gpu" (NVIDIA hızlandırma) | "llm" (toparlayıcı)
