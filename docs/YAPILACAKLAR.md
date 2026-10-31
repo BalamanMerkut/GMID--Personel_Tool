@@ -76,7 +76,19 @@ Son güncelleme: 31 Ekim 2026.
 - Eklenince kısa bir bildirim yeter ("X kütüphaneye eklendi"); istenirse oradan geri alınsın.
 - Oyun olmayan programlar (başlatıcılar, araçlar) yanlışlıkla eklenmesin; bugünkü algılama kuralları korunur. Yanlış eklenen tek tıkla kaldırılabilsin ve bir daha eklenmesin.
 
-## 4. Bekleyen (öncekilerden)
+## 4. Ses Paneli
+
+### 4.1 Tek tıkla kablo kurulumu
+- **Şimdi:** Kullanıcı VB-CABLE'ı siteden kendisi indirip kuruyor.
+- **İstenen:** Ses Paneli'nde tek bir "Kur" düğmesi olsun:
+  1. GMID, VB-CABLE'ı resmi siteden (vb-audio.com) indirir; FFmpeg'i indirdiği gibi.
+  2. Zip'i açar, kurulumu yönetici izniyle başlatır. Windows bir kez izin ister.
+  3. Kurulum bitince kabloyu kendisi tekrar arar.
+  4. Windows varsayılan hoparlörü ya da mikrofonu kabloya çevirdiyse eski haline döndürür.
+- Kullanıcıya kalan tek iş: Discord'da bir kez Giriş Aygıtı olarak "CABLE Output" seçmek. Discord'un ayarlarına dışarıdan dokunulmaz.
+- Kaldırıcı kuralı geçerli: GMID kabloyu kaldırmaz, sadece kendi indirdiği kurulum dosyalarını siler.
+
+## 5. Bekleyen (öncekilerden)
 
 - **FPS göstergesi:** Panelde FPS neden çıkmıyor, teşhis ve çözüm (PresentMon).
 - **Ses Paneli:** VB-CABLE ile ilk gerçek deneme. Sorun çıkarsa geri bildirime göre düzeltme.
