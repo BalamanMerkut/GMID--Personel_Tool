@@ -85,6 +85,12 @@ pub const ACTIONS: &[Action] = &[
         default: "Ctrl+Alt+P",
     },
     Action {
+        id: "dictation.toggle",
+        group: "Sesle yazma",
+        label: "Sesle yazmayı aç / kapat",
+        default: "Ctrl+Alt+Y",
+    },
+    Action {
         id: "videos.clipboard",
         group: "Video İndirici",
         label: "Panodaki bağlantıyı indir (önerilen kalite)",
@@ -245,6 +251,9 @@ fn run(app: &AppHandle, action: &str) {
         "app.show" => window::show_main(app),
         "videos.clipboard" => download_clipboard(app),
         "screen.shot" => crate::screenshot::take(app),
+        "dictation.toggle" => {
+            crate::dictation::toggle(app);
+        }
         "gamemode.toggle" => {
             app.state::<crate::gamemode::GameMode>().toggle(app);
         }

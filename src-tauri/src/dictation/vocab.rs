@@ -14,6 +14,17 @@ use serde::{Deserialize, Serialize};
 pub const RULES_KEY: &str = "dictation.rules";
 /// "Hayır" denen öneriler bir daha sorulmaz.
 const REJECTED_KEY: &str = "dictation.rejected";
+/// Sözlüğe yalnız Whisper emin olmadığında danışılsın (varsayılan açık).
+pub const ONLY_UNSURE_KEY: &str = "dictation.vocabOnlyUnsure";
+/// Bir kez görülmüş, henüz öğrenilmemiş düzeltmeler (aynısı yeniden görülünce öğrenilir).
+const CANDIDATES_KEY: &str = "dictation.candidates";
+/// Whisper bu kadar emin duyduysa: sözlük o sözcüğe dokunmaz, sözcüğün değiştirilmesi de "yanlış duymuş"
+/// değil "fikir değiştirmiş" sayılır (öğrenilmez).
+pub const SURE: f32 = 0.85;
+/// Bunun altında Whisper bocalamış: düzeltme ilk görüşte öğrenilir.
+pub const UNSURE: f32 = 0.5;
+/// Arada kalan (ya da güveni bilinmeyen) düzeltme bu kadar kez görülünce öğrenilir.
+pub const SIGHTINGS: u32 = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -130,21 +141,118 @@ fn is_word(c: char) -> bool {
 }
 
 /// Kuralları uygular; yeni yazı ve kullanılan kuralların sırası.
+#[cfg(test)]
 pub fn apply(text: &str, rules: &[Rule]) -> (String, Vec<usize>) {
+    let (out, used, _) = apply_heard(text, rules, |_| None, false);
+    (out, used)
+}
+
+/// Kuralları uygular; `only_unsure` açıksa Whisper'ın net duyduğu sözcüklere (`confidence` ≥ [`SURE`])
+/// dokunulmaz: duyduğunu yazar, sözlüğe yalnız bocaladığında danışır. Yalnız büyük/küçük harf düzelten kurallar
+/// ("gmid" → "GMID") her zaman uygulanır. Dönen: yazı, uygulanan ve emin olunduğu için atlanan kurallar.
+pub fn apply_heard(
+    text: &str,
+    rules: &[Rule],
+    confidence: impl Fn(&str) -> Option<f32>,
+    only_unsure: bool,
+) -> (String, Vec<usize>, Vec<usize>) {
     let mut out = text.to_string();
     let mut used = Vec::new();
+    let mut skipped = Vec::new();
     // Uzun kurallar önce: "gmd tool" "gmd"den önce.
     let mut order: Vec<usize> = (0..rules.len()).collect();
     order.sort_by_key(|&i| std::cmp::Reverse(rules[i].from.chars().count()));
     for i in order {
         let r = &rules[i];
+        let case_only = fold(&r.from) == fold(&r.to);
+        if only_unsure && !case_only && confidence(&r.from).is_some_and(|c| c >= SURE) {
+            if replace_word(&out, &r.from, &r.to).1 > 0 {
+                skipped.push(i);
+            }
+            continue;
+        }
         let (next, n) = replace_word(&out, &r.from, &r.to);
         if n > 0 {
             out = next;
             used.push(i);
         }
     }
-    (out, used)
+    (out, used, skipped)
+}
+
+/// Bu düzeltme kaçıncı kez görülüyor (bu görülme dahil). Öğrenilince [`forget_sighting`] ile silinir.
+pub fn sighting(db: &Db, from: &str, to: &str) -> u32 {
+    let key = format!("{}\t{to}", fold(from));
+    let mut v: Vec<(String, u32)> = db.setting_json(CANDIDATES_KEY).unwrap_or_default();
+    let n = match v.iter_mut().find(|(k, _)| *k == key) {
+        Some((_, c)) => {
+            *c += 1;
+            *c
+        }
+        None => {
+            v.push((key, 1));
+            1
+        }
+    };
+    if v.len() > 300 {
+        v.drain(..v.len() - 300);
+    }
+    if let Ok(j) = serde_json::to_string(&v) {
+        let _ = db.set_setting(CANDIDATES_KEY, &j);
+    }
+    n
+}
+
+pub fn forget_sighting(db: &Db, from: &str, to: &str) {
+    let key = format!("{}\t{to}", fold(from));
+    let mut v: Vec<(String, u32)> = db.setting_json(CANDIDATES_KEY).unwrap_or_default();
+    v.retain(|(k, _)| *k != key);
+    if let Ok(j) = serde_json::to_string(&v) {
+        let _ = db.set_setting(CANDIDATES_KEY, &j);
+    }
+}
+
+/// Cümle baştan yazılmış mı: yapıştırılan sözcüklerin %70'inden azı yerinde duruyorsa ya da birbirinden ayrı
+/// ikiden çok yer değişmişse bu "yanlış duyulmuş sözcük" değil, söylenmek istenenin değişmesidir.
+pub fn rewritten(pasted: &str, edited: &str) -> bool {
+    let a: Vec<String> = tokens(pasted).into_iter().map(|t| t.0).collect();
+    let b: Vec<String> = tokens(edited).into_iter().map(|t| t.0).collect();
+    if a.is_empty() || a.len() > 400 || b.len() > 4000 {
+        return false;
+    }
+    let (n, m) = (a.len(), b.len());
+    let mut dp = vec![vec![0u16; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[i][j] = if a[i] == b[j] {
+                dp[i + 1][j + 1] + 1
+            } else {
+                dp[i + 1][j].max(dp[i][j + 1])
+            };
+        }
+    }
+    let common = dp[0][0] as usize;
+    // Değişen ayrı yerler: dikte yazısında eşleşmeyen sözcük öbekleri.
+    let (mut i, mut j, mut spots, mut in_gap) = (0, 0, 0, false);
+    while i < n && j < m {
+        if a[i] == b[j] {
+            in_gap = false;
+            i += 1;
+            j += 1;
+        } else if dp[i + 1][j] >= dp[i][j + 1] {
+            if !in_gap {
+                spots += 1;
+                in_gap = true;
+            }
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    if i < n && !in_gap {
+        spots += 1;
+    }
+    (n >= 4 && common * 10 < n * 7) || spots > 2
 }
 
 /// `from`u sözcük sınırlarında (büyük/küçük harf fark etmeden) `to` ile değiştirir. Sonrasında ek gelebilir
@@ -475,6 +583,78 @@ mod tests {
         assert!(acceptable("videoyu", "VDS"));
         assert!(acceptable("gmd", "GMID"));
         assert!(acceptable("Esad", "Esat"));
+    }
+
+    #[test]
+    fn sure_words_are_left_alone() {
+        let rules = vec![
+            Rule {
+                from: "videoyu".into(),
+                to: "VDS".into(),
+                hits: 0,
+            },
+            Rule {
+                from: "gmid".into(),
+                to: "GMID".into(),
+                hits: 0,
+            },
+        ];
+        let conf = |w: &str| match fold(w).as_str() {
+            "videoyu" => Some(0.95),
+            "gmid" => Some(0.97),
+            _ => None,
+        };
+        // Net duyduysa duyduğunu yazar; yalnız harf düzelten kural yine uygulanır.
+        let (t, used, skipped) = apply_heard("videoyu gmid ile aç", &rules, conf, true);
+        assert_eq!(t, "videoyu GMID ile aç");
+        assert_eq!((used, skipped), (vec![1], vec![0]));
+        // Bocaladıysa sözlüğe danışır.
+        let unsure = |w: &str| (fold(w) == "videoyu").then_some(0.4);
+        assert_eq!(apply_heard("videoyu aç", &rules, unsure, true).0, "VDS aç");
+        // Güven bilinmiyorsa ya da ayar kapalıysa eskisi gibi.
+        assert_eq!(
+            apply_heard("videoyu aç", &rules, |_| None, true).0,
+            "VDS aç"
+        );
+        assert_eq!(apply_heard("videoyu aç", &rules, conf, false).0, "VDS aç");
+    }
+
+    #[test]
+    fn rewrites_are_not_corrections() {
+        // Tek sözcük düzeltmesi: yeniden yazma değil.
+        assert!(!rewritten(
+            "yarın esad ile maça gidiyoruz",
+            "yarın Esat ile maça gidiyoruz"
+        ));
+        // Cümlenin çoğu değişti.
+        assert!(rewritten(
+            "yarın esad ile maça gidiyoruz",
+            "bugün evde kalıp film izleyeceğiz"
+        ));
+        // Üç ayrı yer değişti.
+        assert!(rewritten(
+            "bir iki üç dört beş altı yedi",
+            "bir X üç Y beş Z yedi"
+        ));
+        // İki yer: hâlâ düzeltme olabilir.
+        assert!(!rewritten(
+            "bir iki üç dört beş altı yedi sekiz",
+            "bir X üç dört beş Y yedi sekiz"
+        ));
+    }
+
+    #[test]
+    fn sightings_are_counted() {
+        let dir = std::env::temp_dir().join(format!("gmid-vocab-seen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        assert_eq!(sighting(&db, "Esad", "Esat"), 1);
+        assert_eq!(sighting(&db, "esad", "Esat"), 2);
+        forget_sighting(&db, "ESAD", "Esat");
+        assert_eq!(sighting(&db, "esad", "Esat"), 1);
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

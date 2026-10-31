@@ -19,7 +19,7 @@ mod win;
 
 use crate::db::Db;
 use crate::paths::DataDir;
-use engine::{Engine, WhisperCfg};
+use engine::{Engine, Heard, WhisperCfg};
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -27,6 +27,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
 pub const ENABLED_KEY: &str = "dictation.enabled";
+/// Oyun açıkken sesle yazma dinlemesin (varsayılan kapalı: oyunda da çalışır).
+pub const OFF_IN_GAME_KEY: &str = "dictation.offInGame";
 /// Açılışta modelleri önceden yükle (varsayılan açık).
 pub const PRELOAD_KEY: &str = "dictation.preload";
 
@@ -108,6 +110,7 @@ struct Settings {
     tidy: bool,
     words: String,
     rules: Vec<vocab::Rule>,
+    only_unsure: bool,
 }
 
 fn settings(db: &Db) -> Settings {
@@ -128,6 +131,7 @@ fn settings(db: &Db) -> Settings {
         tidy: db.setting_json("dictation.tidy").unwrap_or(false),
         words: db.setting_json("dictation.words").unwrap_or_default(),
         rules: vocab::rules(db),
+        only_unsure: db.setting_json(vocab::ONLY_UNSURE_KEY).unwrap_or(true),
     }
 }
 
@@ -169,24 +173,52 @@ impl Dictation {
 
     /// Yapıştırılan yazı sonradan düzeltildiyse: yanlış duyulmuşa benzeyen parçalar kendiliğinden sözlüğe eklenir
     /// ("Geri al" kartıyla); kendiliğinden öğrenme kapalıysa sorulur.
-    pub fn propose(&self, app: &AppHandle, pasted: &str, edited: &str) {
+    ///
+    /// Düzeltme cümlenin bütünüyle değerlendirilir: yalnız Whisper'ın yanlış duyduğu sözcük öğrenilir, kişinin
+    /// söylediğini değiştirmesi (fikir değiştirmek) öğrenilmez:
+    /// - Cümle baştan yazıldıysa ya da ikiden çok yer değiştiyse hiçbiri öğrenilmez.
+    /// - Whisper o sözcüğü net duyduysa (güven ≥ %85) değiştirmek fikir değişikliğidir.
+    /// - Whisper bocaladıysa (< %50) hemen; arada kalan ya da güveni bilinmeyen düzeltme ikinci kez görülünce
+    ///   öğrenilir.
+    pub fn propose(&self, app: &AppHandle, pasted: &str, edited: &str, heard: &Heard) {
         let db = app.state::<Db>();
         let auto = db.setting_json::<bool>(AUTO_LEARN_KEY).unwrap_or(true);
+        if vocab::rewritten(pasted, edited) {
+            crate::log!("Sesle yazma: cümle yeniden yazılmış, düzeltme öğrenilmedi");
+            return;
+        }
         let found = vocab::fresh(&db, vocab::suggest(pasted, edited));
-        let pairs: Vec<(String, String)> = found
-            .iter()
-            .filter(|(f, t)| {
-                // Sorulacaksa da kendiliğinden eklenecekse de: yalnız tek sözcük, birleşik/ekli değil.
-                let ok = vocab::acceptable(f, t);
-                if !ok {
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        for (f, t) in found {
+            // Sorulacaksa da kendiliğinden eklenecekse de: yalnız tek sözcük, birleşik/ekli değil.
+            if !vocab::acceptable(&f, &t) {
+                crate::log!(
+                    "Sesle yazma: {f} → {t} öğrenilmedi (tek sözcük düzeltmesine benzemiyor)"
+                );
+                continue;
+            }
+            let conf = heard.confidence(&f);
+            let case_only = vocab::fold(&f) == vocab::fold(&t);
+            if !case_only && conf.is_some_and(|c| c >= vocab::SURE) {
+                crate::log!(
+                    "Sesle yazma: {f} → {t} öğrenilmedi (Whisper net duymuştu: %{:.0}; fikir değişikliği sayıldı)",
+                    conf.unwrap_or(0.0) * 100.0
+                );
+                continue;
+            }
+            if auto && !case_only && !conf.is_some_and(|c| c < vocab::UNSURE) {
+                let n = vocab::sighting(&db, &f, &t);
+                if n < vocab::SIGHTINGS {
                     crate::log!(
-                        "Sesle yazma: {f} → {t} öğrenilmedi (tek sözcük düzeltmesine benzemiyor)"
+                        "Sesle yazma: {f} → {t} aday ({n}/{}); bir daha görülürse öğrenilecek",
+                        vocab::SIGHTINGS
                     );
+                    continue;
                 }
-                ok
-            })
-            .cloned()
-            .collect();
+            }
+            vocab::forget_sighting(&db, &f, &t);
+            pairs.push((f, t));
+        }
         if pairs.is_empty() {
             return;
         }
@@ -402,6 +434,33 @@ pub fn apply(app: &AppHandle) {
     let _ = &d.hook;
 }
 
+/// Kısayol ya da üst çubuktaki düğme: sesle yazmayı açar/kapatır. Dönen: yeni durum.
+pub fn toggle(app: &AppHandle) -> bool {
+    let db = app.state::<Db>();
+    let on = !db.setting_json::<bool>(ENABLED_KEY).unwrap_or(false);
+    let _ = db.set_setting(ENABLED_KEY, if on { "true" } else { "false" });
+    apply(app);
+    crate::overlay::show_osd(
+        app,
+        "mic",
+        if on {
+            "Sesle yazma açık · Ctrl + Alt basılı tut, konuş"
+        } else {
+            "Sesle yazma kapalı"
+        },
+    );
+    let _ = app.emit("dictation-toggled", on);
+    on
+}
+
+/// "Oyundayken kapalı" ayarı açıksa ve bir oyun çalışıyorsa dikte başlamaz (oyun kapanınca kendiliğinden döner).
+fn paused_for_game(app: &AppHandle) -> bool {
+    app.state::<Db>()
+        .setting_json::<bool>(OFF_IN_GAME_KEY)
+        .unwrap_or(false)
+        && !app.state::<crate::games::Games>().running_ids().is_empty()
+}
+
 /// Modelleri önceden yükler (ayarlar ekranındaki "Hazırla" düğmesi).
 pub fn warm_up(app: &AppHandle) {
     let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
@@ -461,7 +520,7 @@ fn controller(app: AppHandle, rx: std::sync::mpsc::Receiver<win::KeyEvent>) {
 
         mode = match mode {
             Mode::Idle => {
-                if combo && !others && d.enabled.load(Ordering::SeqCst) {
+                if combo && !others && d.enabled.load(Ordering::SeqCst) && !paused_for_game(&app) {
                     // Gösterge şimdiden (görünmez) açılır: pencere ve içindeki sayfa uyanmış olur, süre
                     // dolunca yalnız görünür hale gelir; bekleyen pencerenin uyanması gecikme yapmaz.
                     crate::overlay::dictation_view(&app, "armed", 0);
@@ -616,7 +675,7 @@ fn run(
     if loading {
         crate::overlay::dictation_view(app, "loading", 0);
     }
-    let raw = d
+    let heard = d
         .engine
         .transcribe(
             dir.root(),
@@ -634,12 +693,24 @@ fn run(
     if loading {
         crate::overlay::dictation_view(app, "processing", 0);
     }
-    let raw = crate::transcript::parse::clean_dictation(&raw);
+    let raw = crate::transcript::parse::clean_dictation(&heard.text);
     if raw.is_empty() {
         return Ok(None);
     }
-    // Sözlük: toparlamadan önce (yapay zekâ doğru sözcüğü görsün) ve sonra (geri bozduysa).
-    let (fixed, mut used) = vocab::apply(&raw, &s.rules);
+    // Sözlük: toparlamadan önce (yapay zekâ doğru sözcüğü görsün) ve sonra (geri bozduysa). Whisper net
+    // duyduğu sözcükte duyduğunu yazar; sözlüğe yalnız bocaladığında danışılır.
+    let conf = |w: &str| heard.confidence(w);
+    let (fixed, mut used, skipped) = vocab::apply_heard(&raw, &s.rules, conf, s.only_unsure);
+    for i in &skipped {
+        if let Some(r) = s.rules.get(*i) {
+            crate::log!(
+                "Sesle yazma: \"{}\" net duyuldu, sözlük ({} → {}) uygulanmadı",
+                r.from,
+                r.from,
+                r.to
+            );
+        }
+    }
     let mut text = fixed.clone();
     let mut tidied = false;
     if s.tidy && engine::llm_ready(dir.root()) {
@@ -647,7 +718,7 @@ fn run(
         match d.engine.tidy(dir.root(), &fixed, &s.whisper.lang) {
             Ok(t) => {
                 tidied = t != fixed;
-                let (t, more) = vocab::apply(&t, &s.rules);
+                let (t, more, _) = vocab::apply_heard(&t, &s.rules, conf, s.only_unsure);
                 used.extend(more);
                 text = t;
             }
@@ -662,10 +733,14 @@ fn run(
     let gen = d.generation.load(Ordering::SeqCst);
     let (app2, pasted) = (app.clone(), text.clone());
     let app3 = app.clone();
+    let heard2 = heard.clone();
     win::watch_field(
         text.clone(),
         move || app2.state::<Dictation>().generation.load(Ordering::SeqCst) == gen,
-        move |edited| app3.state::<Dictation>().propose(&app3, &pasted, &edited),
+        move |edited| {
+            app3.state::<Dictation>()
+                .propose(&app3, &pasted, &edited, &heard2)
+        },
     );
     Ok(Some(Entry {
         text,

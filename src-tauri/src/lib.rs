@@ -453,6 +453,7 @@ pub fn run() {
             commands::clips::clips_ready_reveal,
             commands::clips::clips_plan,
             commands::dictation::dictation_apply,
+            commands::dictation::dictation_toggle,
             commands::dictation::dictation_install,
             commands::dictation::dictation_warm_up,
             commands::dictation::dictation_rules,

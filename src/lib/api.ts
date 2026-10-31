@@ -538,6 +538,8 @@ export const api = {
     status: () => call<DictationStatus>("dictation_status"),
     /** Ayarlar kaydedildikten sonra: açar/kapatır, sunucular yeni ayarla başlar. */
     apply: () => call<DictationStatus>("dictation_apply"),
+    /** Açar/kapatır (üst çubuktaki düğme); yeni durum. */
+    toggle: () => call<boolean>("dictation_toggle"),
     /** `part`: "whisper" | "gpu" (NVIDIA hızlandırma) | "llm" (toparlayıcı) */
     install: (part: "whisper" | "gpu" | "llm") => call<DictationStatus>("dictation_install", { part }),
     warmUp: () => call<DictationStatus>("dictation_warm_up"),

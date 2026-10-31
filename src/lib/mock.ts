@@ -1353,6 +1353,14 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       const clean = (w: string) => w.replace(/[.,!?]+$/, "");
       return oldW.flatMap((w, i) => (newW[i] && clean(newW[i]) !== clean(w) ? [[clean(w), clean(newW[i])]] : [])).slice(0, 3);
     }
+    case "dictation_toggle": {
+      const st = JSON.parse(localStorage.getItem("gmid.settings") ?? "{}");
+      const on = st["dictation.enabled"] !== "true";
+      st["dictation.enabled"] = String(on);
+      localStorage.setItem("gmid.settings", JSON.stringify(st));
+      emit("dictation-toggled", on);
+      return on;
+    }
     case "dictation_status":
     case "dictation_apply":
     case "dictation_warm_up":

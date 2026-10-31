@@ -292,14 +292,15 @@ impl Engine {
         }
     }
 
-    /// 16 kHz tek kanal WAV → yazı.
+    /// 16 kHz tek kanal WAV → yazı ve her sözcükte Whisper'ın ne kadar emin olduğu (sözlüğe ne zaman
+    /// danışılacağı için).
     pub fn transcribe(
         &self,
         root: &Path,
         cfg: &WhisperCfg,
         wav: &[u8],
         prompt: &str,
-    ) -> Result<String, String> {
+    ) -> Result<Heard, String> {
         self.touch();
         let mut last = String::new();
         // Sunucu kapanmışsa (çökme, uyku) bir kez yeniden başlatıp dener.
@@ -454,13 +455,112 @@ pub fn accept_tidy(original: &str, out: &str) -> String {
     t.to_string()
 }
 
-/// whisper-server'a WAV gönderir (multipart/form-data).
-fn post_inference(
+/// Whisper'ın duyduğu: yazı ve sözcük başına güven (0–1). Sunucu güven vermezse `words` boş kalır.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Heard {
+    pub text: String,
+    /// (küçük harfli, noktalamasız sözcük, güven)
+    pub words: Vec<(String, f32)>,
+}
+
+impl Heard {
+    /// Sözcüğün (ya da sözcük grubunun) güveni: geçtiği yerlerin en düşüğü. Bilinmiyorsa `None`.
+    pub fn confidence(&self, phrase: &str) -> Option<f32> {
+        let want: Vec<String> = phrase.split_whitespace().map(word_key).collect();
+        if want.is_empty() || self.words.is_empty() {
+            return None;
+        }
+        let mut best: Option<f32> = None;
+        for start in 0..self.words.len() {
+            let window = &self.words[start..];
+            if window.len() < want.len() || !want.iter().zip(window).all(|(w, (x, _))| w == x) {
+                continue;
+            }
+            let c = window[..want.len()]
+                .iter()
+                .map(|(_, p)| *p)
+                .fold(f32::INFINITY, f32::min);
+            best = Some(best.map_or(c, |b: f32| b.min(c)));
+        }
+        best
+    }
+}
+
+/// Karşılaştırma anahtarı: küçük harf, baştaki/sondaki noktalama atılmış.
+fn word_key(s: &str) -> String {
+    super::vocab::fold(s.trim_matches(|c: char| !c.is_alphanumeric()))
+}
+
+/// whisper-server'ın `verbose_json` yanıtından sözcük güvenleri. Parçalar (token) birleştirilir: boşlukla
+/// başlayan parça yeni sözcüktür; sözcüğün güveni parçalarının en düşüğü. İki biçim okunur:
+/// `segments[].words[] {word, probability}` ve `segments[].tokens[] {text, p}`.
+pub fn heard_words(v: &serde_json::Value) -> Vec<(String, f32)> {
+    let mut pieces: Vec<(String, f32)> = Vec::new();
+    for seg in v["segments"].as_array().into_iter().flatten() {
+        let list = seg["words"]
+            .as_array()
+            .filter(|a| a.iter().any(|w| w.is_object()))
+            .or_else(|| {
+                seg["tokens"]
+                    .as_array()
+                    .filter(|a| a.iter().any(|t| t.is_object()))
+            });
+        for t in list.into_iter().flatten() {
+            let text = t["word"]
+                .as_str()
+                .or(t["text"].as_str())
+                .unwrap_or_default();
+            let p = t["probability"].as_f64().or(t["p"].as_f64());
+            let (Some(p), false) = (
+                p,
+                text.trim_start().starts_with("[_") || text.contains("<|"),
+            ) else {
+                continue;
+            };
+            pieces.push((text.to_string(), p as f32));
+        }
+    }
+    let mut words: Vec<(String, f32)> = Vec::new();
+    for (text, p) in pieces {
+        let starts_word = text.starts_with(char::is_whitespace) || words.is_empty();
+        for (k, part) in text.split_whitespace().enumerate() {
+            let w = word_key(part);
+            if starts_word || k > 0 {
+                words.push((w, p));
+            } else if let Some(last) = words.last_mut() {
+                last.0.push_str(&w);
+                last.1 = last.1.min(p);
+            }
+        }
+    }
+    words.retain(|(w, _)| !w.is_empty());
+    words
+}
+
+/// whisper-server'a WAV gönderir (multipart/form-data). Önce sözcük güvenleriyle (`verbose_json`); sunucu
+/// bunu desteklemiyorsa düz yazıyla.
+fn post_inference(port: u16, wav: &[u8], prompt: &str, timeout: Duration) -> Result<Heard, String> {
+    match post_inference_as(port, wav, prompt, timeout, "verbose_json") {
+        Ok(v) => Ok(Heard {
+            text: v["text"].as_str().unwrap_or_default().to_string(),
+            words: heard_words(&v),
+        }),
+        Err(e) if e.starts_with("sunucu ") => post_inference_as(port, wav, prompt, timeout, "json")
+            .map(|v| Heard {
+                text: v["text"].as_str().unwrap_or_default().to_string(),
+                words: Vec::new(),
+            }),
+        Err(e) => Err(e),
+    }
+}
+
+fn post_inference_as(
     port: u16,
     wav: &[u8],
     prompt: &str,
     timeout: Duration,
-) -> Result<String, String> {
+    format: &str,
+) -> Result<serde_json::Value, String> {
     let boundary = format!("gmid{}", crate::util::new_id());
     let mut body: Vec<u8> = Vec::with_capacity(wav.len() + 1024);
     let mut field = |name: &str, value: &str| {
@@ -471,7 +571,7 @@ fn post_inference(
     };
     field("temperature", "0.0");
     field("temperature_inc", "0.2");
-    field("response_format", "json");
+    field("response_format", format);
     if !prompt.trim().is_empty() {
         field("prompt", prompt.trim());
     }
@@ -502,7 +602,7 @@ fn post_inference(
     if let Some(e) = v["error"].as_str() {
         return Err(e.to_string());
     }
-    Ok(v["text"].as_str().unwrap_or_default().to_string())
+    Ok(v)
 }
 
 #[derive(Serialize, Clone)]
@@ -665,10 +765,11 @@ HTTPServer(('127.0.0.1', port), H).serve_forever()
         let wav = crate::dictation::to_wav(&vec![100i16; 16_000]);
         let raw = engine
             .transcribe(&root, &cfg, &wav, "GMID, Merkut")
-            .unwrap();
+            .unwrap()
+            .text;
         assert!(raw.contains("prompt=GMID, Merkut"), "{raw}");
         assert!(raw.contains(&format!("wav={}", wav.len())), "{raw}");
-        assert!(raw.contains("riff=True fmt=json lang=tr"), "{raw}");
+        assert!(raw.contains("riff=True fmt=verbose_json lang=tr"), "{raw}");
         assert_eq!(engine.running_on_gpu(), Some(false));
         // İkinci istek aynı sunucuyu kullanır.
         let port = engine.whisper.lock().unwrap().as_ref().unwrap().port;
@@ -681,6 +782,40 @@ HTTPServer(('127.0.0.1', port), H).serve_forever()
         engine.shutdown();
         assert_eq!(engine.running_on_gpu(), None);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn word_confidence_is_read() {
+        // whisper.cpp: parçalar (token) boşlukla başlayınca yeni sözcük; özel parçalar atlanır.
+        let v = serde_json::json!({
+            "text": " Merhaba GMID ekibi.",
+            "segments": [{ "tokens": [
+                { "text": "[_BEG_]", "p": 0.99 },
+                { "text": " Mer", "p": 0.98 }, { "text": "haba", "p": 0.95 },
+                { "text": " GM", "p": 0.41 }, { "text": "ID", "p": 0.90 },
+                { "text": " ekibi.", "p": 0.97 },
+                { "text": "<|endoftext|>", "p": 0.99 }
+            ]}]
+        });
+        let w = heard_words(&v);
+        assert_eq!(
+            w.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(),
+            ["merhaba", "gmid", "ekibi"]
+        );
+        assert!((w[1].1 - 0.41).abs() < 1e-6);
+        let h = Heard {
+            text: v["text"].as_str().unwrap().into(),
+            words: w,
+        };
+        assert!(h.confidence("GMID").unwrap() < 0.5);
+        assert!(h.confidence("gmid ekibi").unwrap() < 0.5);
+        assert!(h.confidence("Merhaba").unwrap() > 0.9);
+        assert_eq!(h.confidence("yok"), None);
+        // Diğer biçim: words[] {word, probability}
+        let v2 = serde_json::json!({ "segments": [{ "words": [{ "word": " VDS", "probability": 0.3 }] }] });
+        assert_eq!(heard_words(&v2), vec![("vds".to_string(), 0.3)]);
+        // Güven yoksa boş.
+        assert!(heard_words(&serde_json::json!({ "text": "x" })).is_empty());
     }
 
     #[test]

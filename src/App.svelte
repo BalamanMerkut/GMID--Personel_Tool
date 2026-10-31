@@ -29,6 +29,7 @@
   import WrappedScreen from "./lib/screens/Wrapped.svelte";
   import SearchPalette from "./lib/components/SearchPalette.svelte";
   import Welcome from "./lib/components/Welcome.svelte";
+  import DictationToggle from "./lib/components/DictationToggle.svelte";
   import { maybeShowWelcome, welcome } from "./lib/welcome.svelte";
   import Player from "./lib/components/Player.svelte";
   import { nav, player, stopPlayer } from "./lib/player.svelte";
@@ -165,6 +166,7 @@
         <button class="find" onclick={() => (searchOpen = true)} title="Her şeyde ara (Ctrl+K)">
           <Icon name="search" size={15} /><span>Ara</span><kbd>Ctrl K</kbd>
         </button>
+        <DictationToggle onnavigate={navigate} />
         {#if dl.count}
           <button class="dlind" onclick={() => navigate("videos")} title="Video İndirici">
             <Icon name="download" size={17} />

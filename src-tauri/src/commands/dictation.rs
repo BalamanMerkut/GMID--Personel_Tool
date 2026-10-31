@@ -28,6 +28,12 @@ pub fn dictation_apply(app: AppHandle) -> Status {
     app.state::<Dictation>().status(&app)
 }
 
+/// Üst çubuktaki düğme: açar/kapatır, yeni durumu döner.
+#[tauri::command]
+pub fn dictation_toggle(app: AppHandle) -> bool {
+    dictation::toggle(&app)
+}
+
 /// `part`: "whisper" (seçili model + program) | "gpu" (NVIDIA hızlandırma) | "llm" (toparlayıcı)
 #[tauri::command]
 pub async fn dictation_install(app: AppHandle, part: String) -> CmdResult<Status> {

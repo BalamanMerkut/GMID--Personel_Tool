@@ -19,6 +19,8 @@
   let tidy = $state(getJson("dictation.tidy", false));
   let autoLearn = $state(getJson("dictation.autoLearn", true));
   let learnNotify = $state(getJson("dictation.learnNotify", true));
+  let onlyUnsure = $state(getJson("dictation.vocabOnlyUnsure", true));
+  let offInGame = $state(getJson("dictation.offInGame", false));
   let words = $state(getJson<string>("dictation.words", ""));
   let sounds = $state(getJson("dictation.sounds", true));
   let preload = $state(getJson("dictation.preload", true));
@@ -85,6 +87,7 @@
         if (status) status = { ...status, history: [e, ...status.history].slice(0, 20) };
       }),
       on("alerts-changed", () => void api.dictation.rules().then((r) => (rules = r)).catch(() => {})),
+      on("dictation-toggled", () => void refresh()),
       on<ToolProgress>("tools-progress", (p) => {
         if (busy) progress = p;
       }),
@@ -193,6 +196,16 @@
         </button>
       </div>
     {/if}
+    <div class="line">
+      <div>
+        <b>Oyundayken kapalı olsun</b>
+        <span class="sub small">
+          Açıksa bir oyun çalışırken Ctrl + Alt dinlenmez; oyun kapanınca kendiliğinden geri gelir. Hızlıca açıp kapatmak için
+          üst çubuktaki <b>Sesle yazma</b> düğmesi ya da <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Y</kbd>.
+        </span>
+      </div>
+      <Switch label="Oyundayken kapalı olsun" checked={offInGame} onchange={(v) => ((offInGame = v), void setJson("dictation.offInGame", v))} />
+    </div>
     <div class="line">
       <div><b>Ses efekti</b><span class="sub small">Dinlemeye başlarken ve bırakınca kısa bir "tık" sesi.</span></div>
       <Switch label="Ses efekti" checked={sounds} onchange={(v) => ((sounds = v), void setJson("dictation.sounds", v))} />
@@ -319,11 +332,22 @@
         <b>Düzeltmelerimden kendiliğinden öğren</b>
         <span class="sub small">
           {autoLearn
-            ? "Açık: düzelttiğin sözcük sözlüğe hemen eklenir, tek tıkla “Geri al” 20 sn sağ altta durur; dokunmazsan kalır."
+            ? "Açık: Whisper'ın yanlış duyduğu sözcüğü düzeltince sözlüğe eklenir (emin olmadığı sözcük hemen, diğerleri aynı düzeltme ikinci kez görülünce); tek tıkla “Geri al” 20 sn sağ altta durur."
             : "Kapalı: her düzeltmede sağ altta “Bunu böyle mi yazayım?” diye sorar."}
         </span>
       </div>
       <Switch label="Düzeltmelerimden kendiliğinden öğren" checked={autoLearn} onchange={(v) => ((autoLearn = v), void setJson("dictation.autoLearn", v))} />
+    </div>
+    <div class="learnrow">
+      <div>
+        <b>Sözlüğe yalnız emin olmadığında bak</b>
+        <span class="sub small">
+          {onlyUnsure
+            ? "Açık: Whisper bir sözcüğü net duyduysa duyduğunu yazar; sözlüğe yalnız bocaladığında danışır."
+            : "Kapalı: sözlükteki kurallar her seferinde uygulanır (bir sözcük net duyulduğu halde hep yanlış yazılıyorsa kapat)."}
+        </span>
+      </div>
+      <Switch label="Sözlüğe yalnız emin olmadığında bak" checked={onlyUnsure} onchange={(v) => ((onlyUnsure = v), void setJson("dictation.vocabOnlyUnsure", v))} />
     </div>
     {#if autoLearn}
       <div class="learnrow">
@@ -343,6 +367,7 @@
       <ul class="sub small">
         <li>Yalnız <b>bir dikteyi yapıştırdıktan sonra</b>, en çok 2 dakika ve yalnız o yazı kutusuna bakar. Sürekli dinlemez, klavyeni kaydetmez, yazı hiçbir yere gönderilmez ya da saklanmaz.</li>
         <li>Windows'un erişilebilirlik özelliğiyle (ekran okuyucuların kullandığı) okunur; şifre kutularına hiç bakılmaz.</li>
+        <li><b>Fikir değiştirmek öğrenilmez:</b> düzeltme cümlenin bütünüyle değerlendirilir. Cümleyi baştan yazdıysan, ikiden çok yeri değiştirdiysen ya da Whisper o sözcüğü net duymuşken değiştirdiysen (yanlış söyleyip düzelttin demektir) sözlüğe bir şey girmez.</li>
         <li><b>Silmek öğrenilmez:</b> cümleden vazgeçip silersen ya da yazının çoğunu değiştirirsen bir şey eklenmez.</li>
         <li><b>Başka söz söylemek öğrenilmez:</b> “nasılsın”ı “naber” yapmak gibi. Yalnız yanlış duyulmuşa benzeyenler öğrenilir: yazılışı yakın sözcükler (“Esad” → “Esat”), kısaltmalar ve adlar (“videoyu” → “VDS”, “gmd” → “GMID”), sayılar.</li>
         <li><b>Yalnız tek sözcük:</b> iki sözcüğü birleştiren (“bedava.QR”), boşluklu ya da yalnız eki değişen (“telefon” → “telefonlar”) düzeltmeler öğrenilmez.</li>
