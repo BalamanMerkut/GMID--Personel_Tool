@@ -687,6 +687,14 @@ fn run(
     if rms(samples) < 60.0 {
         return Err("Ses duyulmadı; mikrofon kapalı ya da sessiz olabilir.".into());
     }
+    // Konuşma yoksa (tuşa basıp bir şey demeden bırakmak) Whisper'a hiç gönderilmez: sessizliği
+    // "Thank you", "Altyazı M.K." gibi uydurmalarla dolduruyor. Varsa baştaki/sondaki sessizlik kesilir;
+    // sondaki sessizlik de "…, evet." gibi eklemelere yol açıyordu.
+    let Some((from, to)) = speech_span(samples) else {
+        crate::log!("Sesle yazma: konuşma duyulmadı, yazılmadı");
+        return Ok(None);
+    };
+    let samples = &samples[from..to];
     let s = settings(&db);
     d.set_phase(app, "transcribing", None);
     // Model henüz yükleniyorsa gösterge bunu söylesin (ilk dikte birkaç saniye sürebilir).
@@ -712,7 +720,11 @@ fn run(
     if loading {
         crate::overlay::dictation_view(app, "processing", 0);
     }
-    let raw = crate::transcript::parse::clean_dictation(&heard.text);
+    let raw = drop_ghosts(
+        &crate::transcript::parse::clean_dictation(&heard.text),
+        &heard,
+        &s.whisper.lang,
+    );
     if raw.is_empty() {
         return Ok(None);
     }
@@ -780,6 +792,82 @@ fn rms(samples: &[i16]) -> f64 {
     (sum / samples.len().max(1) as f64).sqrt()
 }
 
+/// Kaydın konuşma içeren bölümü (örnek aralığı), 30 ms'lik pencerelerle. Pencere, ortam gürültüsünün
+/// belirgin üstündeyse "ses" sayılır; toplam ~0,2 sn'den azsa (tık, nefes, sessizlik) konuşma yok.
+/// Bulunan aralığın iki yanına 0,3 sn pay bırakılır (sözcüğün başı/sonu kesilmesin).
+fn speech_span(samples: &[i16]) -> Option<(usize, usize)> {
+    const FRAME: usize = 480;
+    const PAD: usize = 10;
+    let frames: Vec<f64> = samples.chunks(FRAME).map(rms).collect();
+    let mut sorted = frames.clone();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let (floor, peak) = (*sorted.get(sorted.len() / 5)?, *sorted.last()?);
+    // Gürültü tabanının 3 katı (sürekli konuşmada taban da yüksek olur: o zaman tepenin dörtte biri),
+    // ama en az 120 (sessiz odada mikrofon cızırtısı ses sayılmasın).
+    let thr = (floor * 3.0).min(peak * 0.25).max(120.0);
+    let loud: Vec<usize> = (0..frames.len()).filter(|&i| frames[i] > thr).collect();
+    if loud.len() < 7 {
+        return None;
+    }
+    let a = loud[0].saturating_sub(PAD) * FRAME;
+    let b = ((loud[loud.len() - 1] + 1 + PAD) * FRAME).min(samples.len());
+    Some((a, b))
+}
+
+/// Whisper'ın sessizliğe uydurduğu kalıplar: tek başına İngilizce "Thank you." (Türkçe dikte ederken)
+/// ve sona eklenen, Whisper'ın kendisinin de emin olmadığı "Evet." / "Teşekkürler." gibi kapanışlar.
+fn drop_ghosts(text: &str, heard: &Heard, lang: &str) -> String {
+    const ENGLISH: &[&str] = &[
+        "thank you",
+        "thanks",
+        "you",
+        "bye",
+        "thank you very much",
+        "thank you so much",
+    ];
+    const TAILS: &[&str] = &[
+        "evet",
+        "tamam",
+        "teşekkürler",
+        "teşekkür ederim",
+        "thank you",
+        "thanks",
+        "you",
+        "bye",
+    ];
+    let key = |s: &str| {
+        s.split_whitespace()
+            .map(|w| vocab::fold(w.trim_matches(|c: char| !c.is_alphanumeric())))
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let whole = key(text);
+    if lang != "en" && ENGLISH.contains(&whole.as_str()) {
+        return String::new();
+    }
+    // Son cümle: son noktalamadan (. ! ? ,) sonrası; metnin sonundaki noktalama sayılmaz.
+    let body = text.trim_end_matches(|c: char| ".!?,… ".contains(c));
+    let Some(cut) = body.rfind(['.', '!', '?', ',']) else {
+        return text.to_string();
+    };
+    let tail = key(&body[cut + 1..]);
+    let unsure = heard.confidence(&tail).is_some_and(|p| p < 0.6);
+    if TAILS.contains(&tail.as_str()) && unsure {
+        let kept = body[..cut].trim_end();
+        // Virgülle bitiyorsa cümleyi noktayla kapat.
+        return format!(
+            "{kept}{}",
+            if body[cut..].starts_with(',') {
+                "."
+            } else {
+                &body[cut..cut + 1]
+            }
+        );
+    }
+    text.to_string()
+}
+
 /// 16 kHz, tek kanal, 16 bit PCM → WAV dosyası.
 pub fn to_wav(samples: &[i16]) -> Vec<u8> {
     let data_len = (samples.len() * 2) as u32;
@@ -805,6 +893,73 @@ pub fn to_wav(samples: &[i16]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tone(n: usize, amp: f64) -> Vec<i16> {
+        (0..n)
+            .map(|i| (amp * (i as f64 * 0.07).sin()) as i16)
+            .collect()
+    }
+
+    #[test]
+    fn speech_is_found_and_silence_trimmed() {
+        // Sessiz oda (hafif cızırtı): konuşma yok.
+        let hiss: Vec<i16> = (0..32_000).map(|i| ((i * 7919 % 61) as i16) - 30).collect();
+        assert_eq!(speech_span(&hiss), None);
+        // Tek bir tık: konuşma yok.
+        let mut click = hiss.clone();
+        click[10_000..10_200].copy_from_slice(&tone(200, 8000.0));
+        assert_eq!(speech_span(&click), None);
+        // 1 sn sessizlik + 1 sn konuşma + 2 sn sessizlik: konuşma ±0,3 sn payla.
+        let mut v = vec![0i16; 16_000];
+        v.extend(tone(16_000, 3000.0));
+        v.extend(vec![0i16; 32_000]);
+        let (a, b) = speech_span(&v).unwrap();
+        assert!((16_000 - 5_000..=16_000).contains(&a), "{a}");
+        assert!((32_000..=32_000 + 5_400).contains(&b), "{b}");
+        // Baştan sona konuşma (taban da yüksek): yine bulunur, hepsi kalır.
+        let all = tone(48_000, 2500.0);
+        assert_eq!(speech_span(&all), Some((0, 48_000)));
+        // Kısık mikrofon: konuşma ~300.
+        let mut quiet = vec![0i16; 8_000];
+        quiet.extend(tone(16_000, 420.0));
+        assert!(speech_span(&quiet).is_some());
+    }
+
+    #[test]
+    fn whisper_ghosts_are_dropped() {
+        let heard = |words: &[(&str, f32)]| engine::Heard {
+            text: String::new(),
+            words: words.iter().map(|(w, p)| (w.to_string(), *p)).collect(),
+        };
+        let h = heard(&[("örnek", 0.9), ("versene", 0.9), ("evet", 0.3)]);
+        assert_eq!(
+            drop_ghosts("Bir örnek versene. Evet.", &h, "tr"),
+            "Bir örnek versene."
+        );
+        assert_eq!(
+            drop_ghosts("Bir örnek versene, evet.", &h, "tr"),
+            "Bir örnek versene."
+        );
+        // Gerçekten söylenen (net duyulan) "evet" kalır.
+        let sure = heard(&[("geliyor", 0.9), ("musun", 0.9), ("evet", 0.95)]);
+        assert_eq!(
+            drop_ghosts("Geliyor musun? Evet.", &sure, "tr"),
+            "Geliyor musun? Evet."
+        );
+        // Tek başına "Evet." (cevap) kalır.
+        assert_eq!(
+            drop_ghosts("Evet.", &heard(&[("evet", 0.3)]), "tr"),
+            "Evet."
+        );
+        // Türkçe dikte ederken tek başına "Thank you." atılır; İngilizcede kalır.
+        assert_eq!(drop_ghosts("Thank you.", &heard(&[]), "tr"), "");
+        assert_eq!(drop_ghosts("Thank you.", &heard(&[]), "en"), "Thank you.");
+        // Güven bilgisi yoksa sondaki kalıba dokunulmaz.
+        assert_eq!(
+            drop_ghosts("Tamam bakarım. Evet.", &heard(&[]), "tr"),
+            "Tamam bakarım. Evet."
+        );
+    }
 
     #[test]
     fn wav_header() {
