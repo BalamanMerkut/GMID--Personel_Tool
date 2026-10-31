@@ -48,3 +48,8 @@ async function root(): Promise<{ component: Component<any>; props: Record<string
 }
 
 void root().then(({ component, props }) => mount(component, { target: document.getElementById("app")!, props }));
+
+// Sesle yazma GMID'in kendi penceresindeyken: yazı (Ctrl+V yerine) imlecin olduğu yere doğrudan konur.
+if (["main", "quicknote", "sticky"].includes(view.kind)) {
+  void import("./lib/insert").then((m) => m.listenDictationInsert());
+}

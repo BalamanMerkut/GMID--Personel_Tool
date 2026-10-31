@@ -735,7 +735,12 @@ fn run(
     used.sort_unstable();
     used.dedup();
     vocab::count_hits(&db, &used);
-    win::paste(app, &text)?;
+    if win::foreground_is_ours() {
+        // GMID'in kendi penceresi (Notlar, Dene kutusu…): sayfa yazıyı imlecin olduğu yere kendisi koyar.
+        let _ = app.emit("dictation-insert", &text);
+    } else {
+        win::paste(app, &text)?;
+    }
     // Yapıştırılan yerde düzeltilirse öğren (yazı alanı okunabiliyorsa; şifre alanlarına bakılmaz).
     let gen = d.generation.load(Ordering::SeqCst);
     let (app2, pasted) = (app.clone(), text.clone());

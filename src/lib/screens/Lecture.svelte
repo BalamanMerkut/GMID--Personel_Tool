@@ -17,7 +17,8 @@
   let whisperReady = $state(true);
   let mics = $state<Device[]>([]);
   let title = $state(getJson<string>("lecture.title", ""));
-  let mic = $state(getJson<string>("lecture.mic", ""));
+  /** "system": bilgisayarın sesi (online ders); "": varsayılan mikrofon; diğerleri mikrofon kimliği. */
+  let mic = $state(getJson<string>("lecture.source", "system"));
   let keepAudio = $state(getJson<boolean>("lecture.keepAudio", false));
   let starting = $state(false);
   let list = $state<HTMLElement | null>(null);
@@ -54,7 +55,7 @@
   async function start() {
     starting = true;
     void setJson("lecture.title", title.trim());
-    void setJson("lecture.mic", mic);
+    void setJson("lecture.source", mic);
     void setJson("lecture.keepAudio", keepAudio);
     try {
       st = await api.lecture.start(title.trim(), mic, keepAudio);
@@ -109,8 +110,9 @@
         <div>
           <h2 class="h2">Ders kaydı</h2>
           <p class="sub small">
-            Hoca konuşurken başlat: söylenenler canlı olarak yazıya dökülür, bitince dakika işaretleriyle <b>Notlar</b>'a kaydedilir.
-            Sesle yazmanın Whisper'ı kullanılır; ses bu bilgisayardan çıkmaz.
+            Ders başlarken başlat: hocanın söyledikleri <b>burada, arka planda</b> canlı yazıya dökülür (imlecin olduğu yere
+            yazmaz; DEBSIS, Zoom, Teams ya da tarayıcıda ders açıkken rahatça başka şey yapabilirsin). Bitince dakika
+            işaretleriyle <b>Notlar</b>'a kaydedilir. Ses bu bilgisayardan çıkmaz.
           </p>
         </div>
       </div>
@@ -124,14 +126,25 @@
         <span>Ders adı</span>
         <input bind:value={title} placeholder="Örn. Fizik · Türev" maxlength="80" onkeydown={(e) => e.key === "Enter" && whisperReady && start()} />
       </label>
-      <label class="field">
-        <span>Mikrofon</span>
-        <select bind:value={mic}>
-          <option value="">Windows'un varsayılanı</option>
-          {#each mics as m (m.id)}<option value={m.id}>{m.name}</option>{/each}
-        </select>
-        <em class="sub small">Sınıfta hocayı en iyi bilgisayarın kendi mikrofonu duyar; kulaklık mikrofonu yalnız seni duyar.</em>
-      </label>
+      <div class="field">
+        <span>Neyi dinlesin?</span>
+        <div class="src">
+          <button class="srcbtn" aria-pressed={mic === "system"} onclick={() => (mic = "system")}>
+            <Icon name="headphones" size={18} />
+            <span><b>Bilgisayarın sesi</b><em>Online ders (DEBSIS, Zoom, Teams, YouTube…). Kulaklık takılıyken de hocayı duyar.</em></span>
+          </button>
+          <button class="srcbtn" aria-pressed={mic !== "system"} onclick={() => mic === "system" && (mic = "")}>
+            <Icon name="mic" size={18} />
+            <span><b>Mikrofon</b><em>Sınıfta, yüz yüze ders. Hocayı en iyi bilgisayarın kendi mikrofonu duyar.</em></span>
+          </button>
+        </div>
+        {#if mic !== "system"}
+          <select bind:value={mic}>
+            <option value="">Windows'un varsayılan mikrofonu</option>
+            {#each mics as m (m.id)}<option value={m.id}>{m.name}</option>{/each}
+          </select>
+        {/if}
+      </div>
       <div class="line">
         <div>
           <b>Ses kaydını da sakla</b>
@@ -212,6 +225,13 @@
   .field input { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
   .field input:focus { border-color: var(--gold-dim); outline: none; }
   .field em { font-style: normal; }
+  .src { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .srcbtn { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.02); color: var(--muted); }
+  .srcbtn:hover { border-color: var(--gold-dim); }
+  .srcbtn[aria-pressed="true"] { border-color: var(--gold); background: rgba(227, 194, 112, 0.08); color: var(--gold-glow); }
+  .srcbtn span { display: flex; flex-direction: column; gap: 3px; }
+  .srcbtn b { color: var(--text); font-size: 14px; }
+  .srcbtn em { font-style: normal; font-size: 12px; color: var(--muted); }
   .line { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .line > div { display: flex; flex-direction: column; gap: 2px; }
   .btn.big { align-self: flex-start; padding: 12px 22px; font-size: 15px; }

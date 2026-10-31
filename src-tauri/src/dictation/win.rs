@@ -116,6 +116,21 @@ pub fn mask_alt() {
     send(&[key(vk, false), key(vk, true)]);
 }
 
+/// Öndeki pencere GMID'in kendisi mi (ana pencere, not pencereleri)? Kendi penceremizde yazı Ctrl+V ile değil,
+/// doğrudan sayfaya yazılır.
+pub fn foreground_is_ours() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return false;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        pid == std::process::id()
+    }
+}
+
 /// Yazıyı odaktaki programa yapıştırır: panoya koyar, Ctrl+V gönderir, sonra panoyu eski haline getirir.
 pub fn paste(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;

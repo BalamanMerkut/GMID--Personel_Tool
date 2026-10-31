@@ -360,21 +360,36 @@ pub async fn deals_refresh(app: AppHandle) -> CmdResult<crate::deals::Snapshot> 
 /// Fırsatı açar: mağazanın uygulaması yüklüyse orada (Steam, Epic, Microsoft Store), değilse tarayıcıda.
 /// `browser`: her durumda tarayıcıda. Dönen: "app" | "browser".
 #[tauri::command]
-pub fn deals_open(url: String, store: String, browser: Option<bool>) -> CmdResult<String> {
+pub async fn deals_open(url: String, store: String, browser: Option<bool>) -> CmdResult<String> {
     if !url.starts_with("https://") {
         return Err("Geçersiz bağlantı".into());
     }
-    if !browser.unwrap_or(false) {
-        if let Some((scheme, link)) = crate::deals::app_link(&store, &url) {
-            if crate::deals::scheme_installed(scheme)
-                && tauri_plugin_opener::open_url(&link, None::<&str>).is_ok()
-            {
-                return Ok("app".into());
+    let store = store.to_lowercase();
+    tauri::async_runtime::spawn_blocking(move || {
+        if browser.unwrap_or(false) {
+            tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())?;
+            return Ok("browser".to_string());
+        }
+        // Kısa bağlantının gittiği asıl mağaza sayfası (uygulama ürünü doğrudan açsın).
+        let real = crate::deals::resolve(&url);
+        if let Some((scheme, link)) = crate::deals::app_link(&store, &real) {
+            let installed = crate::deals::scheme_installed(scheme);
+            crate::log!(
+                "Fırsat açılıyor: {store} · {real} · uygulama {}",
+                if installed { "yüklü" } else { "bulunamadı" }
+            );
+            if installed {
+                match crate::deals::open_app_link(&link) {
+                    Ok(()) => return Ok("app".to_string()),
+                    Err(e) => crate::log!("Mağaza uygulaması açılamadı ({link}): {e}"),
+                }
             }
         }
-    }
-    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())?;
-    Ok("browser".into())
+        tauri_plugin_opener::open_url(&real, None::<&str>).map_err(|e| e.to_string())?;
+        Ok("browser".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Bağlantıyı varsayılan tarayıcıda açar (yalnız https).

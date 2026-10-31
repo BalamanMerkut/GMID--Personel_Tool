@@ -300,14 +300,18 @@ fn pick(dir: &Path, lang: &str) -> Option<(String, Vec<Segment>)> {
         .collect();
     let rank = |code: &str| {
         let base = code.split(['-', '_']).next().unwrap_or(code);
-        if code.ends_with("-orig") || base == lang {
+        // İstenen dil önce, sonra videonun asıl dili ("-orig"); ikisi eşit sayılırsa sıra klasördeki dosya
+        // sırasına kalır ve Türkçe istenmişken İngilizce gelebilir.
+        if base == lang && !code.ends_with("-orig") {
             0
-        } else if base == "tr" {
+        } else if code.ends_with("-orig") || base == lang {
             1
-        } else if base == "en" {
+        } else if base == "tr" {
             2
-        } else {
+        } else if base == "en" {
             3
+        } else {
+            4
         }
     };
     files.sort_by_key(|(c, _)| rank(c));

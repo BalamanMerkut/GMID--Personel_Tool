@@ -10,7 +10,8 @@ pub fn lecture_status(l: State<'_, Lecture>) -> Status {
     l.status()
 }
 
-/// `mic`: aygıt kimliği (boşsa varsayılan). `keepAudio`: sesi de `Dersler` klasörüne kaydet.
+/// `mic`: "system" bilgisayarın sesi (online ders), boşsa varsayılan mikrofon, değilse mikrofonun kimliği.
+/// `keepAudio`: sesi de `Dersler` klasörüne kaydet.
 #[tauri::command]
 pub async fn lecture_start(
     app: AppHandle,

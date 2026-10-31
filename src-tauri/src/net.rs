@@ -21,3 +21,19 @@ pub fn agent(connect: Duration, body: Duration) -> ureq::Agent {
         .build()
         .into()
 }
+
+/// Yönlendirmeleri izlemeyen bağlantı: kısa bağlantının (GamerPower "open" adresleri) gittiği yeri öğrenmek için.
+pub fn agent_no_redirect(timeout: Duration) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::PlatformVerifier)
+                .build(),
+        )
+        .timeout_global(Some(timeout))
+        .max_redirects(0)
+        .http_status_as_error(false)
+        .user_agent(concat!("GMID-Tool/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .into()
+}

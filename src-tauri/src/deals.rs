@@ -597,6 +597,44 @@ pub fn store_label(store: &str) -> &'static str {
     }
 }
 
+/// GamerPower'ın kısa bağlantıları ("gamerpower.com/open/…") önce mağaza sayfasına gider. Asıl adres
+/// öğrenilirse uygulama doğrudan ürün sayfasını açar (Steam: `steam://store/<id>`); öğrenilemezse bağlantı aynen
+/// kalır. En çok 5 yönlendirme izlenir.
+pub fn resolve(url: &str) -> String {
+    if !url.contains("gamerpower.com/") {
+        return url.to_string();
+    }
+    let agent = crate::net::agent_no_redirect(std::time::Duration::from_secs(6));
+    let mut cur = url.to_string();
+    for _ in 0..5 {
+        let Ok(resp) = agent.get(&cur).call() else {
+            break;
+        };
+        if !resp.status().is_redirection() {
+            break;
+        }
+        let Some(next) = resp
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+        else {
+            break;
+        };
+        cur = if next.starts_with("http") {
+            next
+        } else {
+            // Göreli adres: aynı siteden.
+            let origin: String = cur.splitn(4, '/').take(3).collect::<Vec<_>>().join("/");
+            format!("{origin}{next}")
+        };
+        if !cur.contains("gamerpower.com/") {
+            break;
+        }
+    }
+    cur
+}
+
 /// Mağazanın kendi uygulamasında açan bağlantı (uygulama yüklüyse kullanılır).
 /// Steam her sayfayı kendi tarayıcısında açabilir (GamerPower yönlendirmesi dahil); Epic ve Microsoft Store
 /// yalnız ürün kimliği belliyse. Diğerlerinde güvenilir bir yol yok: tarayıcı.
@@ -606,7 +644,18 @@ pub fn app_link(store: &str, url: &str) -> Option<(&'static str, String)> {
     }
     let lower = url.to_ascii_lowercase();
     match store {
-        "steam" => Some(("steam", format!("steam://openurl/{url}"))),
+        "steam" => {
+            // Ürün sayfası: Steam'in kendi mağaza sayfası; başka bir site (çekiliş sitesi) ise Steam'in tarayıcısı.
+            let app = lower
+                .split("store.steampowered.com/app/")
+                .nth(1)
+                .and_then(|r| r.split(['/', '?', '#']).next())
+                .filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
+            Some(match app {
+                Some(id) => ("steam", format!("steam://store/{id}")),
+                None => ("steam", format!("steam://openurl/{url}")),
+            })
+        }
         "epic" => {
             let slug = lower
                 .split("store.epicgames.com/")
@@ -650,7 +699,7 @@ pub fn app_link(store: &str, url: &str) -> Option<(&'static str, String)> {
 #[cfg(windows)]
 pub fn scheme_installed(scheme: &str) -> bool {
     use windows::core::HSTRING;
-    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CLASSES_ROOT, RRF_RT_REG_SZ};
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CLASSES_ROOT, RRF_RT_ANY};
     // Kayıtlı uygulama: HKCR\<tür>\shell\open\command'da bir komut olur.
     let mut buf = [0u16; 1024];
     let mut size = (buf.len() * 2) as u32;
@@ -659,7 +708,7 @@ pub fn scheme_installed(scheme: &str) -> bool {
             HKEY_CLASSES_ROOT,
             &HSTRING::from(format!("{scheme}\\shell\\open\\command")),
             None,
-            RRF_RT_REG_SZ,
+            RRF_RT_ANY,
             None,
             Some(buf.as_mut_ptr() as *mut _),
             Some(&mut size),
@@ -672,6 +721,35 @@ pub fn scheme_installed(scheme: &str) -> bool {
 #[cfg(not(windows))]
 pub fn scheme_installed(_scheme: &str) -> bool {
     false
+}
+
+/// `steam://…` gibi bir bağlantıyı Windows'un kendi açma yöntemiyle (kayıtlı uygulamaya) verir.
+#[cfg(windows)]
+pub fn open_app_link(link: &str) -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let r = unsafe {
+        ShellExecuteW(
+            None,
+            &HSTRING::from("open"),
+            &HSTRING::from(link),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // 32'den büyükse başarılı.
+    if r.0 as isize > 32 {
+        Ok(())
+    } else {
+        Err(format!("ShellExecute {}", r.0 as isize))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn open_app_link(link: &str) -> Result<(), String> {
+    tauri_plugin_opener::open_url(link, None::<&str>).map_err(|e| e.to_string())
 }
 
 /// Yeni ücretsiz oyun ve yeni / daha büyük istek listesi indirimi için bildirim.
@@ -774,6 +852,18 @@ mod tests {
 
     #[test]
     fn store_apps_open_the_right_page() {
+        assert_eq!(
+            app_link(
+                "steam",
+                "https://store.steampowered.com/app/1086940/Baldurs_Gate_3/"
+            )
+            .map(|l| l.1),
+            Some("steam://store/1086940".to_string())
+        );
+        assert_eq!(
+            resolve("https://store.steampowered.com/app/1"),
+            "https://store.steampowered.com/app/1"
+        );
         assert_eq!(
             app_link("steam", "https://www.gamerpower.com/open/abc")
                 .unwrap()

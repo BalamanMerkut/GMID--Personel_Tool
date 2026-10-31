@@ -503,25 +503,81 @@ impl WavFile {
     }
 }
 
+/// Gelen ses (kanallar ve hız ne olursa) → 16 kHz tek kanal 16 bit. Bilgisayarın sesi genelde 48 kHz stereo
+/// gelir: kanallar ortalanır, hız düşürülürken araya giren örneklerin ortalaması alınır (kaba alçak geçiren).
+pub struct Downmix {
+    step: f64,
+    pos: f64,
+    sum: f64,
+    n: u32,
+}
+
+impl Downmix {
+    pub fn new(rate: u32) -> Downmix {
+        Downmix {
+            step: RATE as f64 / rate.max(1) as f64,
+            pos: 0.0,
+            sum: 0.0,
+            n: 0,
+        }
+    }
+
+    /// Bir karenin (tüm kanalların ortalaması, -1..1) eklenmesi.
+    pub fn push(&mut self, mono: f32, out: &mut Vec<i16>) {
+        self.sum += mono as f64;
+        self.n += 1;
+        self.pos += self.step;
+        if self.pos >= 1.0 {
+            self.pos -= 1.0;
+            let v = (self.sum / self.n as f64).clamp(-1.0, 1.0);
+            out.push((v * 32767.0) as i16);
+            self.sum = 0.0;
+            self.n = 0;
+        }
+    }
+}
+
+/// Kayıt kaynağı: `"system"` bilgisayarın sesi (online ders: tarayıcı, Zoom, Teams…; kulaklık takılıyken de),
+/// boş metin varsayılan mikrofon, başka bir şey mikrofonun kimliği.
+pub const SYSTEM: &str = "system";
+
 #[cfg(windows)]
 fn capture(
     sh: &Shared,
-    mic: &str,
+    source: &str,
     audio: Option<PathBuf>,
     ready: std::sync::mpsc::Sender<Result<(), String>>,
 ) {
-    use windows::core::HSTRING;
+    use windows::core::{GUID, HSTRING};
     use windows::Win32::Media::Audio::{
-        eCapture, eConsole, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator,
+        eCapture, eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator,
         MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, WAVEFORMATEX,
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_LOOPBACK,
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
         WAVE_FORMAT_PCM,
     };
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
+        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED,
     };
 
-    let open = || -> Result<(IAudioClient, IAudioCaptureClient), String> {
+    /// Gelen örneklerin biçimi.
+    #[derive(Clone, Copy, PartialEq)]
+    enum Sample {
+        I16,
+        I32,
+        F32,
+    }
+    struct Opened {
+        client: IAudioClient,
+        cap: IAudioCaptureClient,
+        channels: usize,
+        sample: Sample,
+        rate: u32,
+    }
+    const FLOAT: GUID = GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
+    let system = source == SYSTEM;
+
+    let open = || -> Result<Opened, String> {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let err = |what: &str, e: windows::core::Error| {
@@ -533,10 +589,56 @@ fn capture(
             };
             let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
                 .map_err(|e| err("Ses sistemi açılamadı", e))?;
-            let dev = if mic.is_empty() {
+            if system {
+                // Bilgisayarın sesi: varsayılan çıkışın "geri döngüsü" (kulaklıktan duyulan her şey).
+                let dev = en
+                    .GetDefaultAudioEndpoint(eRender, eConsole)
+                    .map_err(|e| err("Ses çıkışı bulunamadı", e))?;
+                let client: IAudioClient = dev
+                    .Activate(CLSCTX_ALL, None)
+                    .map_err(|e| err("Ses çıkışı açılamadı", e))?;
+                let pfmt = client
+                    .GetMixFormat()
+                    .map_err(|e| err("Ses biçimi okunamadı", e))?;
+                let f: WAVEFORMATEX = *pfmt;
+                let float = f.wFormatTag == 3
+                    || (f.wFormatTag == 0xFFFE && {
+                        let ext = std::ptr::read_unaligned(pfmt as *const WAVEFORMATEXTENSIBLE);
+                        let sub = ext.SubFormat;
+                        sub == FLOAT
+                    });
+                let sample = match (float, f.wBitsPerSample) {
+                    (true, 32) => Some(Sample::F32),
+                    (false, 16) => Some(Sample::I16),
+                    (false, 32) => Some(Sample::I32),
+                    _ => None,
+                };
+                let init = client.Initialize(
+                    AUDCLNT_SHAREMODE_SHARED,
+                    AUDCLNT_STREAMFLAGS_LOOPBACK,
+                    2_000_000,
+                    0,
+                    pfmt,
+                    None,
+                );
+                CoTaskMemFree(Some(pfmt as *const _));
+                let sample = sample.ok_or("Bilgisayarın ses biçimi desteklenmiyor")?;
+                init.map_err(|e| err("Bilgisayarın sesi dinlenemedi", e))?;
+                let cap: IAudioCaptureClient =
+                    client.GetService().map_err(|e| err("Ses okunamadı", e))?;
+                client.Start().map_err(|e| err("Kayıt başlatılamadı", e))?;
+                return Ok(Opened {
+                    client,
+                    cap,
+                    channels: f.nChannels.max(1) as usize,
+                    sample,
+                    rate: f.nSamplesPerSec,
+                });
+            }
+            let dev = if source.is_empty() {
                 en.GetDefaultAudioEndpoint(eCapture, eConsole)
             } else {
-                en.GetDevice(&HSTRING::from(mic))
+                en.GetDevice(&HSTRING::from(source))
                     .or_else(|_| en.GetDefaultAudioEndpoint(eCapture, eConsole))
             }
             .map_err(|e| err("Mikrofon bulunamadı", e))?;
@@ -566,10 +668,16 @@ fn capture(
                 .GetService()
                 .map_err(|e| err("Mikrofon okunamadı", e))?;
             client.Start().map_err(|e| err("Kayıt başlatılamadı", e))?;
-            Ok((client, cap))
+            Ok(Opened {
+                client,
+                cap,
+                channels: 1,
+                sample: Sample::I16,
+                rate: RATE as u32,
+            })
         }
     };
-    let (client, cap) = match open() {
+    let o = match open() {
         Ok(x) => x,
         Err(e) => {
             let _ = ready.send(Err(e));
@@ -579,31 +687,74 @@ fn capture(
     };
     let mut wav = audio.and_then(|p| WavFile::create(&p).ok());
     let _ = ready.send(Ok(()));
+    let mut down = Downmix::new(o.rate);
     let mut chunk: Vec<i16> = Vec::with_capacity(RATE);
+    // Bilgisayarın sesi: hiçbir şey çalmazken Windows örnek göndermez. Zaman çizelgesi kaymasın diye geçen süre
+    // kadar sessizlik eklenir (duraklatılan süre sayılmaz).
+    let mut last = std::time::Instant::now();
+    let mut wall: f64 = 0.0;
+    let mut produced: u64 = 0;
     while !sh.stop.load(Ordering::SeqCst) {
         chunk.clear();
         unsafe {
-            while cap.GetNextPacketSize().unwrap_or(0) > 0 {
+            while o.cap.GetNextPacketSize().unwrap_or(0) > 0 {
                 let mut data: *mut u8 = std::ptr::null_mut();
                 let (mut frames, mut flags) = (0u32, 0u32);
-                if cap
+                if o.cap
                     .GetBuffer(&mut data, &mut frames, &mut flags, None, None)
                     .is_err()
                 {
                     break;
                 }
-                if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 || data.is_null() {
-                    chunk.extend(std::iter::repeat(0i16).take(frames as usize));
+                let n = frames as usize;
+                let silent = flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 || data.is_null();
+                if o.sample == Sample::I16 && o.channels == 1 && o.rate == RATE as u32 {
+                    if silent {
+                        chunk.extend(std::iter::repeat(0i16).take(n));
+                    } else {
+                        chunk.extend_from_slice(std::slice::from_raw_parts(data as *const i16, n));
+                    }
                 } else {
-                    chunk.extend_from_slice(std::slice::from_raw_parts(
-                        data as *const i16,
-                        frames as usize,
-                    ));
+                    let ch = o.channels;
+                    for f in 0..n {
+                        let mono = if silent {
+                            0.0
+                        } else {
+                            let mut sum = 0.0f32;
+                            for c in 0..ch {
+                                let i = f * ch + c;
+                                sum += match o.sample {
+                                    Sample::F32 => *(data as *const f32).add(i),
+                                    Sample::I16 => *(data as *const i16).add(i) as f32 / 32768.0,
+                                    Sample::I32 => {
+                                        *(data as *const i32).add(i) as f32 / 2_147_483_648.0
+                                    }
+                                };
+                            }
+                            sum / ch as f32
+                        };
+                        down.push(mono, &mut chunk);
+                    }
                 }
-                let _ = cap.ReleaseBuffer(frames);
+                let _ = o.cap.ReleaseBuffer(frames);
             }
         }
-        if !chunk.is_empty() && !sh.paused.load(Ordering::SeqCst) {
+        let paused = sh.paused.load(Ordering::SeqCst);
+        let dt = last.elapsed().as_secs_f64();
+        last = std::time::Instant::now();
+        if paused {
+            chunk.clear();
+            sh.level.store(0f32.to_bits(), Ordering::Relaxed);
+        } else if system {
+            wall += dt * RATE as f64;
+            let have = produced + chunk.len() as u64;
+            if (have as f64) < wall - (RATE / 4) as f64 {
+                let pad = (wall - (RATE / 10) as f64) as u64 - have;
+                chunk.extend(std::iter::repeat(0i16).take(pad as usize));
+            }
+        }
+        if !chunk.is_empty() && !paused {
+            produced += chunk.len() as u64;
             sh.level.store(
                 ((rms(&chunk) / 6000.0).min(1.0) as f32).to_bits(),
                 Ordering::Relaxed,
@@ -620,13 +771,11 @@ fn capture(
             if total / RATE as u64 >= MAX_SECONDS {
                 sh.stop.store(true, Ordering::SeqCst);
             }
-        } else if sh.paused.load(Ordering::SeqCst) {
-            sh.level.store(0f32.to_bits(), Ordering::Relaxed);
         }
         std::thread::sleep(Duration::from_millis(50));
     }
     unsafe {
-        let _ = client.Stop();
+        let _ = o.client.Stop();
     }
     if let Some(w) = wav {
         w.close();
@@ -681,6 +830,23 @@ mod tests {
         assert!(body.contains("Fizik.wav"));
         assert!(note_body(0, 10, &[], None, true).contains("yarıda kaldı"));
         assert_eq!(clock(65), "01:05");
+    }
+
+    #[test]
+    fn computer_sound_is_converted_to_16k_mono() {
+        // 48 kHz → 16 kHz: üç karede bir örnek, ortalamaları.
+        let mut d = Downmix::new(48_000);
+        let mut out = Vec::new();
+        for _ in 0..48_000 {
+            d.push(0.5, &mut out);
+        }
+        assert!((15_999..=16_001).contains(&out.len()), "{}", out.len());
+        assert!((out[10] - 16383).abs() <= 1);
+        // Taşan değer sınırlanır.
+        let mut d = Downmix::new(16_000);
+        let mut out = Vec::new();
+        d.push(3.0, &mut out);
+        assert_eq!(out, vec![32767]);
     }
 
     #[test]
