@@ -6,6 +6,7 @@
   import { api } from "../api";
   import Icon from "../Icon.svelte";
   import Switch from "../components/Switch.svelte";
+  import { FRESH, peek, store } from "../footballCache";
   import { getJson, setJson } from "../settings.svelte";
   import type { FootballFav, FootballGroup, FootballLeaders, FootballMatch, FootballTeam, FootballTeamPage } from "../types";
 
@@ -34,6 +35,10 @@
   let teamOpen = $state<{ league: string; team: FootballTeam } | null>(null);
   let teamTab = $state<"squad" | "games">("squad");
   let loading = $state(false);
+  /** Ekranda önbellekteki veri var, arkada tazeleniyor. */
+  let refreshing = $state(false);
+  /** "Yenile" düğmesi: önbellek taze olsa da sor. */
+  let force = false;
   let error = $state("");
   let updated = $state<Date | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -118,19 +123,45 @@
   };
   const leagueName = (id: string) => (id === "all" ? "Tüm maçlar" : (leagues.find(([s]) => s === id)?.[1] ?? CUPS[id] ?? id));
 
-  async function guard<T>(work: () => Promise<T>, apply: (v: T) => void, quiet = false) {
+  /**
+   * Önbellekte varsa hemen gösterir; tazeyse (süresi `fresh` ms) hiç sormaz, değilse arkada sorar ve yalnız
+   * değiştiyse ekrana yansıtır. Önbellekte yoksa iskelet (yükleniyor) görünür.
+   */
+  async function guard<T>(key: string, fresh: number | ((v: T) => number), work: () => Promise<T>, apply: (v: T) => void, quiet = false, blank?: () => void) {
     const my = ++seq;
-    if (!quiet) loading = true;
+    const hit = peek<T>(key);
+    const forced = force;
+    force = false;
+    if (hit) {
+      apply(hit.data);
+      error = "";
+      loading = false;
+      updated = new Date(Date.now() - hit.age);
+      const ttl = typeof fresh === "function" ? fresh(hit.data) : fresh;
+      if (hit.age < ttl && !forced) {
+        refreshing = false;
+        return;
+      }
+      refreshing = true;
+    } else if (!quiet) {
+      // Elde yoksa başka lig/haftanın eski verisi görünmesin: boşalt, iskelet dönsün.
+      blank?.();
+      loading = true;
+    } else refreshing = true;
     try {
       const v = await work();
       if (my !== seq) return;
-      apply(v);
+      if (store(key, v) || !hit) apply(v);
       error = "";
       updated = new Date();
     } catch (e) {
-      if (my === seq) error = String(e);
+      // Elde veri varsa onu göstermeye devam et (internet gidip gelse de ekran boşalmasın).
+      if (my === seq && !hit) error = String(e);
     } finally {
-      if (my === seq) loading = false;
+      if (my === seq) {
+        loading = false;
+        refreshing = false;
+      }
     }
   }
 
@@ -139,14 +170,21 @@
     const keys = new Set(Array.from({ length: 7 }, (_, i) => ymd(plus(mon, i))));
     // Yerel gün, sitenin gün sınırıyla tam örtüşmeyebilir: bir gün öncesi de istenir, yerel haftaya göre süzülür.
     const want = league === "all" ? leagues.map(([s]) => s) : [league];
+    const from = ymd(plus(mon, -1));
+    const to = ymd(plus(mon, 6));
+    const w = week;
     return guard(
-      () => api.football.week(want, ymd(plus(mon, -1)), ymd(plus(mon, 6))),
+      `w:${want.join(",")}:${from}`,
+      (list: FootballMatch[]) =>
+        w < 0 ? FRESH.past : w > 0 ? FRESH.future : list.some((m) => m.state === "in") ? FRESH.live : FRESH.today,
+      () => api.football.week(want, from, to),
       (list) => (matches = list.filter((m) => keys.has(localKey(m.date)))),
       quiet,
+      () => (matches = []),
     ).then(schedule);
   }
-  const loadTable = () => guard(() => api.football.standings(league), (g) => (groups = g));
-  const loadLeaders = () => guard(() => api.football.leaders(league), (l) => (leaders = l));
+  const loadTable = () => guard(`t:${league}`, FRESH.table, () => api.football.standings(league), (g) => (groups = g), false, () => (groups = []));
+  const loadLeaders = () => guard(`l:${league}`, FRESH.leaders, () => api.football.leaders(league), (l) => (leaders = l), false, () => (leaders = null));
 
   /** Canlı maç varken 30 sn, bugünse 5 dk; diğer günlerde kendiliğinden yenilenmez. */
   function schedule() {
@@ -154,7 +192,11 @@
     if (tab !== "matches" || teamOpen) return;
     const live = matches.some((m) => m.state === "in");
     const wait = live ? 30_000 : week === 0 ? 300_000 : 0;
-    if (wait) timer = setTimeout(() => void loadMatches(true), wait);
+    if (wait)
+      timer = setTimeout(() => {
+        force = true;
+        void loadMatches(true);
+      }, wait);
   }
 
   function reload() {
@@ -202,6 +244,8 @@
     teamPage = null;
     teamTab = "squad";
     void guard(
+      `tm:${lg}:${team.id}`,
+      FRESH.team,
       () => api.football.team(lg, team.id),
       (p) => {
         teamPage = p;
@@ -225,6 +269,10 @@
     for (const m of matches) c.set(localKey(m.date), (c.get(localKey(m.date)) ?? 0) + 1);
     return [...c].sort(([a], [b]) => a.localeCompare(b));
   });
+  const perDay = $derived(new Map(dayCounts));
+  /** Seçili haftanın yedi günü (maçsız günler de görünsün, takvim gibi). */
+  const weekDays = $derived(Array.from({ length: 7 }, (_, i) => ymd(plus(monday(week), i))));
+  const todayKey = ymd(dayAt(0));
   const liveCount = $derived(matches.filter((m) => m.state === "in").length);
   /** Gün gün, her günde lig lig. */
   const byDay = $derived.by(() => {
@@ -338,7 +386,7 @@
         {#if error}
           {@render failed("Takım bilgisi alınamadı")}
         {:else if !tp}
-          <p class="sub">Takım yükleniyor…</p>
+          {@render skel("team")}
         {:else if teamTab === "squad"}
           {#if !tp.players.length}
             <p class="sub empty">Bu takımın kadrosu bulunamadı.</p>
@@ -388,47 +436,61 @@
               <button aria-pressed={tab === "table"} disabled={league === "all"} title={league === "all" ? "Soldan bir lig seç" : undefined} onclick={() => setTab("table")}>Puan durumu</button>
               <button aria-pressed={tab === "leaders"} disabled={league === "all"} title={league === "all" ? "Soldan bir lig seç" : undefined} onclick={() => setTab("leaders")}>Krallık</button>
             </div>
-            <button class="btn ghost sm" onclick={reload} disabled={loading} title="Yenile"><Icon name="refresh" size={15} />{loading ? "Yükleniyor…" : "Yenile"}</button>
+            <button class="btn ghost sm" class:spin={loading || refreshing} onclick={() => ((force = true), reload())} disabled={loading || refreshing} title="Yenile"><Icon name="refresh" size={15} />{loading || refreshing ? "Güncelleniyor…" : "Yenile"}</button>
           </div>
         </div>
       </section>
 
       {#if tab === "matches"}
         <section class="panel">
-          <div class="weekbar">
-            <button class="wnav" onclick={() => setWeek(week - 1)} title="Önceki hafta" aria-label="Önceki hafta"><Icon name="back" size={16} /></button>
-            <div class="wtitle">
-              <b>{weekTitle[0] || weekTitle[1]}</b>
-              {#if weekTitle[0]}<span class="sub small tnum">{weekTitle[1]}</span>{/if}
+          <div class="wk">
+            <div class="wk-top">
+              <div class="wsel">
+                <button class="wnav" onclick={() => setWeek(week - 1)} title="Önceki hafta" aria-label="Önceki hafta"><Icon name="back" size={15} /></button>
+                <div class="wtitle">
+                  <b>{weekTitle[0] || "Hafta"}</b>
+                  <span class="tnum">{weekTitle[1]}</span>
+                </div>
+                <button class="wnav" onclick={() => setWeek(week + 1)} title="Sonraki hafta" aria-label="Sonraki hafta"><span class="flip"><Icon name="back" size={15} /></span></button>
+              </div>
+              {#if week !== 0}<button class="wback" onclick={() => setWeek(0)}><Icon name="replay" size={13} />Bu haftaya dön</button>{/if}
+              {#if liveCount}
+                <button class="live-f" class:on={liveOnly} onclick={() => (liveOnly = !liveOnly)} aria-pressed={liveOnly}><span class="dot"></span>Canlı<b class="tnum">{liveCount}</b></button>
+              {/if}
             </div>
-            <button class="wnav" onclick={() => setWeek(week + 1)} title="Sonraki hafta" aria-label="Sonraki hafta"><span class="flip"><Icon name="back" size={16} /></span></button>
-            {#if week !== 0}<button class="btn ghost sm" onclick={() => setWeek(0)}>Bu hafta</button>{/if}
-            {#if liveCount}
-              <button class="live-f" class:on={liveOnly} onclick={() => (liveOnly = !liveOnly)}><span class="dot"></span>Canlı · {liveCount}</button>
+            {#if matches.length}
+              <div class="strip" role="group" aria-label="Gün">
+                <button class="dc all" class:on={!dayF} onclick={() => (dayF = null)}><span class="wd">Tümü</span><b class="tnum">{matches.length}</b><span class="n">maç</span></button>
+                {#each weekDays as k (k)}
+                  {@const n = perDay.get(k) ?? 0}
+                  {@const [wd] = chipDay(k)}
+                  <button class="dc" class:on={dayF === k} class:today={k === todayKey} disabled={!n} onclick={() => (dayF = dayF === k ? null : k)} title={dayName(k)}>
+                    <span class="wd">{k === todayKey ? "Bugün" : wd}</span>
+                    <b class="tnum">{+k.slice(6, 8)}</b>
+                    <span class="n tnum">{n ? `${n} maç` : "–"}</span>
+                  </button>
+                {/each}
+              </div>
             {/if}
           </div>
-          {#if dayCounts.length > 1}
-            <div class="days" role="group" aria-label="Gün">
-              <button class="day all" class:on={!dayF} onclick={() => (dayF = null)}><b>Tüm hafta</b><span class="tnum">{matches.length} maç</span></button>
-              {#each dayCounts as [k, n] (k)}
-                {@const [wd, dd] = chipDay(k)}
-                <button class="day" class:on={dayF === k} onclick={() => (dayF = dayF === k ? null : k)}><b>{wd}</b><span class="tnum">{dd} · {n}</span></button>
-              {/each}
-            </div>
-          {/if}
           {#if error}
             {@render failed("Maçlar alınamadı")}
           {:else if loading && !matches.length}
-            <p class="sub">Maçlar yükleniyor…</p>
+            {@render skel("matches")}
           {:else if !shown.length}
             <p class="sub empty">{liveOnly ? "Şu an oynanan maç yok." : "Bu hafta maç yok."}</p>
           {:else}
             {#each byDay as [k, gs] (k)}
-              <div class="dayh" class:today={k === ymd(dayAt(0))}>{dayName(k)}</div>
+              <div class="dayh" class:today={k === ymd(dayAt(0))}>
+                <span>{dayName(k)}</span>
+                <i class="tnum">{gs.reduce((n, [, l]) => n + l.length, 0)} maç</i>
+              </div>
               {#each gs as [lg, list] (lg)}
                 <div class="lg">
-                  {#if league === "all"}<button class="lgh link" onclick={() => setLeague(lg)}>{leagueName(lg)} <Icon name="next" size={12} /></button>{/if}
-                  {#each list as m (m.id)}{@render matchRow(m)}{/each}
+                  {#if league === "all"}<button class="lgh link" onclick={() => setLeague(lg)}>{leagueName(lg)} <span class="cnt">{list.length}</span><Icon name="next" size={12} /></button>{/if}
+                  <div class="cards">
+                    {#each list as m (m.id)}{@render matchRow(m)}{/each}
+                  </div>
                 </div>
               {/each}
             {/each}
@@ -440,7 +502,7 @@
           {#if error}
             {@render failed("Puan durumu alınamadı")}
           {:else if loading && !groups.length}
-            <p class="sub">Puan durumu yükleniyor…</p>
+            {@render skel("table")}
           {:else if !groups.length}
             <p class="sub empty">Bu lig için puan durumu yok (kupa elemeleri olabilir).</p>
           {:else}
@@ -473,7 +535,7 @@
           {#if error}
             {@render failed("Krallık listesi alınamadı")}
           {:else if loading && !leaders}
-            <p class="sub">Krallık yükleniyor…</p>
+            {@render skel("table")}
           {:else if leaders && !leaders.goals.length && !leaders.assists.length}
             <p class="sub empty">Bu lig için krallık listesi yok.</p>
           {:else if leaders}
@@ -501,25 +563,69 @@
 {/snippet}
 
 {#snippet matchRow(m: FootballMatch)}
-  <div class="match" class:live={m.state === "in"} class:fav={isFav(m.home.team.id) || isFav(m.away.team.id)}>
-    {@render teamBtn(m.league, m.home.team, true, m.home.winner)}
-    <div class="mid">
-      {#if m.home.score === null}
-        <div class="score tnum kick">{m.status || TIME.format(new Date(m.date))}</div>
+  {@const live = m.state === "in"}
+  {@const fav = isFav(m.home.team.id) || isFav(m.away.team.id)}
+  <article class="mc" class:live class:fav class:post={m.state === "post"}>
+    <div class="mc-top">
+      {#if live}
+        <span class="pill live"><span class="dot"></span>{m.status || "Canlı"}</span>
+      {:else if m.home.score === null}
+        <span class="pill">{m.status && m.status !== TIME.format(new Date(m.date)) ? m.status : TIME.format(new Date(m.date))}</span>
       {:else}
-        <div class="score tnum">{m.home.score}<i>-</i>{m.away.score}</div>
-        <div class="st tnum">{#if m.state === "in"}<span class="dot"></span>{/if}{m.status}</div>
+        <span class="pill done">{m.status || "MS"}</span>
       {/if}
+      {#if fav}<span class="favtag" title="Favori takımın"><Icon name="star" size={12} /></span>{/if}
     </div>
-    {@render teamBtn(m.league, m.away.team, false, m.away.winner)}
+    {@render side(m, m.home, m.away)}
+    {@render side(m, m.away, m.home)}
     {#if m.events.length}
-      <div class="evs">
-        <div class="ev home">
-          {#each sideEvents(m, "home") as e, i (i)}<span class:red={e.kind === "red"}>{e.player || "?"}{evNote(e.kind)}{#if e.minute}{" "}<b class="tnum">{e.minute}</b>{/if} {evIcon(e.kind)}</span>{/each}
-        </div>
-        <div class="ev away">
-          {#each sideEvents(m, "away") as e, i (i)}<span class:red={e.kind === "red"}>{evIcon(e.kind)}{#if e.minute}{" "}<b class="tnum">{e.minute}</b>{/if} {e.player || "?"}{evNote(e.kind)}</span>{/each}
-        </div>
+      <div class="mc-ev">
+        {#each m.events as e, i (i)}
+          {@const t = e.side === "home" ? m.home.team : m.away.team}
+          <span class:red={e.kind === "red"} title={t.name}>
+            {#if t.logo}<img src={t.logo} alt="" loading="lazy" />{/if}
+            <i>{evIcon(e.kind)}</i>{e.player || "?"}{evNote(e.kind)}{#if e.minute}<b class="tnum">{e.minute}</b>{/if}
+          </span>
+        {/each}
+      </div>
+    {/if}
+  </article>
+{/snippet}
+
+{#snippet side(m: FootballMatch, s: FootballMatch["home"], o: FootballMatch["home"])}
+  {@const lose = m.state === "post" && s.score !== null && o.score !== null && s.score < o.score}
+  <div class="mc-row" class:win={s.winner || (m.state === "post" && s.score !== null && o.score !== null && s.score > o.score)} class:lose>
+    <button class="mc-team" onclick={() => openTeam(m.league, s.team)} title="{s.team.name} · kadro ve maçlar">
+      {#if s.team.logo}<img src={s.team.logo} alt="" loading="lazy" />{:else}<span class="ph">{initials(s.team.name)}</span>{/if}
+      <span class="nm">{s.team.name}</span>
+      {#if isFav(s.team.id)}<Icon name="star" size={11} />{/if}
+    </button>
+    <span class="mc-score tnum">{s.score ?? ""}</span>
+  </div>
+{/snippet}
+
+{#snippet skel(kind: "matches" | "table" | "team")}
+  <div class="skel" aria-label="Yükleniyor" aria-busy="true">
+    {#if kind === "matches"}
+      <div class="sk-line w30"></div>
+      <div class="cards">
+        {#each Array(6) as _, i (i)}
+          <div class="mc sk">
+            <div class="sk-line w20"></div>
+            <div class="sk-team"><span class="sk-dot"></span><span class="sk-line w60"></span><span class="sk-line w8"></span></div>
+            <div class="sk-team"><span class="sk-dot"></span><span class="sk-line w50"></span><span class="sk-line w8"></span></div>
+          </div>
+        {/each}
+      </div>
+    {:else if kind === "table"}
+      {#each Array(10) as _, i (i)}
+        <div class="sk-team row"><span class="sk-line w4"></span><span class="sk-dot"></span><span class="sk-line w40"></span><span class="sk-line w20 r"></span></div>
+      {/each}
+    {:else}
+      <div class="squad">
+        {#each Array(9) as _, i (i)}
+          <div class="pl sk"><span class="sk-dot big"></span><span class="sk-col"><span class="sk-line w70"></span><span class="sk-line w40"></span></span></div>
+        {/each}
       </div>
     {/if}
   </div>
@@ -578,40 +684,17 @@
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 10px; font-size: 13px; color: var(--muted); cursor: pointer; }
   .favb { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
   .favb.on { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
-  .match.fav { background: rgba(227, 194, 112, 0.06); }
-  .match.fav:not(.live) { border-color: rgba(227, 194, 112, 0.25); }
   h2 { margin: 0; font-family: var(--f-display); font-size: 22px; }
   .sm { padding: 6px 11px; font-size: 13px; }
   .seg button:disabled { opacity: 0.4; cursor: default; }
-  .weekbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .wnav { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--coal-2); color: var(--text); cursor: pointer; }
-  .flip { display: grid; transform: scaleX(-1); }
-  .wnav:hover { border-color: var(--gold); color: var(--gold-glow); }
-  .wtitle { display: flex; flex-direction: column; min-width: 150px; align-items: center; }
-  .wtitle b { font-size: 15px; }
   .dayh { margin-top: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 14px; color: var(--text); text-transform: capitalize; }
   .dayh.today { color: var(--gold-glow); }
-  .days { display: flex; gap: 6px; flex-wrap: wrap; align-items: stretch; }
-  .day { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 60px; padding: 7px 10px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--coal-2); color: var(--muted); cursor: pointer; font: inherit; }
-  .day b { font-size: 13px; color: var(--text); font-weight: 600; }
-  .day span { font-size: 11.5px; }
-  .day.on { border-color: var(--gold); background: rgba(227, 194, 112, 0.12); }
-  .day.on b { color: var(--gold-glow); }
-  .live-f { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 12px; border: 1px solid rgba(224, 106, 106, 0.5); background: rgba(224, 106, 106, 0.08); color: #ffb4b4; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .live-f.on { background: rgba(224, 106, 106, 0.22); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5a5a; animation: pulse 1.6s infinite; flex: none; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 90, 0.55); } 70% { box-shadow: 0 0 0 7px rgba(255, 90, 90, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 90, 90, 0); } }
   .lg { display: flex; flex-direction: column; gap: 4px; }
   .lgh { margin-top: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 6px; }
   .lgh.link { background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; align-self: flex-start; }
   .lgh.link:hover { color: var(--gold); }
-  .match { display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); align-items: center; gap: 4px 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.025); border: 1px solid transparent; }
-  .match:hover { background: rgba(255, 255, 255, 0.045); }
-  .match.live { border-color: rgba(224, 106, 106, 0.35); }
-  .mid { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .st { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--dim); }
-  .match.live .st { color: #ff8a8a; font-weight: 700; }
-  .score.kick { font-size: 14px; font-weight: 600; color: var(--muted); }
   .tm { display: flex; align-items: center; gap: 10px; min-width: 0; background: none; border: 0; padding: 4px 6px; border-radius: 8px; color: inherit; font: inherit; cursor: pointer; }
   .tm:hover { background: rgba(255, 255, 255, 0.05); }
   .tm:hover .nm { color: var(--gold-glow); }
@@ -621,16 +704,8 @@
   .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   .tm.win .nm { font-weight: 700; }
   .score { justify-self: center; display: inline-flex; align-items: center; gap: 6px; min-width: 64px; justify-content: center; padding: 4px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.3); font-size: 17px; font-weight: 700; }
-  .match.live .score { color: #ffd2d2; }
   .score i { font-style: normal; color: var(--dim); font-weight: 400; }
   .vs { color: var(--dim); font-weight: 400; }
-  .evs { grid-column: 1 / 4; display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); gap: 0 12px; font-size: 12px; color: var(--muted); }
-  .ev { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 0 6px; }
-  .ev.home { text-align: right; }
-  .ev.away { grid-column: 3; }
-  .ev span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ev b { color: var(--text); font-weight: 600; }
-  .ev .red { color: #ff8a8a; }
   .empty { padding: 18px 4px; }
   .err { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(224, 106, 106, 0.08); border: 1px solid rgba(224, 106, 106, 0.35); color: #ffc9c9; font-size: 13px; }
   .err span { flex: 1; }
@@ -688,10 +763,93 @@
     .side { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 10px; }
     .brand, .cat, .src { display: none; }
     .lg-btn { width: auto; border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 12px; }
-    .match { grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr); gap: 4px 8px; }
-    .evs { grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr); gap: 0 8px; }
     .tr { grid-template-columns: 28px minmax(0, 1fr) 28px 28px 28px 28px 0 0 36px; }
     .tr > :nth-child(7), .tr > :nth-child(8) { display: none; }
     .game { grid-template-columns: 80px minmax(0, 1fr) 54px minmax(0, 1fr) 34px; }
   }
+  /* ---- hafta seçici ---- */
+  .wk { display: flex; flex-direction: column; gap: 10px; }
+  .wk-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .wsel { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.18); }
+  .wnav { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; border: 0; background: none; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+  .wnav:hover { background: rgba(255, 255, 255, 0.07); color: var(--gold-glow); }
+  .flip { display: grid; transform: scaleX(-1); }
+  .wtitle { display: flex; align-items: baseline; gap: 8px; padding: 0 10px; min-width: 190px; justify-content: center; }
+  .wtitle b { font-family: var(--f-display); font-size: 15px; font-weight: 700; color: var(--text); }
+  .wtitle span { font-size: 12.5px; color: var(--dim); }
+  .wback { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+  .wback:hover { color: var(--gold-glow); border-color: rgba(227, 194, 112, 0.4); }
+  .live-f { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 999px; border: 1px solid rgba(224, 106, 106, 0.4); background: rgba(224, 106, 106, 0.07); color: #ffb4b4; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .live-f b { min-width: 20px; padding: 1px 6px; border-radius: 999px; background: rgba(224, 106, 106, 0.25); color: #ffe1e1; font-size: 11.5px; text-align: center; }
+  .live-f:hover, .live-f.on { background: rgba(224, 106, 106, 0.2); border-color: rgba(224, 106, 106, 0.65); }
+  .strip { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--line); }
+  .dc { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px 8px; border-radius: 10px; border: 1px solid transparent; background: none; color: var(--muted); font: inherit; cursor: pointer; transition: background 0.15s, color 0.15s; }
+  .dc .wd { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+  .dc b { font-size: 18px; font-weight: 700; line-height: 1.2; color: var(--text); }
+  .dc .n { font-size: 11px; color: var(--dim); }
+  .dc:not(:disabled):hover { background: rgba(255, 255, 255, 0.05); }
+  .dc:disabled { cursor: default; opacity: 0.35; }
+  .dc.today .wd { color: var(--gold); }
+  .dc.today::after { content: ""; position: absolute; top: 5px; right: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); }
+  .dc.on { background: rgba(227, 194, 112, 0.13); border-color: rgba(227, 194, 112, 0.45); }
+  .dc.on b, .dc.on .wd { color: var(--gold-glow); }
+  .dc.on .n { color: var(--gold); }
+  .dc.all b { color: var(--gold-glow); }
+  @media (max-width: 640px) { .strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } .wtitle { min-width: 0; } }
+  /* ---- maç kartları ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+  .mc { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 11px; border-radius: 14px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)); transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+  .mc:hover { border-color: var(--line-2); transform: translateY(-1px); }
+  .mc.live { border-color: rgba(224, 106, 106, 0.45); background: linear-gradient(180deg, rgba(224, 106, 106, 0.08), rgba(255, 255, 255, 0.015)); }
+  .mc.fav:not(.live) { border-color: rgba(227, 194, 112, 0.35); }
+  .mc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+  .pill.done { color: var(--dim); }
+  .pill.live { background: rgba(224, 106, 106, 0.16); color: #ff9a9a; }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5f5f; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .favtag { color: var(--gold); display: grid; place-items: center; }
+  .mc-row { display: flex; align-items: center; gap: 8px; }
+  .mc-team { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 4px 4px; margin-left: -4px; border-radius: 8px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .mc-team:hover { background: rgba(255, 255, 255, 0.05); }
+  .mc-team:hover .nm { color: var(--gold-glow); }
+  .mc-team img, .mc-team .ph { width: 22px; height: 22px; object-fit: contain; flex: none; }
+  .mc-team .ph { display: grid; place-items: center; border-radius: 50%; background: var(--coal); font-size: 10px; font-weight: 700; color: var(--muted); }
+  .mc-team .nm { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mc-team :global(svg) { color: var(--gold); flex: none; }
+  .mc-score { min-width: 26px; text-align: right; font-size: 17px; font-weight: 800; }
+  .mc-row.lose .nm, .mc-row.lose .mc-score { color: var(--dim); font-weight: 500; }
+  .mc-row.win .nm { font-weight: 700; }
+  .mc.live .mc-score { color: #ffd2d2; }
+  .mc-ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; padding-top: 7px; border-top: 1px dashed rgba(255, 255, 255, 0.08); font-size: 11.5px; color: var(--muted); }
+  .mc-ev span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .mc-ev img { width: 13px; height: 13px; object-fit: contain; }
+  .mc-ev i { font-style: normal; font-size: 10px; }
+  .mc-ev b { color: var(--text); font-weight: 600; margin-left: 2px; }
+  .mc-ev .red { color: #ff8a8a; }
+  .mc-ev .red i { color: #ff5f5f; }
+  .cnt { font-size: 10.5px; color: var(--dim); font-weight: 600; }
+  .dayh { display: flex; align-items: baseline; justify-content: space-between; }
+  .dayh i { font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--dim); }
+  .btn.spin :global(svg) { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- yüklenirken iskelet: içi dolup boşalan ışık ---- */
+  .skel { display: flex; flex-direction: column; gap: 10px; }
+  .sk { pointer-events: none; }
+  .sk-team { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .sk-team.row { padding: 8px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+  .sk-col { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .sk-line, .sk-dot {
+    display: block; height: 11px; border-radius: 6px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.12) 40%, rgba(255, 255, 255, 0.05) 80%);
+    background-size: 220% 100%; animation: shimmer 1.3s ease-in-out infinite;
+  }
+  .sk-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+  .sk-dot.big { width: 38px; height: 38px; }
+  .w4 { width: 4%; } .w8 { width: 8%; margin-left: auto; } .w20 { width: 20%; } .w30 { width: 30%; } .w40 { width: 40%; }
+  .w50 { width: 50%; } .w60 { width: 60%; } .w70 { width: 70%; }
+  .sk-line.r { margin-left: auto; }
+  @keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+  @media (prefers-reduced-motion: reduce) { .sk-line, .sk-dot, .pill .dot { animation: none; } }
 </style>

@@ -99,11 +99,31 @@ pub fn kind_of(desc: &str) -> Option<&'static str> {
         .filter(|w| !w.is_empty())
         .collect();
     let has = |w: &str| words.contains(&w);
-    if d.contains("film series") || d.contains("franchise") || d.contains("character") {
+    // Türkçe Vikipedi'nin açıklamaları da: "2019 yapımı Türk komedi filmi", "Türk televizyon dizisi".
+    if d.contains("film series")
+        || d.contains("franchise")
+        || d.contains("character")
+        || d.contains("film serisi")
+        || d.contains("karakter")
+        // Kişiler: "American film director", "Türk film yönetmeni".
+        || [
+            "director", "actor", "actress", "producer", "screenwriter", "composer", "critic",
+            "yönetmen", "yönetmeni", "oyuncu", "oyuncusu", "yapımcı", "yapımcısı", "senarist",
+            "aktör", "aktris", "eleştirmen", "şarkıcı",
+        ]
+        .iter()
+        .any(|w| has(w))
+    {
         None
-    } else if has("series") || has("miniseries") || has("sitcom") || has("telenovela") {
+    } else if has("series")
+        || has("miniseries")
+        || has("sitcom")
+        || has("telenovela")
+        || has("dizisi")
+        || has("dizi")
+    {
         Some("series")
-    } else if has("film") || has("movie") {
+    } else if has("film") || has("movie") || has("filmi") {
         Some("movie")
     } else {
         None
@@ -128,8 +148,10 @@ pub fn parse_search(json: &Value) -> Vec<Hit> {
         .into_iter()
         .filter_map(|p| {
             let title = p["title"].as_str()?;
+            // İngilizce Vikipedi'de sayfanın kısa açıklaması; Türkçede Vikiveri açıklaması.
             let desc = p["pageprops"]["wikibase-shortdesc"]
                 .as_str()
+                .or(p["description"].as_str())
                 .unwrap_or_default();
             let kind = kind_of(desc)?;
             Some(Hit {
@@ -145,14 +167,67 @@ pub fn parse_search(json: &Value) -> Vec<Hit> {
         .collect()
 }
 
-pub fn search(term: &str) -> Result<Vec<Hit>, String> {
-    let url = format!(
-        "https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&generator=search\
-         &gsrlimit=12&prop=pageimages%7Cpageprops&piprop=thumbnail&pithumbsize=300&pilicense=any\
+fn search_url(lang: &str, term: &str) -> String {
+    format!(
+        "https://{lang}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&generator=search\
+         &gsrlimit=12&prop=pageimages%7Cpageprops%7Cdescription&piprop=thumbnail&pithumbsize=300&pilicense=any\
          &ppprop=wikibase-shortdesc%7Cwikibase_item&gsrsearch={}",
         enc(term.trim())
-    );
-    Ok(parse_search(&get_json(&url)?))
+    )
+}
+
+/// İngilizce ve Türkçe Vikipedi'de aynı anda arar: yerli ve küçük yapımlar ("Aykut Enişte") çoğu zaman yalnız
+/// Türkçe Vikipedi'de vardır. Aynı yapım (Vikiveri kimliği) bir kez gelir; adı aranana tam uyanlar önce.
+pub fn search(term: &str) -> Result<Vec<Hit>, String> {
+    let (en, tr) = std::thread::scope(|s| {
+        let en = s.spawn(|| get_json(&search_url("en", term)).map(|j| parse_search(&j)));
+        let tr = s.spawn(|| get_json(&search_url("tr", term)).map(|j| parse_search(&j)));
+        (
+            en.join()
+                .unwrap_or_else(|_| Err("arama yarıda kaldı".into())),
+            tr.join()
+                .unwrap_or_else(|_| Err("arama yarıda kaldı".into())),
+        )
+    });
+    if let (Err(e), Err(_)) = (&en, &tr) {
+        return Err(e.clone());
+    }
+    let tr = tr.unwrap_or_default().into_iter().map(|mut h| {
+        // Türkçe sayfa: bilgiler Türkçe Vikipedi'den alınsın (İngilizce'de aynı adlı başka sayfa olabilir).
+        h.wiki_title = format!("{TR_PREFIX}{}", h.wiki_title);
+        h
+    });
+    Ok(merge_hits(en.unwrap_or_default(), tr.collect(), term))
+}
+
+/// Türkçe Vikipedi sayfası olduğunu belirten ön ek ("tr:Aykut Enişte").
+pub const TR_PREFIX: &str = "tr:";
+
+pub fn merge_hits(en: Vec<Hit>, tr: Vec<Hit>, term: &str) -> Vec<Hit> {
+    let mut out: Vec<Hit> = Vec::new();
+    for h in en.into_iter().chain(tr) {
+        let dup = out.iter().any(|x| {
+            (x.wikidata.is_some() && x.wikidata == h.wikidata)
+                || (norm(&x.name) == norm(&h.name) && x.year == h.year && x.kind == h.kind)
+        });
+        if !dup {
+            out.push(h);
+        }
+    }
+    let q = norm(term);
+    // Tam uyan önce, sonra adı arananla başlayanlar; kalanlar geldiği sırada.
+    out.sort_by_key(|h| {
+        let n = norm(&h.name);
+        if n == q {
+            0
+        } else if n.starts_with(&q) {
+            1
+        } else {
+            2
+        }
+    });
+    out.truncate(16);
+    out
 }
 
 // ---- Wikidata ----
@@ -680,11 +755,19 @@ struct Pending {
 }
 
 fn fill(db: &Db, posters: &Path, p: &Pending) -> Result<(), String> {
-    let (id, wiki) = (p.id.as_str(), p.wiki.as_deref());
-    let f = match p.qid.as_deref() {
+    // "tr:" ile başlayan: Türkçe Vikipedi'den bulunmuş; İngilizce sayfası bilinmiyor.
+    let tr_hit = p.wiki.as_deref().and_then(|w| w.strip_prefix(TR_PREFIX));
+    let (id, wiki) = (
+        p.id.as_str(),
+        p.wiki.as_deref().filter(|w| !w.starts_with(TR_PREFIX)),
+    );
+    let mut f = match p.qid.as_deref() {
         Some(q) => facts(q)?,
         None => Facts::default(),
     };
+    if f.tr_wiki.is_none() {
+        f.tr_wiki = tr_hit.map(str::to_string);
+    }
     let summary = f
         .tr_wiki
         .as_deref()
@@ -781,6 +864,35 @@ mod tests {
     }
 
     #[test]
+    fn turkish_wikipedia_hits_are_merged() {
+        let json: Value = serde_json::from_str(
+            r#"{"query":{"pages":[
+              {"title":"Aykut Enişte","index":1,"description":"2019 yapımı Türk komedi filmi","pageprops":{"wikibase_item":"Q65"}},
+              {"title":"Kardeş Payı","index":2,"description":"Türk televizyon dizisi","pageprops":{"wikibase_item":"Q66"}},
+              {"title":"Cem Yılmaz","index":3,"description":"Türk komedyen, oyuncu ve yönetmen","pageprops":{"wikibase_item":"Q67"}}
+            ]}}"#,
+        )
+        .unwrap();
+        let tr = parse_search(&json);
+        assert_eq!(tr.len(), 2, "{tr:?}");
+        assert_eq!((tr[0].kind.as_str(), tr[0].year), ("movie", Some(2019)));
+        assert_eq!(tr[1].kind, "series");
+        let en = vec![Hit {
+            wiki_title: "Aykut Enişte".into(),
+            name: "Aykut Enişte".into(),
+            description: "2019 Turkish film".into(),
+            image: None,
+            wikidata: Some("Q65".into()),
+            kind: "movie".into(),
+            year: Some(2019),
+        }];
+        let m = merge_hits(en, tr, "kardeş payı");
+        // Aynı Vikiveri kimliği bir kez; tam uyan önce.
+        assert_eq!(m.len(), 2);
+        assert_eq!(m[0].name, "Kardeş Payı");
+    }
+
+    #[test]
     fn search_results_are_films_and_series_only() {
         let json: Value = serde_json::from_str(
             r#"{"query":{"pages":[
@@ -851,6 +963,9 @@ mod tests {
             Some("movie")
         );
         assert_eq!(kind_of("Turkish actor"), None);
+        assert_eq!(kind_of("American film director"), None);
+        assert_eq!(kind_of("Türk film yönetmeni"), None);
+        assert_eq!(kind_of("2019 yapımı Türk komedi filmi"), Some("movie"));
         assert_eq!(display_name("Dark (TV series)"), "Dark");
         assert_eq!(display_name("Up"), "Up");
     }

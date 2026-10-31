@@ -384,6 +384,15 @@ pub async fn deals_open(url: String, store: String, browser: Option<bool>) -> Cm
                     Err(e) => crate::log!("Mağaza uygulaması açılamadı ({link}): {e}"),
                 }
             }
+            // Bağlantı türü kayıtlı değilse başlatıcının kendisine verilir (Epic).
+            if let Some(exe) = crate::deals::launcher_exe(scheme) {
+                let mut cmd = std::process::Command::new(&exe);
+                cmd.arg(&link);
+                match cmd.spawn() {
+                    Ok(_) => return Ok("app".to_string()),
+                    Err(e) => crate::log!("Başlatıcı açılamadı ({}): {e}", exe.display()),
+                }
+            }
         }
         tauri_plugin_opener::open_url(&real, None::<&str>).map_err(|e| e.to_string())?;
         Ok("browser".to_string())

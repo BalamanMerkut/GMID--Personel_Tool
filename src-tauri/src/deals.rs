@@ -657,24 +657,29 @@ pub fn app_link(store: &str, url: &str) -> Option<(&'static str, String)> {
             })
         }
         "epic" => {
-            let slug = lower
+            // Epic'in kendi biçimi: com.epicgames.launcher://store/product/<ürün>. Ürün adı yoksa (ücretsiz
+            // oyunlar sayfası) başlatıcının mağazası açılır.
+            let rest = lower
                 .split("store.epicgames.com/")
-                .nth(1)?
+                .nth(1)
+                .or_else(|| lower.split("epicgames.com/store/").nth(1))?;
+            let slug = rest
                 .split("/p/")
-                .nth(1)?
-                .split(['?', '#', '/'])
-                .next()?
-                .to_string();
-            (!slug.is_empty()
-                && slug
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
-            .then(|| {
-                (
-                    "com.epicgames.launcher",
-                    format!("com.epicgames.launcher://store/p/{slug}"),
-                )
-            })
+                .nth(1)
+                .or_else(|| rest.split("product/").nth(1))
+                .and_then(|r| r.split(['?', '#', '/']).next())
+                .filter(|s| {
+                    !s.is_empty()
+                        && s.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                });
+            Some((
+                "com.epicgames.launcher",
+                match slug {
+                    Some(s) => format!("com.epicgames.launcher://store/product/{s}"),
+                    None => "com.epicgames.launcher://store".to_string(),
+                },
+            ))
         }
         "xbox" => {
             // apps.microsoft.com/detail/9NBLGGH4R32N, microsoft.com/…/p/ad/9NBLGGH4R32N
@@ -721,6 +726,34 @@ pub fn scheme_installed(scheme: &str) -> bool {
 #[cfg(not(windows))]
 pub fn scheme_installed(_scheme: &str) -> bool {
     false
+}
+
+/// Bağlantı türü kayıtlı görünmese de başlatıcı yüklüyse (Epic bazen kendini kaydetmiyor) programın yolu.
+#[cfg(windows)]
+pub fn launcher_exe(scheme: &str) -> Option<std::path::PathBuf> {
+    if scheme != "com.epicgames.launcher" {
+        return None;
+    }
+    let roots = [
+        std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| r"C:\Program Files (x86)".into()),
+        std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into()),
+    ];
+    roots
+        .iter()
+        .flat_map(|r| {
+            ["Win64", "Win32"].map(|b| {
+                std::path::Path::new(r)
+                    .join(r"Epic Games\Launcher\Portal\Binaries")
+                    .join(b)
+                    .join("EpicGamesLauncher.exe")
+            })
+        })
+        .find(|p| p.is_file())
+}
+
+#[cfg(not(windows))]
+pub fn launcher_exe(_scheme: &str) -> Option<std::path::PathBuf> {
+    None
 }
 
 /// `steam://…` gibi bir bağlantıyı Windows'un kendi açma yöntemiyle (kayıtlı uygulamaya) verir.
@@ -877,10 +910,14 @@ mod tests {
             )
             .unwrap()
             .1,
-            "com.epicgames.launcher://store/p/hogwarts-legacy"
+            "com.epicgames.launcher://store/product/hogwarts-legacy"
         );
         // Epic ürün adı yoksa (yönlendirme bağlantısı) tarayıcı.
         assert!(app_link("epic", "https://www.gamerpower.com/open/abc").is_none());
+        assert_eq!(
+            app_link("epic", "https://store.epicgames.com/tr/free-games").map(|l| l.1),
+            Some("com.epicgames.launcher://store".to_string())
+        );
         assert_eq!(
             app_link(
                 "xbox",
