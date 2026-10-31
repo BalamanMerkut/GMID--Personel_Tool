@@ -332,13 +332,14 @@
         </div>
         <div class="line">
           <div>
-            <b>Yeni oyun açılınca sor</b>
+            <b>Açtığın yeni oyunları kendiliğinden ekle</b>
             <span class="sub small">
               Kütüphanende olmayan bir oyun açılınca (bilinen oyunlar listesinde varsa ya da bir dakikadan uzun tam ekran
-              çalışırsa) sağ altta "Kütüphaneye ekleyeyim mi?" diye sorar.
+              çalışırsa) sormadan kütüphaneye eklenir, oynama süresi hemen işler. Yanlış eklenen bir programı kütüphaneden
+              kaldırırsan bir daha eklenmez.
             </span>
           </div>
-          <Switch label="Yeni oyun açılınca sor" checked={gamesAsk} onchange={(v) => toggle("games.ask", v, (x) => (gamesAsk = x))} />
+          <Switch label="Açtığın yeni oyunları kendiliğinden ekle" checked={gamesAsk} onchange={(v) => toggle("games.ask", v, (x) => (gamesAsk = x))} />
         </div>
       </section>
       <ClipsSettings />

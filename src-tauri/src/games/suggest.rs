@@ -1,12 +1,12 @@
-//! Kütüphanede olmayan bir oyun açılınca "Kütüphaneye ekleyeyim mi?" diye sormak.
+//! Kütüphanede olmayan bir oyun açılınca sormadan kütüphaneye eklemek (süresi hemen işlesin).
 //!
 //! İki ipucu:
 //! 1. **Discord'un algılanabilir oyunlar listesi** (`/applications/detectable`, herkese açık, haftada bir indirilir):
-//!    binlerce oyunun exe adı. Bilinen bir oyun 20 sn açık kalırsa sorulur.
+//!    binlerce oyunun exe adı. Bilinen bir oyun 20 sn açık kalırsa eklenir.
 //! 2. **Tam ekran:** listede olmayan bir program 1 dakikadan uzun süre ön planda ve tam ekransa (tarayıcı, video
-//!    oynatıcı gibi bilinen programlar hariç) sorulur.
+//!    oynatıcı gibi bilinen programlar hariç) eklenir.
 //!
-//! "Bir daha sorma" denen program unutulmaz; "Şimdi değil" denen bir sonraki açılışında yeniden sorulur.
+//! Kütüphaneden kaldırılan (ya da eskiden "Bir daha sorma" denen) program bir daha eklenmez.
 
 use super::procs::Proc;
 use std::collections::HashMap;

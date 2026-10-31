@@ -387,6 +387,26 @@ impl Games {
         {
             let db = app.state::<Db>();
             let conn = db.conn();
+            // Elle ya da kendiliğinden eklenmiş (exe yoluyla) oyun kaldırılınca bir daha kendiliğinden eklenmesin.
+            let manual: Option<(String, String)> = conn
+                .query_row(
+                    "SELECT source_id, name FROM games WHERE id = ?1 AND source = 'manual'",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .ok();
+            if let Some((path, name)) = manual {
+                let exe = Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let _ = conn.execute(
+                    "INSERT INTO game_suggestions (path, exe, name, reason, state, seen_at)
+                     VALUES (?1, ?2, ?3, 'removed', 'ignored', ?4)
+                     ON CONFLICT(path) DO UPDATE SET state = 'ignored'",
+                    params![path, exe, name, now_ms()],
+                );
+            }
             let reviewed: bool = conn
                 .query_row(
                     "SELECT EXISTS(SELECT 1 FROM reviews WHERE subject_kind = 'game' AND subject_id = ?1)",
@@ -620,7 +640,8 @@ impl Games {
         changed
     }
 
-    /// Kütüphanede olmayan bir oyun açıldıysa sorar (sağ altta kart + Kütüphanem'de liste).
+    /// Kütüphanede olmayan bir oyun açıldıysa sormadan kütüphaneye ekler (süresi hemen işlesin); köşede kısa
+    /// bir bildirim çıkar. Kütüphaneden kaldırılan bir daha eklenmez.
     fn suggest_tick(&self, app: &AppHandle, procs: &[procs::Proc], titles: &HashMap<u32, String>) {
         let db = app.state::<Db>();
         if !db.setting_json::<bool>(suggest::ASK_KEY).unwrap_or(true) {
@@ -691,6 +712,7 @@ impl Games {
         }
         let guard = self.matchers(&db);
         let matchers = guard.as_deref().unwrap_or_default();
+        let mut to_add: Vec<(String, String)> = Vec::new();
         for (p, name, reason) in candidates {
             if p.pid == me || matchers.iter().any(|m| matches(m, p, titles)) {
                 continue;
@@ -723,20 +745,27 @@ impl Games {
             if ignored {
                 continue;
             }
-            let _ = db.conn().execute(
-                "INSERT INTO game_suggestions (path, exe, name, reason, state, seen_at)
-                 VALUES (?1, ?2, ?3, ?4, 'pending', ?5)
-                 ON CONFLICT(path) DO UPDATE SET seen_at = excluded.seen_at",
-                params![key, p.name, name, reason, now],
-            );
-            st.after_exit.insert(key.clone(), p.pid);
-            if !st.showing.contains(&key) {
-                st.showing.push(key);
-            }
-            raised = true;
+            to_add.push((name, key));
         }
         drop(guard);
         drop(st);
+        for (name, path) in to_add {
+            match self.add_manual(app, &name, &path) {
+                Ok(()) => {
+                    let _ = db
+                        .conn()
+                        .execute("DELETE FROM game_suggestions WHERE path = ?1", [&path]);
+                    crate::log!("Yeni oyun kütüphaneye eklendi: {name} ({path})");
+                    crate::overlay::show_osd(
+                        app,
+                        "library",
+                        format!("Kütüphaneye eklendi: {name}"),
+                    );
+                    let _ = app.emit("games-suggestions", ());
+                }
+                Err(e) => crate::log!("Yeni oyun eklenemedi ({name}): {e}"),
+            }
+        }
         if raised {
             crate::overlay::raise_alerts_quiet(app);
             let _ = app.emit("games-suggestions", ());
