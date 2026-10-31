@@ -226,7 +226,7 @@
         {:else if route === "notes"}
           <!-- Not editörü büyük olduğu için sadece Notlar açılınca yüklenir. -->
           {#await import("./lib/screens/Notes.svelte") then m}
-            <m.default />
+            <m.default onnavigate={navigate} />
           {/await}
         {:else}
           <Placeholder {screen} onnavigate={navigate} />

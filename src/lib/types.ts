@@ -56,6 +56,13 @@ export interface NoteSummary {
   pinned: boolean;
   updatedAt: number;
   deletedAt: number | null;
+  createdAt: number;
+  /** "lecture": Ders Kaydı'ndan gelen not. */
+  kind: "note" | "lecture";
+  tasksDone: number;
+  tasksTotal: number;
+  images: number;
+  words: number;
 }
 
 export interface NoteInput {

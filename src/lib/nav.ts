@@ -63,10 +63,10 @@ export const ROOMS: Room[] = [
     screens: [
       { id: "notes", label: "Notlar", icon: "note", phase: null,
         description: "Her yerden Ctrl+Alt+N ile açılan hızlı not, yapışkan notlar ve yapılacaklar listeleri. Kaybolmaz, kendiliğinden kaydedilir." },
-      { id: "reminders", label: "Hatırlatıcılar", icon: "bell", phase: null,
-        description: "\"30 dk sonra\", \"yarın 09:00\" gibi hızlı hatırlatıcılar; Windows bildirimiyle, oyundayken köşede küçük gösterge." },
       { id: "lecture", label: "Ders Kaydı", icon: "mic", phase: null,
         description: "Online derste (DEBSIS, Zoom, Teams) ya da sınıfta kaydı başlat: hocanın söyledikleri arka planda canlı yazıya dökülür, bitince dakika işaretleriyle Notlar'a kaydedilir. Ses bilgisayardan çıkmaz." },
+      { id: "reminders", label: "Hatırlatıcılar", icon: "bell", phase: null,
+        description: "\"30 dk sonra\", \"yarın 09:00\" gibi hızlı hatırlatıcılar; Windows bildirimiyle, oyundayken köşede küçük gösterge." },
       { id: "timer", label: "Sayaç", icon: "timer", phase: null,
         description: "Kronometre ve aynı anda birden çok geri sayım. Tepsiden ve Oyun İçi Panel'den başlatılabilir." },
       { id: "audio", label: "Ses & Mikrofon", icon: "speaker", phase: null,
@@ -158,9 +158,9 @@ export const NAV: NavRoom[] = [
         icon: "note",
         tabs: [
           { id: "notes", label: "Notlar" },
+          { id: "lecture", label: "Ders Kaydı" },
           { id: "reminders", label: "Hatırlatıcılar" },
           { id: "timer", label: "Sayaç" },
-          { id: "lecture", label: "Ders Kaydı" },
         ],
       },
       {

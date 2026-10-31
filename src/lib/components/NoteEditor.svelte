@@ -175,48 +175,87 @@
     return true;
   }
 
-  type Tool = { icon: IconName; label: string; run: () => void; active: () => boolean };
-  const tools: Tool[] = [
-    { icon: "bold", label: "Kalın (Ctrl+B)", run: () => editor?.chain().focus().toggleBold().run(), active: () => !!editor?.isActive("bold") },
-    { icon: "italic", label: "İtalik (Ctrl+I)", run: () => editor?.chain().focus().toggleItalic().run(), active: () => !!editor?.isActive("italic") },
-    { icon: "heading", label: "Başlık", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: () => !!editor?.isActive("heading") },
-    { icon: "list", label: "Madde listesi", run: () => editor?.chain().focus().toggleBulletList().run(), active: () => !!editor?.isActive("bulletList") },
-    { icon: "checklist", label: "Yapılacaklar", run: () => editor?.chain().focus().toggleTaskList().run(), active: () => !!editor?.isActive("taskList") },
-    { icon: "code", label: "Kod", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: () => !!editor?.isActive("codeBlock") },
+  type Tool = { icon: IconName; label: string; run: () => void; active?: () => boolean };
+  const chain = () => editor!.chain().focus();
+  /** Gruplar: başlık · yazı · liste · blok · resim. Sağda geri al / yinele. */
+  const groups: Tool[][] = [
+    [
+      { icon: "h1", label: "Büyük başlık", run: () => chain().toggleHeading({ level: 1 }).run(), active: () => !!editor?.isActive("heading", { level: 1 }) },
+      { icon: "h2", label: "Alt başlık", run: () => chain().toggleHeading({ level: 2 }).run(), active: () => !!editor?.isActive("heading", { level: 2 }) },
+    ],
+    [
+      { icon: "bold", label: "Kalın (Ctrl+B)", run: () => chain().toggleBold().run(), active: () => !!editor?.isActive("bold") },
+      { icon: "italic", label: "İtalik (Ctrl+I)", run: () => chain().toggleItalic().run(), active: () => !!editor?.isActive("italic") },
+      { icon: "strike", label: "Üstü çizili", run: () => chain().toggleStrike().run(), active: () => !!editor?.isActive("strike") },
+    ],
+    [
+      { icon: "list", label: "Madde listesi", run: () => chain().toggleBulletList().run(), active: () => !!editor?.isActive("bulletList") },
+      { icon: "olist", label: "Numaralı liste", run: () => chain().toggleOrderedList().run(), active: () => !!editor?.isActive("orderedList") },
+      { icon: "checklist", label: "Yapılacaklar", run: () => chain().toggleTaskList().run(), active: () => !!editor?.isActive("taskList") },
+    ],
+    [
+      { icon: "quote", label: "Alıntı / önemli not", run: () => chain().toggleBlockquote().run(), active: () => !!editor?.isActive("blockquote") },
+      { icon: "code", label: "Kod", run: () => chain().toggleCodeBlock().run(), active: () => !!editor?.isActive("codeBlock") },
+      { icon: "divider", label: "Ayırıcı çizgi", run: () => chain().setHorizontalRule().run() },
+    ],
+  ];
+  const history: Tool[] = [
+    { icon: "undo", label: "Geri al (Ctrl+Z)", run: () => chain().undo().run() },
+    { icon: "redo", label: "Yinele (Ctrl+Y)", run: () => chain().redo().run() },
   ];
 </script>
 
 {#if toolbar}
   <div class="toolbar" role="toolbar" aria-label="Biçimlendirme">
-    {#each tools as t (t.icon)}
-      <button title={t.label} aria-label={t.label} aria-pressed={tick >= 0 && t.active()} onmousedown={(e) => e.preventDefault()} onclick={t.run}>
-        <Icon name={t.icon} size={17} />
-      </button>
+    {#each groups as g, gi (gi)}
+      <div class="grp">
+        {#each g as t (t.icon)}
+          <button title={t.label} aria-label={t.label} aria-pressed={tick >= 0 && !!t.active?.()} onmousedown={(e) => e.preventDefault()} onclick={t.run}>
+            <Icon name={t.icon} size={17} />
+          </button>
+        {/each}
+      </div>
     {/each}
-    <button title="Resim ekle (ya da ekran görüntüsünü Ctrl+V ile yapıştır)" aria-label="Resim ekle" onmousedown={(e) => e.preventDefault()} onclick={pickImage}>
-      <Icon name="image" size={17} />
-    </button>
+    <div class="grp">
+      <button class="img-btn" title="Resim ekle (ekran görüntüsünü Ctrl+V ile de yapıştırabilirsin)" aria-label="Resim ekle" onmousedown={(e) => e.preventDefault()} onclick={pickImage}>
+        <Icon name="image" size={17} /><span>Resim</span>
+      </button>
+    </div>
+    <div class="grp end">
+      {#each history as t (t.icon)}
+        <button title={t.label} aria-label={t.label} disabled={tick >= 0 && !(t.icon === "undo" ? editor?.can().undo() : editor?.can().redo())} onmousedown={(e) => e.preventDefault()} onclick={t.run}>
+          <Icon name={t.icon} size={17} />
+        </button>
+      {/each}
+    </div>
   </div>
 {/if}
 <div class="editor" class:hand={font === "hand"} style:font-family={fontOf(font).family} bind:this={host}></div>
 
 <style>
-  .toolbar { display: flex; gap: 2px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 8px; }
-  .toolbar button { border: 0; background: transparent; color: var(--muted); padding: 6px 7px; border-radius: 7px; display: grid; place-items: center; }
-  .toolbar button:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
-  .toolbar button[aria-pressed="true"] { color: var(--gold-glow); background: rgba(227, 194, 112, 0.14); }
+  .toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px; margin-bottom: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.06); }
+  .grp { display: flex; gap: 1px; padding-right: 6px; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+  .grp:last-child, .grp.end { border-right: 0; padding-right: 0; }
+  .grp.end { margin-left: auto; }
+  .toolbar button { border: 0; background: transparent; color: var(--muted); padding: 6px 7px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; font-weight: 600; }
+  .toolbar button:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+  .toolbar button[aria-pressed="true"] { color: var(--gold-glow); background: rgba(227, 194, 112, 0.16); }
+  .toolbar button:disabled { opacity: 0.35; cursor: default; }
+  .img-btn span { padding-right: 2px; }
   .editor { flex: 1; min-height: 0; overflow: auto; font-size: 15px; line-height: 1.6; color: #e6e1d4; }
   .editor.hand { font-size: 21px; line-height: 1.4; }
   .editor :global(.tiptap) { outline: none; min-height: 100%; padding-bottom: 24px; }
   .editor :global(.tiptap > * + *) { margin-top: 0.55em; }
   .editor :global(p) { margin: 0; }
   .editor :global(h1), .editor :global(h2), .editor :global(h3) { font-family: var(--f-display); margin: 0.6em 0 0.2em; line-height: 1.25; }
-  .editor :global(h2) { font-size: 1.3em; }
+  .editor :global(h1) { font-size: 1.55em; }
+  .editor :global(h2) { font-size: 1.25em; color: var(--gold-glow); }
+  .editor :global(hr) { border: 0; border-top: 1px dashed rgba(255, 255, 255, 0.18); margin: 1em 0; }
+  .editor :global(blockquote) { margin: 0; background: rgba(227, 194, 112, 0.07); border-left: 3px solid var(--gold); border-radius: 0 10px 10px 0; padding: 6px 12px; }
   .editor :global(ul), .editor :global(ol) { margin: 0; padding-left: 1.3em; }
   .editor :global(code) { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.88em; background: rgba(0, 0, 0, 0.3); padding: 1px 5px; border-radius: 5px; }
   .editor :global(pre) { background: rgba(0, 0, 0, 0.35); padding: 10px 12px; border-radius: 10px; overflow-x: auto; }
   .editor :global(pre code) { background: none; padding: 0; }
-  .editor :global(blockquote) { margin: 0; padding-left: 12px; border-left: 3px solid var(--gold-dim); color: var(--muted); }
   .editor :global(ul[data-type="taskList"]) { list-style: none; padding-left: 2px; }
   .editor :global(ul[data-type="taskList"] li) { display: flex; gap: 10px; align-items: flex-start; }
   .editor :global(ul[data-type="taskList"] li > label) { margin-top: 0.22em; flex: none; }

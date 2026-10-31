@@ -49,6 +49,11 @@ const notes: Note[] = [
     createdAt: now() - 2 * 86_400_000, updatedAt: now() - 2 * 86_400_000, deletedAt: null,
   },
   {
+    id: "n4", title: "Fizik · Türev · 30.10.2026", color: "default", font: "inter", pinned: false,
+    body: "*Ders kaydı · 14:05 başladı · 52 dk*\n\n**00:00** Bugün türevin tanımıyla başlıyoruz. Bir fonksiyonun bir noktadaki türevi, o noktadaki teğetin eğimidir.\n\n**00:25** Limit tanımını hatırlayalım: h sıfıra giderken f(x+h) eksi f(x) bölü h.\n\n**00:50** Ödev olarak kitabın 42. sayfasındaki ilk on soruyu çözün.",
+    createdAt: now() - 26 * 3_600_000, updatedAt: now() - 26 * 3_600_000, deletedAt: null,
+  },
+  {
     id: "n3", title: "Market", color: "gold", font: "hand", pinned: false,
     body: "- [ ] Çay\n- [ ] Kahve\n- [x] Ekmek", createdAt: now() - 4 * 86_400_000, updatedAt: now() - 4 * 86_400_000, deletedAt: null,
   },
@@ -561,7 +566,16 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return notes
         .filter((n) => (a.trash ? n.deletedAt !== null : n.deletedAt === null))
         .sort((x, y) => Number(y.pinned) - Number(x.pinned) || y.updatedAt - x.updatedAt)
-        .map((n) => ({ id: n.id, title: n.title, preview: preview(n.body), color: n.color, pinned: n.pinned, updatedAt: n.updatedAt, deletedAt: n.deletedAt }));
+        .map((n) => {
+          const tasks = n.body.match(/^\s*[-*+]\s*\[( |x|X)\]/gm) ?? [];
+          return {
+            id: n.id, title: n.title, preview: preview(n.body).replace(/^Ders kaydı ·[^·]*·[^·]*· /, ""), color: n.color, pinned: n.pinned,
+            updatedAt: n.updatedAt, deletedAt: n.deletedAt, createdAt: n.createdAt,
+            kind: n.body.trimStart().startsWith("*Ders kaydı ·") ? "lecture" : "note",
+            tasksDone: tasks.filter((t) => /x\]/i.test(t)).length, tasksTotal: tasks.length,
+            images: (n.body.match(/!\[/g) ?? []).length, words: n.body.split(/\s+/).filter((w) => /\p{L}|\d/u.test(w)).length,
+          };
+        });
     case "note_get":
       return notes.find((n) => n.id === a.id) ?? null;
     case "note_save": {

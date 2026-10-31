@@ -34,6 +34,42 @@ pub struct NoteSummary {
     pub pinned: bool,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
+    pub created_at: i64,
+    /// "note" | "lecture" (Ders Kaydı'ndan gelen not)
+    pub kind: &'static str,
+    /// Yapılacaklar: biten / toplam (yoksa 0/0).
+    pub tasks_done: u32,
+    pub tasks_total: u32,
+    pub images: u32,
+    pub words: u32,
+}
+
+/// Liste kartı için notun içinden bilgiler: ders kaydı mı, yapılacaklar, resim ve sözcük sayısı.
+pub fn facts(body: &str) -> (&'static str, u32, u32, u32, u32) {
+    let kind = if body.trim_start().starts_with("*Ders kaydı ·") {
+        "lecture"
+    } else {
+        "note"
+    };
+    let (mut done, mut total) = (0, 0);
+    for l in body.lines() {
+        let t = l
+            .trim_start()
+            .trim_start_matches(['-', '*', '+'])
+            .trim_start();
+        if t.starts_with("[ ]") {
+            total += 1;
+        } else if t.starts_with("[x]") || t.starts_with("[X]") {
+            total += 1;
+            done += 1;
+        }
+    }
+    let images = body.matches("![").count() as u32;
+    let words = strip_images(body)
+        .split_whitespace()
+        .filter(|w| !matches!(*w, "[x]" | "[X]") && w.chars().any(char::is_alphanumeric))
+        .count() as u32;
+    (kind, done, total, images, words)
 }
 
 #[derive(Deserialize)]
@@ -71,14 +107,23 @@ pub fn list(db: &Db, trash: bool) -> rusqlite::Result<Vec<NoteSummary>> {
     ))?;
     let rows = stmt.query_map([], from_row)?;
     rows.map(|n| {
-        n.map(|n| NoteSummary {
-            preview: preview(&n.body),
-            id: n.id,
-            title: n.title,
-            color: n.color,
-            pinned: n.pinned,
-            updated_at: n.updated_at,
-            deleted_at: n.deleted_at,
+        n.map(|n| {
+            let (kind, tasks_done, tasks_total, images, words) = facts(&n.body);
+            NoteSummary {
+                preview: preview(&n.body),
+                id: n.id,
+                title: n.title,
+                color: n.color,
+                pinned: n.pinned,
+                updated_at: n.updated_at,
+                deleted_at: n.deleted_at,
+                created_at: n.created_at,
+                kind,
+                tasks_done,
+                tasks_total,
+                images,
+                words,
+            }
         })
     })
     .collect()
@@ -269,7 +314,7 @@ pub fn preview(body: &str) -> String {
                 .trim()
                 .replace(['*', '_', '`'], "")
         })
-        .filter(|l| !l.is_empty())
+        .filter(|l| !l.is_empty() && !l.starts_with("Ders kaydı ·") && !l.starts_with("---"))
         .collect::<Vec<_>>()
         .join(" · ");
     text.chars().take(140).collect()
@@ -386,6 +431,17 @@ fn remove_mirror(db: &Db, dir: &Path, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_cards_know_what_is_inside() {
+        let (kind, done, total, images, words) =
+            facts("Alışveriş\n\n- [x] Çay\n- [ ] Kahve\n- [ ] Süt\n\n![](Resimler/a.png)");
+        assert_eq!((kind, done, total, images), ("note", 1, 3, 1));
+        assert_eq!(words, 4);
+        let lecture = "*Ders kaydı · 14:05 başladı · 50 dk*\n\n**00:00** Bugün türev.";
+        assert_eq!(facts(lecture).0, "lecture");
+        assert_eq!(preview(lecture), "00:00 Bugün türev.");
+    }
 
     #[test]
     fn slug_removes_forbidden_characters() {
