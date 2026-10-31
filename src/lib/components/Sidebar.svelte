@@ -9,7 +9,7 @@
   import { on } from "../bus";
   import type { UpdateStatus } from "../types";
   import { community, joinDiscord, startCommunity } from "../community.svelte";
-  import { dealsBadge, markDealsSeen, startDealsBadge } from "../dealsBadge.svelte";
+  import { dealsBadge, startDealsBadge } from "../dealsBadge.svelte";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
   const downloading = $derived(activeSummary().count);
@@ -18,10 +18,6 @@
   const currentGroup = $derived(groupOf(current)?.id);
   $effect(() => {
     if (currentGroup) last[currentGroup] = current;
-  });
-  // Fırsatlar açıkken gelen yenilikler de görülmüş sayılır.
-  $effect(() => {
-    if (current === "deals" && dealsBadge.count) markDealsSeen();
   });
   let update = $state<UpdateStatus | null>(null);
   onMount(() => {

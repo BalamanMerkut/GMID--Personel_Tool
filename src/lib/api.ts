@@ -444,6 +444,8 @@ export const api = {
     get: () => call<DealsSnapshot>("deals_get"),
     /** Kaynaklara şimdi bakar (birkaç saniye sürebilir). */
     refresh: () => call<DealsSnapshot>("deals_refresh"),
+    /** Mağazanın uygulaması yüklüyse orada (Steam, Epic, Microsoft Store), değilse tarayıcıda açar. */
+    open: (url: string, store: string, browser = false) => call<"app" | "browser">("deals_open", { url, store, browser }),
   },
 
   update: {

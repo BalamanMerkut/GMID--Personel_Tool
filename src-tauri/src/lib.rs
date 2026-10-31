@@ -259,6 +259,7 @@ pub fn run() {
             commands::wrapped_save,
             commands::deals_get,
             commands::deals_refresh,
+            commands::deals_open,
             commands::update_status,
             commands::update_check,
             commands::update_install,

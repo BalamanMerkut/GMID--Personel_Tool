@@ -1426,6 +1426,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return "C:\\Users\\Sen\\Documents\\GMID Tool\\Ozetler\\GMID Wrapped.png";
     case "deals_get":
       return dealsSnap;
+    case "deals_open":
+      window.open(a.url as string, "_blank");
+      return a.store === "steam" && !a.browser ? "app" : "browser";
     case "deals_refresh":
       await wait(800);
       dealsSnap = { ...dealsSnap, fetchedAt: now() };

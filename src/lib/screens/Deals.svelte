@@ -2,6 +2,7 @@
   // Fırsatlar: her platformda şu an ücretsiz oyunlar, Epic'in sıradaki ücretsizi ve istek listendeki indirimler.
   import { onMount } from "svelte";
   import { api } from "../api";
+  import { dealsBadge, enterDeals, freeKey, leaveDeals, wishKey } from "../dealsBadge.svelte";
   import { on } from "../bus";
   import Switch from "../components/Switch.svelte";
   import Icon from "../Icon.svelte";
@@ -16,7 +17,13 @@
     epic: "Epic", steam: "Steam", gog: "GOG", playstation: "PlayStation", xbox: "Xbox / Microsoft", ubisoft: "Ubisoft",
     ea: "EA", prime: "Prime Gaming", itch: "itch.io", battlenet: "Battle.net", other: "Diğer", mobile: "Telefon",
   };
-  const NOTIFY_STORES = ["epic", "steam", "gog", "playstation", "xbox", "ubisoft", "ea", "prime", "itch", "battlenet", "other"];
+  /** Gösterim sırası: Steam, Epic, GOG, sonra diğerleri (filtreden bağımsız). */
+  const ORDER = ["steam", "epic", "gog", "playstation", "xbox", "ubisoft", "ea", "prime", "itch", "battlenet", "other", "mobile"];
+  const NOTIFY_STORES = ORDER.filter((s) => s !== "mobile");
+  const rank = (store: string) => {
+    const i = ORDER.indexOf(store.toLowerCase());
+    return i < 0 ? ORDER.length : i;
+  };
 
   let snap = $state<DealsSnapshot | null>(null);
   let loading = $state(false);
@@ -26,6 +33,7 @@
   let now = $state(Date.now());
 
   onMount(() => {
+    enterDeals();
     void api.deals.get().then((s) => {
       snap = s;
       // Hiç bakılmadıysa ya da 3 saatten eskiyse şimdi bak.
@@ -34,6 +42,7 @@
     const stop = on<DealsSnapshot>("deals", (s) => (snap = s));
     const t = setInterval(() => (now = Date.now()), 60_000);
     return () => {
+      leaveDeals();
       clearInterval(t);
       void stop.then((f) => f());
     };
@@ -68,8 +77,17 @@
     for (const g of snap?.free ?? []) c[g.store] = (c[g.store] ?? 0) + 1;
     return c;
   });
-  const storesHere = $derived(Object.keys(STORES).filter((s) => counts[s]));
-  const shown = $derived((snap?.free ?? []).filter((g) => (store ? g.store === store : g.store !== "mobile")));
+  const storesHere = $derived(ORDER.filter((s) => counts[s]));
+  const isNew = (g: Giveaway) => dealsBadge.visitNew.includes(freeKey(g.id));
+  const since = (g: Giveaway) => dealsBadge.firstSeen[freeKey(g.id)] ?? 0;
+  const filtered = $derived((snap?.free ?? []).filter((g) => (store ? g.store === store : g.store !== "mobile")));
+  /** Son girişten beri gelenler: en yeni başta. */
+  const fresh = $derived(filtered.filter(isNew).sort((a, b) => since(b) - since(a)));
+  /** Geri kalanı mağaza sırasıyla; aynı mağazada en son gelen başta. */
+  const shown = $derived(filtered.filter((g) => !isNew(g)).sort((a, b) => rank(a.store) - rank(b.store) || since(b) - since(a)));
+  const wish = $derived([...(snap?.wishlist ?? [])].sort((a, b) => rank(a.store) - rank(b.store) || b.discount - a.discount));
+  const wishNew = (d: { gameId: string; discount: number }) => dealsBadge.visitNew.includes(wishKey(d.gameId, d.discount));
+  const came = (ms: number) => (ms ? `${ago(ms, now)} geldi` : "");
 
   function left(g: Giveaway) {
     if (!g.ends) return "Süresi belirsiz";
@@ -82,7 +100,15 @@
   }
   const urgent = (g: Giveaway) => !!g.ends && g.ends - now < 24 * 3_600_000;
   const date = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" }) : "");
-  const open = (url: string) => void api.openUrl(url).catch((e) => notify(String(e), "info"));
+  /** Mağazanın uygulaması yüklüyse orada açılır (Steam, Epic, Microsoft Store), değilse tarayıcıda. */
+  async function open(url: string, storeId: string, browser = false) {
+    try {
+      const how = await api.deals.open(url, storeId, browser);
+      if (how === "app") notify(`${STORES[storeId.toLowerCase()] ?? storeId} uygulamasında açıldı`, "gift");
+    } catch (e) {
+      notify(String(e), "info");
+    }
+  }
 </script>
 
 <div class="deals">
@@ -130,7 +156,7 @@
 
   <section class="panel">
     <div class="spread">
-      <h3 class="h2"><Icon name="gift" />Şu an ücretsiz <span class="sub small tnum">{shown.length}</span></h3>
+      <h3 class="h2"><Icon name="gift" />Şu an ücretsiz <span class="sub small tnum">{filtered.length}</span></h3>
       {#if snap?.error}<span class="err small" title={snap.error}>Bazı kaynaklara ulaşılamadı</span>{/if}
     </div>
     {#if storesHere.length > 1}
@@ -141,25 +167,23 @@
         {/each}
       </div>
     {/if}
+    {#if fresh.length}
+      <div class="newhead">
+        <span class="newtag">YENİ</span>
+        <b>Son girişinden beri {fresh.length} yeni ücretsiz oyun</b>
+        {#if since(fresh[0])}<span class="sub small">· en son {came(since(fresh[0]))}</span>{/if}
+      </div>
+      <div class="grid">
+        {#each fresh as g (g.id)}{@render card(g, true)}{/each}
+      </div>
+      {#if shown.length}<div class="sep"></div>{/if}
+    {/if}
     {#if shown.length}
       <div class="grid">
-        {#each shown as g (g.id)}
-          <article class="card">
-            <button class="img" onclick={() => open(g.url)} title="Mağazada aç">
-              {#if g.image}<img src={g.image} alt="" loading="lazy" referrerpolicy="no-referrer" />{:else}<span class="ph">{g.title}</span>{/if}
-              <span class="badge {g.store}">{STORES[g.store] ?? g.store}</span>
-            </button>
-            <div class="body">
-              <b class="t" title={g.title}>{g.title}</b>
-              <span class="price">{#if g.worth}<s>{g.worth}</s>{/if}<em>Ücretsiz</em></span>
-              <div class="spread">
-                <span class="small" class:hot={urgent(g)}>{left(g)}</span>
-                <button class="btn sm" onclick={() => open(g.url)}><Icon name="download" size={14} />Al</button>
-              </div>
-            </div>
-          </article>
-        {/each}
+        {#each shown as g (g.id)}{@render card(g, false)}{/each}
       </div>
+    {:else if fresh.length}
+      <!-- yalnız yeniler var -->
     {:else if loading}
       <p class="sub">Bakılıyor…</p>
     {:else}
@@ -172,7 +196,7 @@
       <h3 class="h2"><Icon name="clock" />Yakında ücretsiz</h3>
       <div class="upc">
         {#each snap.upcoming as g (g.id)}
-          <button class="up" onclick={() => open(g.url)}>
+          <button class="up" onclick={() => open(g.url, g.store)}>
             {#if g.image}<img src={g.image} alt="" loading="lazy" referrerpolicy="no-referrer" />{/if}
             <span><b>{g.title}</b><span class="sub small">{STORES[g.store]} · {date(g.starts)}</span></span>
           </button>
@@ -183,15 +207,15 @@
 
   <section class="panel">
     <h3 class="h2"><Icon name="star" />İstek listende indirimde <span class="sub small tnum">{snap?.wishlist.length ?? 0}</span></h3>
-    {#if snap?.wishlist.length}
+    {#if wish.length}
       <div class="wish">
-        {#each snap.wishlist as d (d.gameId)}
-          <div class="wrow">
+        {#each wish as d (d.gameId)}
+          <div class="wrow" class:fresh={wishNew(d)}>
             {#if d.cover}<img src={d.cover.startsWith("http") || d.cover.startsWith("data:") ? d.cover : api.fileSrc(d.cover)} alt="" />{:else}<span class="wph"></span>{/if}
-            <span class="wn"><b>{d.name}</b><span class="sub small">{d.store}</span></span>
+            <span class="wn"><b>{d.name}{#if wishNew(d)} <span class="newtag sm">YENİ</span>{/if}</b><span class="sub small">{d.store}</span></span>
             <span class="off">-%{d.discount}</span>
             <span class="wp">{#if d.regular}<s>{d.regular}</s>{/if}<b>{d.price}</b></span>
-            <button class="btn ghost sm" onclick={() => open(d.url)}>Mağazada aç</button>
+            <button class="btn ghost sm" onclick={() => open(d.url, d.store)}>Mağazada aç</button>
           </div>
         {/each}
       </div>
@@ -205,6 +229,27 @@
     {/if}
   </section>
 </div>
+
+{#snippet card(g: Giveaway, isFresh: boolean)}
+  <article class="card" class:fresh={isFresh}>
+    <button class="img" onclick={() => open(g.url, g.store)} title="Mağazada aç (uygulaması yüklüyse uygulamada)">
+      {#if g.image}<img src={g.image} alt="" loading="lazy" referrerpolicy="no-referrer" />{:else}<span class="ph">{g.title}</span>{/if}
+      <span class="badge {g.store}">{STORES[g.store] ?? g.store}</span>
+      {#if isFresh}<span class="newtag corner">YENİ</span>{/if}
+    </button>
+    <div class="body">
+      <b class="t" title={g.title}>{g.title}</b>
+      <span class="price">{#if g.worth}<s>{g.worth}</s>{/if}<em>Ücretsiz</em>{#if since(g)}<span class="came sub small">{came(since(g))}</span>{/if}</span>
+      <div class="spread">
+        <span class="small" class:hot={urgent(g)}>{left(g)}</span>
+        <span class="row">
+          <button class="mini" onclick={() => open(g.url, g.store, true)} title="Tarayıcıda aç"><Icon name="link" size={14} /></button>
+          <button class="btn sm" onclick={() => open(g.url, g.store)}><Icon name="download" size={14} />Al</button>
+        </span>
+      </div>
+    </div>
+  </article>
+{/snippet}
 
 <style>
   .deals { display: flex; flex-direction: column; gap: 16px; max-width: 1400px; margin: 0 auto; }
@@ -224,6 +269,16 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
   .card { display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); transition: border-color 0.15s, transform 0.15s; }
   .card:hover { border-color: var(--gold-dim); transform: translateY(-2px); }
+  .card.fresh { border: 2px solid var(--bad); box-shadow: 0 0 0 3px rgba(224, 106, 106, 0.16), 0 8px 24px rgba(224, 106, 106, 0.12); }
+  .card.fresh:hover { border-color: #f08080; }
+  .newtag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; }
+  .newtag.sm { font-size: 10px; padding: 1px 6px; vertical-align: 2px; }
+  .newtag.corner { position: absolute; right: 8px; top: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+  .newhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sep { height: 1px; background: var(--line); margin: 4px 0; }
+  .came { margin-left: auto; }
+  .mini { border: 0; background: transparent; color: var(--dim); padding: 6px; border-radius: 8px; display: grid; place-items: center; }
+  .mini:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
   .img { position: relative; border: 0; padding: 0; aspect-ratio: 16 / 9; background: var(--coal-2); display: block; width: 100%; cursor: pointer; }
   .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .ph { display: grid; place-items: center; height: 100%; padding: 10px; color: var(--muted); font-weight: 700; }
@@ -248,7 +303,8 @@
   .up img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; }
   .up span { display: flex; flex-direction: column; gap: 2px; }
   .wish { display: flex; flex-direction: column; gap: 6px; }
-  .wrow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); }
+  .wrow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid transparent; }
+  .wrow.fresh { border: 2px solid var(--bad); background: rgba(224, 106, 106, 0.06); }
   .wrow img, .wph { width: 44px; height: 58px; object-fit: cover; border-radius: 6px; background: var(--coal-2); flex: none; }
   .wn { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .off { font-weight: 800; color: #1b1608; background: var(--good); padding: 3px 8px; border-radius: 6px; }

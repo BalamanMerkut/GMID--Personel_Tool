@@ -356,6 +356,26 @@ pub async fn deals_refresh(app: AppHandle) -> CmdResult<crate::deals::Snapshot> 
     .map_err(|e| e.to_string())
 }
 
+/// Fırsatı açar: mağazanın uygulaması yüklüyse orada (Steam, Epic, Microsoft Store), değilse tarayıcıda.
+/// `browser`: her durumda tarayıcıda. Dönen: "app" | "browser".
+#[tauri::command]
+pub fn deals_open(url: String, store: String, browser: Option<bool>) -> CmdResult<String> {
+    if !url.starts_with("https://") {
+        return Err("Geçersiz bağlantı".into());
+    }
+    if !browser.unwrap_or(false) {
+        if let Some((scheme, link)) = crate::deals::app_link(&store, &url) {
+            if crate::deals::scheme_installed(scheme)
+                && tauri_plugin_opener::open_url(&link, None::<&str>).is_ok()
+            {
+                return Ok("app".into());
+            }
+        }
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())?;
+    Ok("browser".into())
+}
+
 /// Bağlantıyı varsayılan tarayıcıda açar (yalnız https).
 #[tauri::command]
 pub fn open_url(url: String) -> CmdResult<()> {

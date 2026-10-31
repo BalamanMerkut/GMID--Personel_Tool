@@ -597,6 +597,83 @@ pub fn store_label(store: &str) -> &'static str {
     }
 }
 
+/// Mağazanın kendi uygulamasında açan bağlantı (uygulama yüklüyse kullanılır).
+/// Steam her sayfayı kendi tarayıcısında açabilir (GamerPower yönlendirmesi dahil); Epic ve Microsoft Store
+/// yalnız ürün kimliği belliyse. Diğerlerinde güvenilir bir yol yok: tarayıcı.
+pub fn app_link(store: &str, url: &str) -> Option<(&'static str, String)> {
+    if !url.starts_with("https://") {
+        return None;
+    }
+    let lower = url.to_ascii_lowercase();
+    match store {
+        "steam" => Some(("steam", format!("steam://openurl/{url}"))),
+        "epic" => {
+            let slug = lower
+                .split("store.epicgames.com/")
+                .nth(1)?
+                .split("/p/")
+                .nth(1)?
+                .split(['?', '#', '/'])
+                .next()?
+                .to_string();
+            (!slug.is_empty()
+                && slug
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+            .then(|| {
+                (
+                    "com.epicgames.launcher",
+                    format!("com.epicgames.launcher://store/p/{slug}"),
+                )
+            })
+        }
+        "xbox" => {
+            // apps.microsoft.com/detail/9NBLGGH4R32N, microsoft.com/…/p/ad/9NBLGGH4R32N
+            let id = url
+                .split(['/', '?', '#', '='])
+                .find(|p| {
+                    p.len() == 12
+                        && p.starts_with('9')
+                        && p.chars().all(|c| c.is_ascii_alphanumeric())
+                })?
+                .to_ascii_uppercase();
+            Some((
+                "ms-windows-store",
+                format!("ms-windows-store://pdp/?ProductId={id}"),
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// Bu bağlantı türünü açan bir uygulama kayıtlı mı (Steam, Epic yüklü mü)?
+#[cfg(windows)]
+pub fn scheme_installed(scheme: &str) -> bool {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CLASSES_ROOT, RRF_RT_REG_SZ};
+    // Kayıtlı uygulama: HKCR\<tür>\shell\open\command'da bir komut olur.
+    let mut buf = [0u16; 1024];
+    let mut size = (buf.len() * 2) as u32;
+    unsafe {
+        RegGetValueW(
+            HKEY_CLASSES_ROOT,
+            &HSTRING::from(format!("{scheme}\\shell\\open\\command")),
+            None,
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr() as *mut _),
+            Some(&mut size),
+        )
+        .is_ok()
+            && size > 2
+    }
+}
+
+#[cfg(not(windows))]
+pub fn scheme_installed(_scheme: &str) -> bool {
+    false
+}
+
 /// Yeni ücretsiz oyun ve yeni / daha büyük istek listesi indirimi için bildirim.
 fn notify(app: &AppHandle, db: &Db, snap: &Snapshot) {
     let prefs: Prefs = db.setting_json(PREFS_KEY).unwrap_or_default();
@@ -693,6 +770,38 @@ mod tests {
         assert_eq!(g[1].worth, None);
         assert_eq!(g[1].ends, None);
         assert_eq!(g[2].store, "mobile");
+    }
+
+    #[test]
+    fn store_apps_open_the_right_page() {
+        assert_eq!(
+            app_link("steam", "https://www.gamerpower.com/open/abc")
+                .unwrap()
+                .1,
+            "steam://openurl/https://www.gamerpower.com/open/abc"
+        );
+        assert_eq!(
+            app_link(
+                "epic",
+                "https://store.epicgames.com/tr/p/hogwarts-legacy?x=1"
+            )
+            .unwrap()
+            .1,
+            "com.epicgames.launcher://store/p/hogwarts-legacy"
+        );
+        // Epic ürün adı yoksa (yönlendirme bağlantısı) tarayıcı.
+        assert!(app_link("epic", "https://www.gamerpower.com/open/abc").is_none());
+        assert_eq!(
+            app_link(
+                "xbox",
+                "https://apps.microsoft.com/detail/9nblggh4r32n?hl=tr"
+            )
+            .unwrap()
+            .1,
+            "ms-windows-store://pdp/?ProductId=9NBLGGH4R32N"
+        );
+        assert!(app_link("gog", "https://www.gog.com/game/x").is_none());
+        assert!(app_link("steam", "steam://run/1").is_none());
     }
 
     #[test]
