@@ -1,5 +1,5 @@
 //! Odak çalmayan küçük pencereler:
-//! - **Ekran göstergesi (OSD):** sağ üstte 2 sn görünen bilgi ("Mikrofon kapalı"). Tıklamaları geçirir.
+//! - **Bildirim kartı (OSD):** sağ alttan kayıp birkaç saniye görünen bilgi ("Mikrofon kapalı", "Gol!"). Odak almaz, tıklamaları geçirir.
 //! - **Uyarılar:** sağ altta hatırlatıcı/sayaç kartları ("Ertele", "Tamam").
 //!
 //! İkisi de oyunun ya da çalıştığın pencerenin odağını almaz; ihtiyaç olunca oluşturulur,
@@ -19,7 +19,10 @@ pub const ALERTS: &str = "alerts";
 /// Sesle yazma göstergesi (ekranın alt ortası).
 pub const DICTATION: &str = "dikte";
 
-const OSD_SIZE: (f64, f64) = (380.0, 76.0);
+/// Sağ alttaki bildirim kartı (gölge ve kayma payıyla).
+const OSD_SIZE: (f64, f64) = (384.0, 112.0);
+/// Bildirimin ekranda kalma süresi (çıkış kayması dahil).
+const OSD_MS: u64 = 3600;
 const DICTATION_SIZE: (f64, f64) = (180.0, 64.0);
 const ALERTS_WIDTH: f64 = 380.0;
 const MARGIN: f64 = 20.0;
@@ -28,7 +31,11 @@ const MARGIN: f64 = 20.0;
 pub struct OsdMessage {
     pub id: u64,
     pub icon: String,
+    /// Kısa başlık ("Gol!", "Sesle yazma kapalı"); boşsa simgeden türetilir.
+    pub title: String,
     pub text: String,
+    /// Ekranda kalma süresi (ms).
+    pub ms: u64,
 }
 
 /// Sesle yazma göstergesinin durumu: "listening" | "loading" | "processing" | "error" | "hidden".
@@ -82,6 +89,13 @@ fn tool_window(app: &AppHandle, label: &str, size: (f64, f64)) -> tauri::Result<
 
 /// Sağ üstte kısa bir bilgi gösterir.
 pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
+    show_toast(app, icon, "", text);
+}
+
+/// Sağ alttan kayarak gelen, birkaç saniye sonra kendiliğinden giden bildirim (MSN bildirimi gibi). Odak
+/// almaz, tıklamalar alttaki pencereye geçer; oyunun üstünde de görünür. Sağ altta uyarı kartları açıksa
+/// onların üstünde durur.
+pub fn show_toast(app: &AppHandle, icon: &str, title: &str, text: impl Into<String>) {
     // Ayarlardan kapatılabilir (Kontrol Odası → Ses & Mikrofon).
     let enabled = app
         .state::<crate::db::Db>()
@@ -92,10 +106,15 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
     }
     let overlay = app.state::<Overlay>();
     let id = overlay.osd_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let text: String = text.into();
+    // Uzun yazı biraz daha uzun kalsın (okunabilsin).
+    let ms = OSD_MS + (text.chars().count().saturating_sub(60) as u64 * 25).min(2500);
     let msg = OsdMessage {
         id,
         icon: icon.into(),
-        text: text.into(),
+        title: title.into(),
+        text,
+        ms,
     };
     if let Ok(mut last) = overlay.last_osd.lock() {
         *last = Some(msg.clone());
@@ -112,7 +131,13 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
             None => tool_window(app, OSD, OSD_SIZE)?,
         };
         let _ = app.emit_to(OSD, "osd", &msg);
-        place(&w, OSD_SIZE, Corner::TopRight);
+        // Sağ altta uyarı kartları açıksa onların üstüne.
+        let above = app
+            .get_webview_window(ALERTS)
+            .filter(|a| a.is_visible().unwrap_or(false))
+            .and_then(|a| a.outer_size().ok())
+            .map_or(0, |s| s.height as i32);
+        place_above(&w, OSD_SIZE, above);
         show_no_activate(&w);
         // Tıklamalar alttaki oyuna/pencereye geçsin. Pencere ekrana çıktıktan sonra yapılmalı
         // (bazı sistemlerde gizli pencerede bu işlem başarısız olur).
@@ -122,7 +147,7 @@ pub fn show_osd(app: &AppHandle, icon: &str, text: impl Into<String>) {
         let app = app.clone();
         std::thread::spawn(move || {
             let current = || app.state::<Overlay>().osd_gen.load(Ordering::SeqCst) == id;
-            std::thread::sleep(Duration::from_millis(2200));
+            std::thread::sleep(Duration::from_millis(ms + 250));
             if current() {
                 if let Some(w) = app.get_webview_window(OSD) {
                     hide_window(&w);
@@ -299,7 +324,6 @@ pub fn close_alerts(app: &AppHandle) {
 }
 
 enum Corner {
-    TopRight,
     BottomRight,
     /// Ekranın alt ortası (görev çubuğunun biraz üstü).
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -316,10 +340,6 @@ fn place(w: &WebviewWindow, size: (f64, f64), corner: Corner) {
     let (width, height) = ((size.0 * scale) as i32, (size.1 * scale) as i32);
     let margin = (MARGIN * scale) as i32;
     let pos = match corner {
-        Corner::TopRight => PhysicalPosition::new(
-            m.position().x + m.size().width as i32 - width - margin,
-            m.position().y + margin,
-        ),
         // Görev çubuğunun üstünde kalsın diye çalışma alanı kullanılır.
         Corner::BottomRight => {
             let area = m.work_area();
@@ -337,6 +357,20 @@ fn place(w: &WebviewWindow, size: (f64, f64), corner: Corner) {
         }
     };
     let _ = w.set_position(pos);
+}
+
+/// Sağ alt köşeye, `above` (fiziksel piksel) kadar yukarıya yerleştirir.
+fn place_above(w: &WebviewWindow, size: (f64, f64), above: i32) {
+    let Ok(Some(m)) = w.primary_monitor() else {
+        return;
+    };
+    let scale = m.scale_factor();
+    let (width, height) = ((size.0 * scale) as i32, (size.1 * scale) as i32);
+    let area = m.work_area();
+    let _ = w.set_position(PhysicalPosition::new(
+        area.position.x + area.size.width as i32 - width,
+        area.position.y + area.size.height as i32 - height - above,
+    ));
 }
 
 /// Pencereyi öne getirir ama odağı almaz: oyun ya da yazdığın şey kesilmez.

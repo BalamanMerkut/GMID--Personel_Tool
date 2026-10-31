@@ -139,7 +139,11 @@ export interface GameSuggestion {
 export interface OsdMessage {
   id: number;
   icon: string;
+  /** Kısa başlık; boşsa simgeden ya da "Başlık: yazı" biçiminden çıkarılır. */
+  title: string;
   text: string;
+  /** Ekranda kalma süresi (ms). */
+  ms: number;
 }
 
 export type JoinKind = "steam" | "exe" | "uri" | "copy";

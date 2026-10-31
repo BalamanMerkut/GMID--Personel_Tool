@@ -676,7 +676,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       return snapshot();
     }
     case "take_osd":
-      return { id: 1, icon: "lock", text: "Mikrofon %100 seviyesine geri çekildi" };
+      return { id: 1, icon: "trophy", title: "Gol!", text: "Fenerbahçe 2-1 Galatasaray · 67' Dzeko", ms: 60_000 };
     case "alerts_list":
       return {
         reminders: reminders.filter((r) => r.notified && !r.done),

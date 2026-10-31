@@ -1141,11 +1141,29 @@ fn watch_leagues(favs: &[Fav]) -> Vec<String> {
 
 /// Bildirimi gösterir: oyun ön plandaysa ekran göstergesi (oyunun üstünde), değilse Windows bildirimi.
 fn deliver(app: &tauri::AppHandle, text: &str) {
+    use tauri::Manager;
     crate::log!("Futbol: {text}");
-    if crate::panel::foreground_fullscreen() {
-        crate::overlay::show_osd(app, "trophy", format!("⚽ {text}"));
+    // Sağ alttan kayan GMID bildirimi (oyunda da görünür); bildirim kartları kapatıldıysa Windows bildirimi.
+    let cards = app
+        .state::<crate::db::Db>()
+        .setting_json::<bool>("ui.osd")
+        .unwrap_or(true);
+    if cards {
+        let (title, body) = toast_parts(text);
+        crate::overlay::show_toast(app, "trophy", &title, body);
     } else {
         crate::overlay::system_notification(app, NOTIFY_KEY, "⚽ GMID Futbol", text);
+    }
+}
+
+/// "GOL! Fenerbahçe 1-0 …" → ("Gol!", "Fenerbahçe 1-0 …"); "Maç başladı: A – B" → ("Maç başladı", "A – B").
+pub fn toast_parts(text: &str) -> (String, String) {
+    if let Some(rest) = text.strip_prefix("GOL!") {
+        return ("Gol!".into(), rest.trim().to_string());
+    }
+    match text.split_once(": ") {
+        Some((t, b)) if t.chars().count() <= 24 => (t.to_string(), b.to_string()),
+        _ => ("Futbol".into(), text.to_string()),
     }
 }
 
@@ -1210,6 +1228,22 @@ mod tests {
               { "homeAway": "home", "score": "0", "team": { "id": "4", "displayName": "Trabzonspor" } }
             ] }] }
         ]})
+    }
+
+    #[test]
+    fn notifications_have_a_title() {
+        assert_eq!(
+            toast_parts("GOL! Fenerbahçe 1-0 Galatasaray · 23' Dzeko"),
+            (
+                "Gol!".to_string(),
+                "Fenerbahçe 1-0 Galatasaray · 23' Dzeko".to_string()
+            )
+        );
+        assert_eq!(
+            toast_parts("Maç başladı: Fenerbahçe – Galatasaray").0,
+            "Maç başladı"
+        );
+        assert_eq!(toast_parts("Kırmızı kart").0, "Futbol");
     }
 
     #[test]

@@ -355,7 +355,7 @@
           <b>Öğrenince haber ver</b>
           <span class="sub small">
             {learnNotify
-              ? "Açık: sağ üstte “Sözlüğe eklendi: … → …” yazar, sağ altta Geri al çıkar."
+              ? "Açık: sağ alttan “Sözlüğe eklendi” bildirimi kayar, yanında Geri al çıkar."
               : "Kapalı: sessizce öğrenir; eklenenleri aşağıdan görüp silebilirsin."}
           </span>
         </div>

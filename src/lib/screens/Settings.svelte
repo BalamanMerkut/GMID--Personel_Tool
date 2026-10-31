@@ -213,13 +213,16 @@
         <span class="sub small">Kilit açıkken bir program mikrofonu kısarsa bu seviyeye geri çekilir. Kilidi açıp kapatmak için Ses & Mikrofon ekranı ya da kısayol.</span>
       </section>
       <section class="panel">
-        <h3 class="h2"><Icon name="monitor" />Ekran göstergesi</h3>
+        <h3 class="h2"><Icon name="monitor" />Bildirim kartları</h3>
         <div class="line">
           <div>
-            <b>Kısayollara sağ üstte küçük bilgi ile cevap ver</b>
-            <span class="sub small">"Mikrofon kapalı", "Ses çıkışı: Kulaklık" gibi. Odağı çalmaz, tıklamaları geçirir.</span>
+            <b>Sağ alttan kayan kısa bildirimler</b>
+            <span class="sub small">
+              "Mikrofon kapalı", "Sesle yazma kapalı", favori takımın golü gibi. Birkaç saniye görünüp kendiliğinden gider; odağı
+              çalmaz, oyunun üstünde de görünür. Kapalıysa futbol bildirimleri Windows bildirimiyle gelir.
+            </span>
           </div>
-          <Switch label="Ekran göstergesi" checked={osd} onchange={(v) => toggle("ui.osd", v, (x) => (osd = x))} />
+          <Switch label="Bildirim kartları" checked={osd} onchange={(v) => toggle("ui.osd", v, (x) => (osd = x))} />
         </div>
         <div class="line">
           <div>

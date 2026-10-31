@@ -385,7 +385,7 @@
       <ul class="sub small">
         <li><Icon name="keyboard" size={14} /><span><b>Num Lock açık olmalı</b>; kapalıyken numpad tuşları ok tuşu gibi çalışır.</span></li>
         <li><Icon name="info" size={14} /><span>Panel açıkken atadığın tuşlar başka programlara gitmez (oyunda numpad kullanıyorsan o tuşları değiştir). Panel kapanınca hepsi serbest kalır.</span></li>
-        <li><Icon name="shield" size={14} /><span>Ses dosyaları yerinde kalır, kopyalanmaz. Oyun içindeyken bastığında sağ üstte çalan sesin adı görünür.</span></li>
+        <li><Icon name="shield" size={14} /><span>Ses dosyaları yerinde kalır, kopyalanmaz. Oyun içindeyken bastığında sağ altta çalan sesin adı kısaca görünür.</span></li>
       </ul>
     </section>
   {/if}

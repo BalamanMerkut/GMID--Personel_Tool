@@ -3,7 +3,7 @@
   //  • dinliyor: kırmızı nokta, sesle oynayan dalga, süre
   //  • model yükleniyor (ilk dikte): üç nokta + "Hazırlanıyor"
   //  • yazıya döküyor: üç altın nokta
-  //  • hata: kısa bir uyarı işareti (ayrıntı sağ üstteki göstergede)
+  //  • hata: kısa bir uyarı işareti (ayrıntı sağ alttaki bildirimde)
   import { onMount } from "svelte";
   import { call } from "../api";
   import { on } from "../bus";

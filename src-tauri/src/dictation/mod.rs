@@ -63,7 +63,7 @@ pub struct Learn {
 pub const AUTO_LEARN_KEY: &str = "dictation.autoLearn";
 /// Kendiliğinden eklenen kuralın "Geri al" kartı bu kadar saniye durur.
 const UNDO_SECS: u64 = 20;
-/// Öğrenince haber ver (sağ altta kart + sağ üstte kısa yazı); varsayılan açık.
+/// Öğrenince haber ver (sağ altta Geri al kartı + kısa bildirim); varsayılan açık.
 pub const LEARN_NOTIFY_KEY: &str = "dictation.learnNotify";
 
 #[derive(Default)]
@@ -263,10 +263,11 @@ impl Dictation {
             let _ = app.emit("dictation-rules", ());
             if notify {
                 if let Some(l) = p.iter().rev().find(|l| l.added) {
-                    crate::overlay::show_osd(
+                    crate::overlay::show_toast(
                         app,
                         "book",
-                        format!("Sözlüğe eklendi: {} → {} · sağ altta Geri al", l.from, l.to),
+                        "Sözlüğe eklendi",
+                        format!("{} → {} · istersen Geri al", l.from, l.to),
                     );
                 }
             } else {
@@ -452,15 +453,21 @@ pub fn toggle(app: &AppHandle) -> bool {
     let on = !db.setting_json::<bool>(ENABLED_KEY).unwrap_or(false);
     let _ = db.set_setting(ENABLED_KEY, if on { "true" } else { "false" });
     apply(app);
-    crate::overlay::show_osd(
-        app,
-        "mic",
-        if on {
-            "Sesle yazma açık · Ctrl + Alt basılı tut, konuş"
-        } else {
-            "Sesle yazma kapalı"
-        },
-    );
+    if on {
+        crate::overlay::show_toast(
+            app,
+            "mic",
+            "Sesle yazma açık",
+            "Ctrl + Alt basılı tut, konuş, bırak",
+        );
+    } else {
+        crate::overlay::show_toast(
+            app,
+            "micoff",
+            "Sesle yazma kapalı",
+            "Yeniden açmak için Ctrl + Alt + Y",
+        );
+    }
     let _ = app.emit("dictation-toggled", on);
     on
 }
