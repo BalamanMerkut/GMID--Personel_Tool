@@ -248,7 +248,7 @@
         <b>NVIDIA ekran kartıyla hızlandır</b>
         <span class="sub small">
           {#if status.gpuError}
-            <span class="err">Ekran kartında açılamadı, işlemci kullanılıyor ({status.gpuError}). Ekran kartı sürücüsünü güncellemek çözebilir.</span>
+            <span class="err">Ekran kartında açılamadı, şimdilik işlemci kullanılıyor; yazı daha geç gelir ({status.gpuError}). 10 dakika sonra kendiliğinden yeniden denenir, hemen denemek için aşağıdaki “Hazırla”ya bas. Sürmüyorsa ekran kartı sürücüsünü güncellemek çözebilir.</span>
           {:else if status.gpuActive === true}
             Şu an ekran kartında çalışıyor: kısa bir dikte 1 saniyenin altında yazılır.
           {:else if status.gpuInstalled}

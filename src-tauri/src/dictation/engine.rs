@@ -74,6 +74,9 @@ pub struct Engine {
     last_used: Mutex<Option<Instant>>,
     /// NVIDIA sürümü bu oturumda çalışmadıysa nedeni (işlemciye geçildi).
     pub gpu_failed: Mutex<Option<String>>,
+    /// Ne zaman başarısız oldu: bir süre sonra ekran kartı yeniden denenir (oyun ekran kartı belleğini
+    /// doldurmuştu, sürücü güncellendi…); oturum boyunca işlemcide kalınmaz.
+    gpu_failed_at: Mutex<Option<Instant>>,
 }
 
 /// Whisper sunucusunun ayarları.
@@ -177,11 +180,15 @@ impl Engine {
         if !model.is_file() {
             return Err("WHISPER_MISSING".into());
         }
-        let gpu_ok = self
-            .gpu_failed
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_none();
+        let gpu_ok = {
+            let mut failed = self.gpu_failed.lock().unwrap_or_else(|e| e.into_inner());
+            let at = *self.gpu_failed_at.lock().unwrap_or_else(|e| e.into_inner());
+            if failed.is_some() && at.is_some_and(|t| t.elapsed() > GPU_RETRY) {
+                crate::log!("Sesle yazma: ekran kartı yeniden deneniyor");
+                *failed = None;
+            }
+            failed.is_none()
+        };
         let use_gpu = cfg.gpu && gpu_ok && whisper::cuda_ready(root);
         let key = format!("{}|{}|{use_gpu}", model.display(), cfg.lang);
         if let Some(s) = guard.as_mut() {
@@ -262,6 +269,8 @@ impl Engine {
                     if gpu && e != SLOW {
                         *self.gpu_failed.lock().unwrap_or_else(|e| e.into_inner()) =
                             Some(e.clone());
+                        *self.gpu_failed_at.lock().unwrap_or_else(|e| e.into_inner()) =
+                            Some(Instant::now());
                     }
                     last = e;
                 }
@@ -276,6 +285,11 @@ impl Engine {
             Ok(mut g) => g.as_mut().is_some_and(|s| s.alive()),
             Err(_) => false,
         }
+    }
+
+    /// Ekran kartını hemen yeniden denesin ("Hazırla" düğmesi, ekran kartı anahtarı).
+    pub fn retry_gpu(&self) {
+        *self.gpu_failed.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Şu an NVIDIA ile mi çalışıyor? (`None`: sunucu kapalı)
@@ -322,12 +336,13 @@ impl Engine {
         careful: bool,
     ) -> Result<Heard, String> {
         self.touch();
-        let limit = inference_limit(wav.len(), careful);
         let mut last = String::new();
         // Sunucu kapanmışsa (çökme, uyku) bir kez yeniden başlatıp dener. Yanıt vermiyorsa (takıldıysa)
         // beklemeye devam edilmez: sunucu kapatılır, sonraki dikte temiz bir sunucuyla başlar.
         for _ in 0..2 {
             let port = self.whisper_port(root, cfg)?;
+            let gpu = self.running_on_gpu() == Some(true);
+            let limit = inference_limit(wav.len(), careful, gpu);
             let started = Instant::now();
             match post_inference(port, wav, prompt, limit, careful) {
                 Ok(t) => return Ok(t),
@@ -586,14 +601,21 @@ pub fn verbose_text(v: &serde_json::Value) -> String {
         .to_string()
 }
 
-/// Bir isteğin en çok ne kadar sürebileceği: kısa dikte için 30 sn + sesin 3 katı (işlemcide büyük model
-/// bile buna sığar), dikkatli okuma (ders) için 3 dk. Bundan uzunu sunucunun takıldığını gösterir.
-fn inference_limit(wav_len: usize, careful: bool) -> Duration {
-    if careful {
-        return Duration::from_secs(180);
-    }
+/// İşlemciye geçildikten bu kadar sonra ekran kartı yeniden denenir.
+const GPU_RETRY: Duration = Duration::from_secs(10 * 60);
+
+/// Bir isteğin en çok ne kadar sürebileceği; bundan uzunu sunucunun takıldığını gösterir. Ekran kartında
+/// kısa dikte 1-2 sn sürer: 30 sn + sesin 3 katı. İşlemcide (özellikle "En doğru" modelle) sesin birkaç
+/// katı sürebilir: 90 sn + sesin 12 katı. Dikkatli okuma (ders) daha uzun.
+fn inference_limit(wav_len: usize, careful: bool, gpu: bool) -> Duration {
     let secs = wav_len.saturating_sub(44) as u64 / 32_000;
-    Duration::from_secs((30 + secs * 3).min(180))
+    let limit = match (careful, gpu) {
+        (true, true) => 180,
+        (true, false) => 600,
+        (false, true) => (30 + secs * 3).min(180),
+        (false, false) => (90 + secs * 12).min(600),
+    };
+    Duration::from_secs(limit)
 }
 
 /// whisper-server'a WAV gönderir (multipart/form-data). Önce sözcük güvenleriyle (`verbose_json`); sunucu
@@ -891,15 +913,12 @@ HTTPServer(('127.0.0.1', port), H).serve_forever()
 
     #[test]
     fn inference_limit_scales_with_audio() {
-        assert_eq!(
-            inference_limit(44 + 32_000 * 5, false),
-            Duration::from_secs(45)
-        );
-        assert_eq!(
-            inference_limit(44 + 32_000 * 600, false),
-            Duration::from_secs(180)
-        );
-        assert_eq!(inference_limit(100, true), Duration::from_secs(180));
+        let s = Duration::from_secs;
+        assert_eq!(inference_limit(44 + 32_000 * 5, false, true), s(45));
+        assert_eq!(inference_limit(44 + 32_000 * 600, false, true), s(180));
+        assert_eq!(inference_limit(44 + 32_000 * 10, false, false), s(210));
+        assert_eq!(inference_limit(100, true, true), s(180));
+        assert_eq!(inference_limit(100, true, false), s(600));
     }
 
     #[test]

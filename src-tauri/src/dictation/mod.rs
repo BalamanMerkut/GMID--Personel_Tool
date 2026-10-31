@@ -872,8 +872,8 @@ fn speech_span(samples: &[i16]) -> Option<(usize, usize)> {
     sorted.sort_by(|a, b| a.total_cmp(b));
     let (floor, peak) = (*sorted.get(sorted.len() / 5)?, *sorted.last()?);
     // Gürültü tabanının 3 katı (sürekli konuşmada taban da yüksek olur: o zaman tepenin dörtte biri),
-    // ama en az 120 (sessiz odada mikrofon cızırtısı ses sayılmasın).
-    let thr = (floor * 3.0).min(peak * 0.25).max(120.0);
+    // ama en az 80 (sessiz odada mikrofon cızırtısı ses sayılmasın; kısık mikrofonda konuşma kaçmasın).
+    let thr = (floor * 3.0).min(peak * 0.25).max(80.0);
     let loud: Vec<usize> = (0..frames.len()).filter(|&i| frames[i] > thr).collect();
     if loud.len() < 7 {
         return None;
@@ -990,7 +990,7 @@ mod tests {
         assert_eq!(speech_span(&all), Some((0, 48_000)));
         // Kısık mikrofon: konuşma ~300.
         let mut quiet = vec![0i16; 8_000];
-        quiet.extend(tone(16_000, 420.0));
+        quiet.extend(tone(16_000, 200.0));
         assert!(speech_span(&quiet).is_some());
     }
 

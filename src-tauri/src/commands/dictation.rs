@@ -74,6 +74,7 @@ pub async fn dictation_install(app: AppHandle, part: String) -> CmdResult<Status
 #[tauri::command]
 pub async fn dictation_warm_up(app: AppHandle) -> CmdResult<Status> {
     blocking(app, |app| {
+        app.state::<Dictation>().engine.retry_gpu();
         dictation::warm_up(app);
         app.state::<Dictation>().status(app)
     })
