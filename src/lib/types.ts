@@ -1258,6 +1258,8 @@ export interface LectureStatus {
   level: number;
   segments: LectureSegment[];
   busy: boolean;
+  /** Henüz kesinleşmemiş parçanın taslağı (kelime kelime akar). */
+  draft: string;
   error: string | null;
   noteId: string | null;
   audio: string | null;

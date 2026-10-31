@@ -431,7 +431,7 @@ const soundpad = {
 
 let lecture: Record<string, unknown> | null = null;
 let lectureTimer: ReturnType<typeof setInterval> | undefined;
-const lectureIdle = { supported: true, recording: false, paused: false, finishing: false, title: "", startedAt: 0, elapsed: 0, level: 0, segments: [], busy: false, error: null, noteId: null, audio: null };
+const lectureIdle = { supported: true, recording: false, paused: false, finishing: false, title: "", startedAt: 0, elapsed: 0, level: 0, segments: [], busy: false, draft: "", error: null, noteId: null, audio: null };
 const LECTURE_LINES = [
   "Bugün türevin tanımıyla başlıyoruz. Bir fonksiyonun bir noktadaki türevi, o noktadaki teğetin eğimidir.",
   "Limit tanımını hatırlayalım: h sıfıra giderken f(x+h) eksi f(x) bölü h.",
@@ -450,12 +450,21 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       lectureTimer = setInterval(() => {
         if (!lecture || !lecture.recording || lecture.paused) return;
         t += 1;
-        lecture.elapsed = (lecture.elapsed as number) + 25;
+        lecture.elapsed = (lecture.elapsed as number) + 5;
         lecture.level = 0.2 + Math.random() * 0.5;
         const segs = lecture.segments as { at: number; text: string }[];
-        if (t <= LECTURE_LINES.length) segs.push({ at: (t - 1) * 25, text: LECTURE_LINES[t - 1] });
+        // Her 5 tikte bir parça kesinleşir; arada taslak sözcük sözcük büyür.
+        const line = LECTURE_LINES[Math.floor((t - 1) / 5)];
+        if (line) {
+          const words = line.split(" ");
+          const k = (t - 1) % 5;
+          if (k === 4) {
+            segs.push({ at: segs.length * 25, text: line });
+            lecture.draft = "";
+          } else lecture.draft = words.slice(0, Math.ceil(((k + 1) / 4) * words.length)).join(" ");
+        }
         emit("lecture-changed");
-      }, 1500);
+      }, 700);
       emit("lecture-changed");
       return lecture;
     }

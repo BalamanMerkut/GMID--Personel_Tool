@@ -135,11 +135,16 @@ fn settings(db: &Db) -> Settings {
     }
 }
 
-/// Ders kaydı için: sesle yazmanın Whisper ayarları, ipucu sözcükleri ve sözlüğü (aynı model, aynı sunucu).
-pub(crate) fn lecture_setup(db: &Db) -> (WhisperCfg, String, Vec<vocab::Rule>, bool) {
+/// Ders kaydı için: sesle yazmanın Whisper ayarları (aynı model, aynı sunucu) ve dilin noktalama örneği.
+/// Kişisel sözlük ve sözcükler derse karışmasın diye verilmez.
+pub(crate) fn lecture_setup(db: &Db) -> (WhisperCfg, &'static str) {
     let s = settings(db);
-    let prompt = whisper_prompt(&s);
-    (s.whisper, prompt, s.rules, s.only_unsure)
+    let style = match s.whisper.lang.as_str() {
+        "tr" => "Bugünkü derste konuyu adım adım anlatacağım, notlarınızı alın.",
+        "en" => "In today's lecture I will explain the topic step by step, please take notes.",
+        _ => "",
+    };
+    (s.whisper, style)
 }
 
 /// Whisper'a ipucu: kullanıcının özel sözcükleri ve noktalamalı örnek bir cümle (noktalama ve

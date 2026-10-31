@@ -17,11 +17,18 @@ pub async fn lecture_start(
     app: AppHandle,
     title: String,
     mic: String,
+    terms: Option<String>,
     keep_audio: bool,
 ) -> CmdResult<Status> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
-        app.state::<Lecture>().start(&app, &title, &mic, keep_audio)
+        app.state::<Lecture>().start(
+            &app,
+            &title,
+            &mic,
+            terms.as_deref().unwrap_or(""),
+            keep_audio,
+        )
     })
     .await
     .map_err(|e| e.to_string())?

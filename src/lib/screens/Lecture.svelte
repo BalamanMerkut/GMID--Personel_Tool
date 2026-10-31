@@ -20,6 +20,8 @@
   /** "system": bilgisayarın sesi (online ders); "": varsayılan mikrofon; diğerleri mikrofon kimliği. */
   let mic = $state(getJson<string>("lecture.source", "system"));
   let keepAudio = $state(getJson<boolean>("lecture.keepAudio", false));
+  /** Dersin terimleri: Whisper bunları duyunca doğru yazmaya yatkın olur. */
+  let terms = $state(getJson<string>("lecture.terms", ""));
   let starting = $state(false);
   let list = $state<HTMLElement | null>(null);
   let follow = $state(true);
@@ -57,8 +59,9 @@
     void setJson("lecture.title", title.trim());
     void setJson("lecture.source", mic);
     void setJson("lecture.keepAudio", keepAudio);
+    void setJson("lecture.terms", terms.trim());
     try {
-      st = await api.lecture.start(title.trim(), mic, keepAudio);
+      st = await api.lecture.start(title.trim(), mic, terms.trim(), keepAudio);
       follow = true;
     } catch (e) {
       notify(String(e), "info");
@@ -145,6 +148,11 @@
           </select>
         {/if}
       </div>
+      <label class="field">
+        <span>Dersin terimleri <i class="opt">· isteğe bağlı</i></span>
+        <input bind:value={terms} placeholder="Örn. türev, integral, Laplace dönüşümü, Prof. Yılmaz" maxlength="400" />
+        <em class="sub small">Virgülle ayır. Whisper bu sözcükleri duyunca doğru yazmaya yatkın olur (özel adlar, terimler, kısaltmalar).</em>
+      </label>
       <div class="line">
         <div>
           <b>Ses kaydını da sakla</b>
@@ -196,15 +204,22 @@
     <section class="panel text">
       <div class="spread">
         <h3 class="h2"><Icon name="note" />Yazı</h3>
-        {#if st.recording}<span class="sub small">Her ~25 saniyede bir, konuşmanın duraksadığı yerde eklenir</span>{/if}
+        {#if st.recording}<span class="sub small">Gri yazı taslak: birkaç saniyede bir akar; konuşma duraksayınca dikkatlice okunup kesinleşir</span>{/if}
       </div>
       <div class="segs" bind:this={list} onscroll={onScroll}>
         {#each st.segments as s, i (i)}
           <p><b class="tnum">{clock(s.at)}</b>{s.text}</p>
         {:else}
-          <p class="sub empty">{st.recording ? "Konuşma bekleniyor… İlk yazı yaklaşık 25 saniye sonra gelir." : "Yazıya dökülecek konuşma duyulmadı."}</p>
+          {#if !st.draft}
+            <p class="sub empty">{st.recording ? "Konuşma bekleniyor… İlk sözcükler birkaç saniye içinde gelir." : "Yazıya dökülecek konuşma duyulmadı."}</p>
+          {/if}
         {/each}
-        {#if st.busy || st.finishing}<p class="sub typing"><span></span><span></span><span></span></p>{/if}
+        {#if st.draft && (st.recording || st.finishing)}
+          <p class="draft">
+            <b>şimdi</b>
+            <span>{#each st.draft.split(/\s+/).filter(Boolean) as w, i (i + w)}<span class="w">{`${w} `}</span>{/each}<i class="caret"></i></span>
+          </p>
+        {:else if st.busy || st.finishing}<p class="sub typing"><span></span><span></span><span></span></p>{/if}
       </div>
       {#if st.audio && !st.recording}<span class="sub small">Ses kaydı: <code>{st.audio}</code></span>{/if}
     </section>
@@ -254,6 +269,12 @@
   .segs p { margin: 0; line-height: 1.6; font-size: 15px; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
   .segs p b { color: var(--gold-dim); font-size: 12.5px; padding-top: 3px; }
   .segs .empty, .segs .typing { display: block; }
+  .segs .draft { color: var(--muted); font-style: italic; }
+  .segs .draft b { opacity: 0.6; }
+  .draft .w { animation: wordin 0.35s ease-out both; }
+  @keyframes wordin { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
+  .caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--gold); animation: blink 1s infinite; }
+  .opt { font-style: normal; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--dim); }
   .typing span { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
   .typing span:nth-child(2) { animation-delay: 0.2s; }
   .typing span:nth-child(3) { animation-delay: 0.4s; }

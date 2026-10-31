@@ -123,7 +123,13 @@ const SLOW: &str = "zamanında hazır olmadı";
 fn warm_whisper(port: u16) {
     let started = Instant::now();
     let silence = vec![0i16; 16_000];
-    match post_inference(port, &super::to_wav(&silence), "", Duration::from_secs(300)) {
+    match post_inference(
+        port,
+        &super::to_wav(&silence),
+        "",
+        Duration::from_secs(300),
+        false,
+    ) {
         Ok(_) => crate::log!(
             "Sesle yazma: Whisper ısındı ({:.1} sn)",
             started.elapsed().as_secs_f64()
@@ -301,12 +307,25 @@ impl Engine {
         wav: &[u8],
         prompt: &str,
     ) -> Result<Heard, String> {
+        self.transcribe_with(root, cfg, wav, prompt, false)
+    }
+
+    /// `careful`: ışın araması (beam search, 5 aday) ile: daha yavaş ama özellikle uzun ve gürültülü konuşmada
+    /// yakın ama yanlış sözcükleri azaltır (ders kaydı; beklemesi önemli olmayan işler).
+    pub fn transcribe_with(
+        &self,
+        root: &Path,
+        cfg: &WhisperCfg,
+        wav: &[u8],
+        prompt: &str,
+        careful: bool,
+    ) -> Result<Heard, String> {
         self.touch();
         let mut last = String::new();
         // Sunucu kapanmışsa (çökme, uyku) bir kez yeniden başlatıp dener.
         for _ in 0..2 {
             let port = self.whisper_port(root, cfg)?;
-            match post_inference(port, wav, prompt, Duration::from_secs(120)) {
+            match post_inference(port, wav, prompt, Duration::from_secs(180), careful) {
                 Ok(t) => return Ok(t),
                 Err(e) => {
                     last = e;
@@ -539,17 +558,24 @@ pub fn heard_words(v: &serde_json::Value) -> Vec<(String, f32)> {
 
 /// whisper-server'a WAV gönderir (multipart/form-data). Önce sözcük güvenleriyle (`verbose_json`); sunucu
 /// bunu desteklemiyorsa düz yazıyla.
-fn post_inference(port: u16, wav: &[u8], prompt: &str, timeout: Duration) -> Result<Heard, String> {
-    match post_inference_as(port, wav, prompt, timeout, "verbose_json") {
+fn post_inference(
+    port: u16,
+    wav: &[u8],
+    prompt: &str,
+    timeout: Duration,
+    careful: bool,
+) -> Result<Heard, String> {
+    match post_inference_as(port, wav, prompt, timeout, "verbose_json", careful) {
         Ok(v) => Ok(Heard {
             text: v["text"].as_str().unwrap_or_default().to_string(),
             words: heard_words(&v),
         }),
-        Err(e) if e.starts_with("sunucu ") => post_inference_as(port, wav, prompt, timeout, "json")
-            .map(|v| Heard {
+        Err(e) if e.starts_with("sunucu ") => {
+            post_inference_as(port, wav, prompt, timeout, "json", careful).map(|v| Heard {
                 text: v["text"].as_str().unwrap_or_default().to_string(),
                 words: Vec::new(),
-            }),
+            })
+        }
         Err(e) => Err(e),
     }
 }
@@ -560,6 +586,7 @@ fn post_inference_as(
     prompt: &str,
     timeout: Duration,
     format: &str,
+    careful: bool,
 ) -> Result<serde_json::Value, String> {
     let boundary = format!("gmid{}", crate::util::new_id());
     let mut body: Vec<u8> = Vec::with_capacity(wav.len() + 1024);
@@ -571,6 +598,10 @@ fn post_inference_as(
     };
     field("temperature", "0.0");
     field("temperature_inc", "0.2");
+    if careful {
+        field("beam_size", "5");
+        field("best_of", "5");
+    }
     field("response_format", format);
     if !prompt.trim().is_empty() {
         field("prompt", prompt.trim());

@@ -51,6 +51,9 @@ pub struct Status {
     pub segments: Vec<Segment>,
     /// Bir parça şu an yazıya dökülüyor.
     pub busy: bool,
+    /// Henüz kesinleşmemiş parçanın taslağı: birkaç saniyede bir hızlıca okunur, kelime kelime görünür;
+    /// parça bitince dikkatli okumayla kesinleşip `segments`e geçer.
+    pub draft: String,
     pub error: Option<String>,
     /// Bitince kaydedilen notun kimliği.
     pub note_id: Option<String>,
@@ -71,8 +74,11 @@ struct Shared {
     level: AtomicU32,
     busy: AtomicBool,
     capture_done: AtomicBool,
+    draft: Mutex<String>,
     segments: Mutex<Vec<Segment>>,
     error: Mutex<Option<String>>,
+    /// Dersin terimleri (Whisper'a ipucu: "türev, integral, Laplace").
+    terms: String,
 }
 
 struct Session {
@@ -109,6 +115,7 @@ impl Lecture {
             level: f32::from_bits(sh.level.load(Ordering::Relaxed)),
             segments: sh.segments.lock().map(|v| v.clone()).unwrap_or_default(),
             busy: sh.busy.load(Ordering::SeqCst),
+            draft: sh.draft.lock().map(|d| d.clone()).unwrap_or_default(),
             error: sh.error.lock().ok().and_then(|e| e.clone()),
             note_id: s.note_id.clone(),
             audio: s.audio.clone(),
@@ -121,6 +128,7 @@ impl Lecture {
         app: &AppHandle,
         title: &str,
         mic: &str,
+        terms: &str,
         keep_audio: bool,
     ) -> Result<Status, String> {
         {
@@ -149,8 +157,16 @@ impl Lecture {
             level: AtomicU32::new(0),
             busy: AtomicBool::new(false),
             capture_done: AtomicBool::new(false),
+            draft: Mutex::new(String::new()),
             segments: Mutex::new(Vec::new()),
             error: Mutex::new(None),
+            terms: terms
+                .split([',', '\n'])
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .take(40)
+                .collect::<Vec<_>>()
+                .join(", "),
         });
         let started_at = crate::util::now_ms();
         let audio = keep_audio.then(|| {
@@ -376,6 +392,25 @@ pub fn cut_point(buf: &[i16], min: usize) -> usize {
     best.1
 }
 
+/// Ses seviyesini dengeler: kısık gelen ders (bilgisayar sesi kısık, hoca mikrofondan uzak) Whisper'a duyulur
+/// seviyede gider. En çok 8 kat yükseltilir; tepeler sınırlanır (cızırtı olmasın).
+pub fn normalize(s: &[i16]) -> Vec<i16> {
+    let level = rms(s);
+    if level < 1.0 {
+        return s.to_vec();
+    }
+    let peak = s
+        .iter()
+        .map(|v| (*v as f64).abs())
+        .fold(0.0, f64::max)
+        .max(1.0);
+    // Hedef ~ -20 dBFS ortalama, tepeler -1 dBFS'i geçmesin.
+    let gain = (3300.0 / level).min(8.0).min(29_000.0 / peak).max(1.0);
+    s.iter()
+        .map(|v| (*v as f64 * gain).clamp(-32767.0, 32767.0) as i16)
+        .collect()
+}
+
 fn rms(s: &[i16]) -> f64 {
     if s.is_empty() {
         return 0.0;
@@ -384,7 +419,13 @@ fn rms(s: &[i16]) -> f64 {
 }
 
 /// Biriken sesi parça parça yazıya döker; kayıt bitince kalanı da döker ve notu kaydeder.
+/// Taslak en erken bu kadar ses birikince ve bu aralıkla okunur (ekran kartı yoksa daha seyrek).
+const DRAFT_MIN: usize = RATE * 3 / 2;
+const DRAFT_EVERY: Duration = Duration::from_millis(2500);
+const DRAFT_EVERY_CPU: Duration = Duration::from_secs(6);
+
 fn worker(app: &AppHandle, sh: &Arc<Shared>) {
+    let mut last_draft = std::time::Instant::now();
     loop {
         let stopping = sh.stop.load(Ordering::SeqCst) && sh.capture_done.load(Ordering::SeqCst);
         let chunk = {
@@ -404,13 +445,66 @@ fn worker(app: &AppHandle, sh: &Arc<Shared>) {
             }
         };
         match chunk {
-            Some((at, samples)) => transcribe(app, sh, at, &samples),
+            Some((at, samples)) => {
+                transcribe(app, sh, at, &samples);
+                sh.draft.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                last_draft = std::time::Instant::now();
+            }
             None if stopping => break,
-            None => std::thread::sleep(Duration::from_millis(400)),
+            None => {
+                let gpu = app
+                    .state::<crate::dictation::Dictation>()
+                    .engine
+                    .running_on_gpu()
+                    != Some(false);
+                let every = if gpu { DRAFT_EVERY } else { DRAFT_EVERY_CPU };
+                if last_draft.elapsed() >= every && !sh.paused.load(Ordering::SeqCst) {
+                    let snapshot = {
+                        let p = sh.pending.lock().unwrap_or_else(|e| e.into_inner());
+                        (p.len() >= DRAFT_MIN).then(|| p.clone())
+                    };
+                    if let Some(samples) = snapshot {
+                        draft(app, sh, &samples);
+                        last_draft = std::time::Instant::now();
+                        continue;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(300));
+            }
         }
     }
     let lecture = app.state::<Lecture>();
     lecture.finish(app, false);
+}
+
+/// Biriken (henüz bölünmemiş) sesin hızlı okuması: yalnız ekranda taslak olarak gösterilir, nota girmez.
+fn draft(app: &AppHandle, sh: &Shared, samples: &[i16]) {
+    if rms(samples) < 60.0 {
+        return;
+    }
+    let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
+    let (cfg, style) = crate::dictation::lecture_setup(&db);
+    let prompt = [sh.terms.as_str(), style]
+        .iter()
+        .filter(|p| !p.is_empty())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(". ");
+    let engine = &app.state::<crate::dictation::Dictation>().engine;
+    let wav = crate::dictation::to_wav(&normalize(samples));
+    if let Ok(h) = engine.transcribe_with(dir.root(), &cfg, &wav, &prompt, false) {
+        let text = crate::transcript::parse::clean_dictation(&h.text);
+        // Bu arada parça kesinleştiyse eski taslak yazılmasın.
+        let still = sh
+            .pending
+            .lock()
+            .map(|p| p.len() >= samples.len())
+            .unwrap_or(false);
+        if still {
+            *sh.draft.lock().unwrap_or_else(|e| e.into_inner()) = text;
+            let _ = app.emit("lecture-changed", ());
+        }
+    }
 }
 
 fn transcribe(app: &AppHandle, sh: &Shared, at: u64, samples: &[i16]) {
@@ -421,36 +515,29 @@ fn transcribe(app: &AppHandle, sh: &Shared, at: u64, samples: &[i16]) {
     sh.busy.store(true, Ordering::SeqCst);
     let _ = app.emit("lecture-changed", ());
     let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
-    let (cfg, words, rules, only_unsure) = crate::dictation::lecture_setup(&db);
-    // Önceki parçanın sonu ipucu olarak verilir: cümle bölünse de devam ettiği anlaşılsın.
+    // Sesle yazmanın kişisel sözlüğü ve sözcükleri (oyun adları, takma adlar) derse karışmasın: yalnız dersin
+    // terimleri, dilin noktalama örneği ve önceki parçanın sonu (cümle bölünse de devamı anlaşılsın).
+    let (cfg, style) = crate::dictation::lecture_setup(&db);
     let tail: String = {
         let segs = sh.segments.lock().unwrap_or_else(|e| e.into_inner());
         let last = segs.last().map(|s| s.text.as_str()).unwrap_or_default();
         let chars: Vec<char> = last.chars().collect();
         chars[chars.len().saturating_sub(200)..].iter().collect()
     };
-    let prompt = if tail.is_empty() {
-        words
-    } else {
-        format!("{words} {tail}")
-    };
+    let prompt = [sh.terms.as_str(), style, tail.as_str()]
+        .iter()
+        .filter(|p| !p.is_empty())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(". ");
     let engine = &app.state::<crate::dictation::Dictation>().engine;
-    let result = engine.transcribe(
-        dir.root(),
-        &cfg,
-        &crate::dictation::to_wav(samples),
-        &prompt,
-    );
+    // Ders beklemeye dayanır: ışın aramasıyla (daha az "yakın ama yanlış" sözcük); ses seviyesi dengelenir.
+    let wav = crate::dictation::to_wav(&normalize(samples));
+    let result = engine.transcribe_with(dir.root(), &cfg, &wav, &prompt, true);
     match result {
         Ok(heard) => {
-            let raw = crate::transcript::parse::clean_dictation(&heard.text);
-            if !raw.trim().is_empty() {
-                let (text, _, _) = crate::dictation::vocab::apply_heard(
-                    &raw,
-                    &rules,
-                    |w| heard.confidence(w),
-                    only_unsure,
-                );
+            let text = crate::transcript::parse::clean_dictation(&heard.text);
+            if !text.trim().is_empty() {
                 sh.segments
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
@@ -504,35 +591,64 @@ impl WavFile {
 }
 
 /// Gelen ses (kanallar ve hız ne olursa) → 16 kHz tek kanal 16 bit. Bilgisayarın sesi genelde 48 kHz stereo
-/// gelir: kanallar ortalanır, hız düşürülürken araya giren örneklerin ortalaması alınır (kaba alçak geçiren).
+/// gelir: kanallar ortalanır, sonra hız düşürülmeden önce 7 kHz üstü süzülür (pencereli sinc, 95 katsayı).
+/// Süzmeden düşürmek yüksek sesleri ("s", "ş", "ç") konuşma bandına katlar; Whisper yakın ama yanlış sözcük yazar.
 pub struct Downmix {
     step: f64,
     pos: f64,
-    sum: f64,
-    n: u32,
+    taps: Vec<f32>,
+    hist: Vec<f32>,
+    at: usize,
 }
 
 impl Downmix {
     pub fn new(rate: u32) -> Downmix {
+        let rate = rate.max(1) as f64;
+        const N: usize = 95;
+        // Kesim: 16 kHz'in yarısının biraz altı (7 kHz), giriş hızına göre.
+        let fc = 7000.0 / rate;
+        let mid = (N - 1) as f64 / 2.0;
+        let mut taps: Vec<f32> = (0..N)
+            .map(|i| {
+                let x = i as f64 - mid;
+                let sinc = if x == 0.0 {
+                    2.0 * fc
+                } else {
+                    (2.0 * std::f64::consts::PI * fc * x).sin() / (std::f64::consts::PI * x)
+                };
+                // Blackman penceresi.
+                let w = 0.42 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / (N - 1) as f64).cos()
+                    + 0.08 * (4.0 * std::f64::consts::PI * i as f64 / (N - 1) as f64).cos();
+                (sinc * w) as f32
+            })
+            .collect();
+        let sum: f32 = taps.iter().sum();
+        for t in &mut taps {
+            *t /= sum;
+        }
         Downmix {
-            step: RATE as f64 / rate.max(1) as f64,
+            step: RATE as f64 / rate,
             pos: 0.0,
-            sum: 0.0,
-            n: 0,
+            hist: vec![0.0; N],
+            taps,
+            at: 0,
         }
     }
 
     /// Bir karenin (tüm kanalların ortalaması, -1..1) eklenmesi.
     pub fn push(&mut self, mono: f32, out: &mut Vec<i16>) {
-        self.sum += mono as f64;
-        self.n += 1;
+        let n = self.hist.len();
+        self.hist[self.at] = mono;
+        self.at = (self.at + 1) % n;
         self.pos += self.step;
         if self.pos >= 1.0 {
             self.pos -= 1.0;
-            let v = (self.sum / self.n as f64).clamp(-1.0, 1.0);
-            out.push((v * 32767.0) as i16);
-            self.sum = 0.0;
-            self.n = 0;
+            // Halka arabellek: en eski örnekten en yeniye.
+            let mut acc = 0.0f32;
+            for (k, t) in self.taps.iter().enumerate() {
+                acc += t * self.hist[(self.at + k) % n];
+            }
+            out.push((acc.clamp(-1.0, 1.0) * 32767.0) as i16);
         }
     }
 }
@@ -834,19 +950,40 @@ mod tests {
 
     #[test]
     fn computer_sound_is_converted_to_16k_mono() {
-        // 48 kHz → 16 kHz: üç karede bir örnek, ortalamaları.
+        // 48 kHz → 16 kHz: sayı üçte bir, düz ses aynen geçer (süzgeç yerleştikten sonra).
         let mut d = Downmix::new(48_000);
         let mut out = Vec::new();
         for _ in 0..48_000 {
             d.push(0.5, &mut out);
         }
         assert!((15_999..=16_001).contains(&out.len()), "{}", out.len());
-        assert!((out[10] - 16383).abs() <= 1);
-        // Taşan değer sınırlanır.
-        let mut d = Downmix::new(16_000);
-        let mut out = Vec::new();
-        d.push(3.0, &mut out);
-        assert_eq!(out, vec![32767]);
+        assert!((out[1000] - 16383).abs() <= 40, "{}", out[1000]);
+        // 12 kHz'lik ıslık (16 kHz'de katlanıp 4 kHz'e düşerdi) süzülür; 1 kHz'lik ses kalır.
+        let tone = |hz: f64| {
+            let mut d = Downmix::new(48_000);
+            let mut out = Vec::new();
+            for i in 0..48_000 {
+                d.push(
+                    (0.5 * (2.0 * std::f64::consts::PI * hz * i as f64 / 48_000.0).sin()) as f32,
+                    &mut out,
+                );
+            }
+            rms(&out[1000..])
+        };
+        assert!(tone(1000.0) > 10_000.0);
+        assert!(tone(12_000.0) < 300.0, "{}", tone(12_000.0));
+    }
+
+    #[test]
+    fn quiet_lectures_are_boosted() {
+        let quiet: Vec<i16> = (0..16_000)
+            .map(|i| if i % 2 == 0 { 300 } else { -300 })
+            .collect();
+        let n = normalize(&quiet);
+        assert!(rms(&n) > 2000.0, "{}", rms(&n));
+        // Yüksek ses kısılmaz, tepeler taşmaz.
+        let loud: Vec<i16> = vec![20_000; 100];
+        assert_eq!(normalize(&loud), loud);
     }
 
     #[test]

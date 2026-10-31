@@ -149,7 +149,8 @@ export const api = {
   /** Ders kaydı: uzun kayıt, canlı yazıya dökme, bitince Notlar'a. */
   lecture: {
     status: () => call<LectureStatus>("lecture_status"),
-    start: (title: string, mic: string, keepAudio: boolean) => call<LectureStatus>("lecture_start", { title, mic, keepAudio }),
+    start: (title: string, mic: string, terms: string, keepAudio: boolean) =>
+      call<LectureStatus>("lecture_start", { title, mic, terms, keepAudio }),
     pause: (paused: boolean) => call<LectureStatus>("lecture_pause", { paused }),
     stop: () => call<LectureStatus>("lecture_stop"),
     clear: () => call<LectureStatus>("lecture_clear"),

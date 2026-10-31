@@ -28,6 +28,13 @@ pub const MODELS: &[Model] = &[
         size_mb: 550,
     },
     Model {
+        id: "large",
+        file: "ggml-large-v3-q5_0.bin",
+        label: "En doğru",
+        detail: "large-v3 · Türkçede en az hata, ders kaydı için iyi; NVIDIA ekran kartıyla önerilir, işlemcide yavaş",
+        size_mb: 1080,
+    },
+    Model {
         id: "small",
         file: "ggml-small-q5_1.bin",
         label: "Hızlı",
