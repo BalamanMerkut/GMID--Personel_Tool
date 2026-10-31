@@ -39,7 +39,7 @@ import type {
   ProgramList, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
   Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
-  Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot, DnsBench, DnsStatus, SoundpadConfig, SoundpadStatus } from "./types";
+  Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot, DnsBench, DnsStatus, SoundpadConfig, SoundpadStatus, LectureStatus } from "./types";
 
 /** Bir Rust komutunu çağırır; tarayıcıda taklit katmana gider. */
 export async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -144,6 +144,15 @@ export const api = {
     if (!inTauri) return () => {};
     const { listen } = await import("@tauri-apps/api/event");
     return listen<string>("navigate", (e) => cb(e.payload));
+  },
+
+  /** Ders kaydı: uzun kayıt, canlı yazıya dökme, bitince Notlar'a. */
+  lecture: {
+    status: () => call<LectureStatus>("lecture_status"),
+    start: (title: string, mic: string, keepAudio: boolean) => call<LectureStatus>("lecture_start", { title, mic, keepAudio }),
+    pause: (paused: boolean) => call<LectureStatus>("lecture_pause", { paused }),
+    stop: () => call<LectureStatus>("lecture_stop"),
+    clear: () => call<LectureStatus>("lecture_clear"),
   },
 
   /** Ses Paneli: tuşa basınca ses mikrofondan çalar (sanal kablo üzerinden). */

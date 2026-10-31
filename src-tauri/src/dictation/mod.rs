@@ -135,6 +135,13 @@ fn settings(db: &Db) -> Settings {
     }
 }
 
+/// Ders kaydı için: sesle yazmanın Whisper ayarları, ipucu sözcükleri ve sözlüğü (aynı model, aynı sunucu).
+pub(crate) fn lecture_setup(db: &Db) -> (WhisperCfg, String, Vec<vocab::Rule>, bool) {
+    let s = settings(db);
+    let prompt = whisper_prompt(&s);
+    (s.whisper, prompt, s.rules, s.only_unsure)
+}
+
 /// Whisper'a ipucu: kullanıcının özel sözcükleri ve noktalamalı örnek bir cümle (noktalama ve
 /// büyük harf kullanmaya yönlendirir).
 fn whisper_prompt(s: &Settings) -> String {

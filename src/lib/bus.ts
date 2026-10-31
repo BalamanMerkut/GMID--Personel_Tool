@@ -44,7 +44,8 @@ export type AppEvent =
   | "gmid-player"
   | "gmid-player-cmd"
   | "soundpad-changed"
-  | "dictation-toggled";
+  | "dictation-toggled"
+  | "lecture-changed";
 
 /** Olayı dinler; dinlemeyi bırakmak için dönen fonksiyonu çağır. */
 export async function on<T = unknown>(event: AppEvent, cb: (payload: T) => void): Promise<() => void> {

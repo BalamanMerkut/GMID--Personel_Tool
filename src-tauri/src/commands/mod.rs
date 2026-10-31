@@ -5,6 +5,7 @@ pub mod dictation;
 pub mod games;
 pub mod install;
 pub mod karaoke;
+pub mod lecture;
 pub mod servers;
 pub mod sound;
 pub mod soundpad;

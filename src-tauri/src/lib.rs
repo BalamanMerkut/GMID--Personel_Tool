@@ -19,6 +19,7 @@ mod games;
 mod hotkeys;
 mod install;
 mod karaoke;
+mod lecture;
 mod log;
 mod mediactl;
 mod net;
@@ -173,6 +174,7 @@ pub fn run() {
             app.manage(football::Football::default());
             app.manage(perf::Perf::default());
             app.manage(soundpad::Soundpad::default());
+            app.manage(lecture::Lecture::default());
             app.manage(audio::Audio::start(handle.clone(), mic_lock));
             app.manage(Launch {
                 splash: AtomicBool::new(!minimized),
@@ -454,6 +456,11 @@ pub fn run() {
             commands::clips::clips_plan,
             commands::dictation::dictation_apply,
             commands::dictation::dictation_toggle,
+            commands::lecture::lecture_status,
+            commands::lecture::lecture_start,
+            commands::lecture::lecture_pause,
+            commands::lecture::lecture_stop,
+            commands::lecture::lecture_clear,
             commands::dictation::dictation_install,
             commands::dictation::dictation_warm_up,
             commands::dictation::dictation_rules,
@@ -481,6 +488,10 @@ pub fn run() {
                     }
                     if let Some(s) = app.try_state::<soundpad::Soundpad>() {
                         s.shutdown();
+                    }
+                    // Ders kaydı sürüyorsa buraya kadarki yazı not olarak saklanır.
+                    if let Some(l) = app.try_state::<lecture::Lecture>() {
+                        l.shutdown(app);
                     }
                     if let (Some(g), Some(db)) =
                         (app.try_state::<games::Games>(), app.try_state::<db::Db>())

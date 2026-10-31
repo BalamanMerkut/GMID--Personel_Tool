@@ -8,6 +8,7 @@
   import { findScreen, groupOf, roomOf, SCREENS } from "./lib/nav";
   import Audio from "./lib/screens/Audio.svelte";
   import Soundpad from "./lib/screens/Soundpad.svelte";
+  import Lecture from "./lib/screens/Lecture.svelte";
   import Home from "./lib/screens/Home.svelte";
   import Placeholder from "./lib/screens/Placeholder.svelte";
   import Reminders from "./lib/screens/Reminders.svelte";
@@ -184,6 +185,8 @@
           <Audio onnavigate={navigate} />
         {:else if route === "soundpad"}
           <Soundpad onnavigate={navigate} />
+        {:else if route === "lecture"}
+          <Lecture onnavigate={navigate} />
         {:else if route === "reminders"}
           <Reminders />
         {:else if route === "videos"}

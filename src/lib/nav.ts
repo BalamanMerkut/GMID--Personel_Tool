@@ -65,6 +65,8 @@ export const ROOMS: Room[] = [
         description: "Her yerden Ctrl+Alt+N ile açılan hızlı not, yapışkan notlar ve yapılacaklar listeleri. Kaybolmaz, kendiliğinden kaydedilir." },
       { id: "reminders", label: "Hatırlatıcılar", icon: "bell", phase: null,
         description: "\"30 dk sonra\", \"yarın 09:00\" gibi hızlı hatırlatıcılar; Windows bildirimiyle, oyundayken köşede küçük gösterge." },
+      { id: "lecture", label: "Ders Kaydı", icon: "mic", phase: null,
+        description: "Derste kaydı başlat: hocanın söyledikleri canlı olarak yazıya dökülür, bitince dakika işaretleriyle Notlar'a kaydedilir. Ses bilgisayardan çıkmaz." },
       { id: "timer", label: "Sayaç", icon: "timer", phase: null,
         description: "Kronometre ve aynı anda birden çok geri sayım. Tepsiden ve Oyun İçi Panel'den başlatılabilir." },
       { id: "audio", label: "Ses & Mikrofon", icon: "speaker", phase: null,
@@ -158,6 +160,7 @@ export const NAV: NavRoom[] = [
           { id: "notes", label: "Notlar" },
           { id: "reminders", label: "Hatırlatıcılar" },
           { id: "timer", label: "Sayaç" },
+          { id: "lecture", label: "Ders Kaydı" },
         ],
       },
       {

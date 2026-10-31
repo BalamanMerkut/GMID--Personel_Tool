@@ -1243,3 +1243,22 @@ export interface SoundpadStatus {
   keyErrors: Record<string, string>;
   ffmpeg: boolean;
 }
+
+/** Ders kaydı: dakika işaretli yazı parçası. */
+export interface LectureSegment { at: number; text: string }
+export interface LectureStatus {
+  supported: boolean;
+  recording: boolean;
+  paused: boolean;
+  /** Kayıt bitti, son parça yazıya dökülüyor. */
+  finishing: boolean;
+  title: string;
+  startedAt: number;
+  elapsed: number;
+  level: number;
+  segments: LectureSegment[];
+  busy: boolean;
+  error: string | null;
+  noteId: string | null;
+  audio: string | null;
+}
