@@ -2,7 +2,8 @@
 //! "şu oyunu oynuyorum" der, sunucu da herkesin durumunu anlık iletir.
 //!
 //! İstemci → sunucu: `{"tip":"merhaba","anahtar":"…"}`, `{"tip":"durum","oyun":"CS2"|null}`
-//! Sunucu → istemci: `liste`, `geldi`, `gitti`, `durum`, `hata`
+//! Sunucu → istemci: `liste`, `geldi`, `gitti`, `durum`, `akis` (akış değişti), `mesaj` (özel mesaj),
+//! `bildirim` (olayıma beğeni/yorum), `hata`
 
 use crate::durum::oyun_adi;
 use crate::Sunucu;
@@ -46,6 +47,8 @@ async fn oturum(mut sock: WebSocket, s: Arc<Sunucu>) {
     // değişiklik zaten hemen ardından gönderilen tam listede vardır.
     s.durum.geldi(&kisi);
     let mut rx = s.durum.abone();
+    let (ozel_tx, mut ozel) = tokio::sync::mpsc::unbounded_channel::<String>();
+    s.durum.kaydol(&kisi.id, ozel_tx.clone());
     let mut nabiz = tokio::time::interval(Duration::from_secs(30));
     nabiz.tick().await;
     if gonder(&mut sock, s.durum.liste_mesaji()).await {
@@ -55,7 +58,15 @@ async fn oturum(mut sock: WebSocket, s: Arc<Sunucu>) {
                     Some(Ok(Message::Text(t))) => {
                         if let Ok(v) = serde_json::from_str::<Value>(&t) {
                             if v["tip"] == "durum" {
-                                s.durum.oyun(&kisi.id, oyun_adi(v["oyun"].as_str()));
+                                let oyun = oyun_adi(v["oyun"].as_str());
+                                if s.durum.oyun(&kisi.id, oyun.clone()) {
+                                    // Oyuna girdi: akışa "X oynuyor" (aynı oyun 12 saatte bir).
+                                    if let Some(o) = oyun {
+                                        if s.db().oyun_basladi(&kisi.id, &o).unwrap_or(false) {
+                                            s.durum.yay(json!({ "tip": "akis" }));
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -68,10 +79,12 @@ async fn oturum(mut sock: WebSocket, s: Arc<Sunucu>) {
                     Err(RecvError::Lagged(_)) => if !gonder(&mut sock, s.durum.liste_mesaji()).await { break },
                     Err(RecvError::Closed) => break,
                 },
+                Some(m) = ozel.recv() => if !gonder(&mut sock, m).await { break },
                 // Arada modem/proxy bağlantıyı sessizce kesmesin.
                 _ = nabiz.tick() => if sock.send(Message::Ping(Vec::new().into())).await.is_err() { break },
             }
         }
     }
+    s.durum.birak(&kisi.id, &ozel_tx);
     s.durum.ayrildi(&kisi.id);
 }

@@ -1,0 +1,282 @@
+//! Sosyal HTTP uçları: kişiler, profiller, akış (beğeni/yorum), özel mesajlar, resimler.
+//! Hepsi giriş ister (`Authorization: Bearer …`), resimlerin kendisi hariç (adları tahmin edilemez özet).
+
+use crate::api::{hata, kim, Sonuc};
+use crate::sosyal::{metin, Profil};
+use crate::Sunucu;
+use axum::body::Bytes;
+use axum::extract::{Path, Query, State};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+use serde::Deserialize;
+use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
+
+fn ic(e: String) -> (StatusCode, Json<serde_json::Value>) {
+    hata(StatusCode::INTERNAL_SERVER_ERROR, e)
+}
+
+pub async fn kisiler(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
+    kim(&s, &h)?;
+    let l = s.db().kisiler().map_err(ic)?;
+    let l: Vec<_> = l
+        .into_iter()
+        .map(|(k, son)| {
+            let c = s.durum.kisi(&k.id);
+            json!({ "id": k.id, "ad": k.ad, "avatar": k.avatar, "son": son,
+                    "cevrimici": c.is_some(), "oyun": c.and_then(|c| c.oyun) })
+        })
+        .collect();
+    Ok(Json(json!({ "kisiler": l })))
+}
+
+pub async fn profil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<String>) -> Sonuc {
+    kim(&s, &h)?;
+    let db = s.db();
+    let k = db
+        .kullanici(&id)
+        .ok_or_else(|| hata(StatusCode::NOT_FOUND, "Böyle biri yok"))?;
+    let (p, t) = db.profil(&id).unzip();
+    let c = s.durum.kisi(&id);
+    Ok(Json(json!({
+        "kisi": k, "cevrimici": c.is_some(), "oyun": c.and_then(|c| c.oyun),
+        "profil": p, "guncelleme": t,
+    })))
+}
+
+pub async fn profil_kaydet(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Json(p): Json<Profil>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let n = s.db().profil_kaydet(&ben.id, p.sinirla()).map_err(ic)?;
+    if n > 0 {
+        s.durum.yay(json!({ "tip": "akis" }));
+    }
+    Ok(Json(json!({ "akis": n })))
+}
+
+#[derive(Deserialize)]
+pub struct AkisSorgu {
+    once: Option<i64>,
+    kisi: Option<String>,
+    sayi: Option<i64>,
+}
+
+pub async fn akis(State(s): State<Arc<Sunucu>>, h: HeaderMap, Query(q): Query<AkisSorgu>) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let l = s
+        .db()
+        .akis(&ben.id, q.once, q.kisi.as_deref(), q.sayi.unwrap_or(30))
+        .map_err(ic)?;
+    Ok(Json(json!({ "olaylar": l })))
+}
+
+fn sahip(s: &Sunucu, id: i64) -> Result<String, (StatusCode, Json<serde_json::Value>)> {
+    s.db()
+        .etkinlik_sahibi(id)
+        .ok_or_else(|| hata(StatusCode::NOT_FOUND, "Bu paylaşım silinmiş"))
+}
+
+pub async fn begen(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<i64>) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let sahibi = sahip(&s, id)?;
+    let (begendim, sayi) = s.db().begen(&ben.id, id).map_err(ic)?;
+    if begendim && sahibi != ben.id {
+        s.durum.kisiye(
+            &sahibi,
+            &json!({ "tip": "bildirim", "tur": "begeni", "kisi": ben, "etkinlik": id }),
+        );
+    }
+    s.durum.yay(json!({ "tip": "akis", "id": id }));
+    Ok(Json(json!({ "begendim": begendim, "begeni": sayi })))
+}
+
+#[derive(Deserialize)]
+pub struct MetinIstek {
+    metin: String,
+}
+
+pub async fn yorum(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+    Json(i): Json<MetinIstek>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let m =
+        metin(&i.metin).ok_or_else(|| hata(StatusCode::BAD_REQUEST, "Yorum boş ya da çok uzun"))?;
+    let sahibi = sahip(&s, id)?;
+    let yid = s.db().yorum_yaz(&ben.id, id, &m).map_err(ic)?;
+    if sahibi != ben.id {
+        s.durum.kisiye(
+            &sahibi,
+            &json!({ "tip": "bildirim", "tur": "yorum", "kisi": ben, "etkinlik": id, "metin": m }),
+        );
+    }
+    s.durum.yay(json!({ "tip": "akis", "id": id }));
+    Ok(Json(json!({ "id": yid })))
+}
+
+pub async fn yorum_sil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<i64>) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    if !s.db().yorum_sil(&ben.id, id).map_err(ic)? {
+        return Err(hata(StatusCode::FORBIDDEN, "Bu yorumu silemezsin"));
+    }
+    s.durum.yay(json!({ "tip": "akis" }));
+    Ok(Json(json!({})))
+}
+
+pub async fn etkinlik_sil(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    if !s.db().etkinlik_sil(&ben.id, id).map_err(ic)? {
+        return Err(hata(
+            StatusCode::FORBIDDEN,
+            "Yalnız kendi paylaşımını silebilirsin",
+        ));
+    }
+    s.durum.yay(json!({ "tip": "akis" }));
+    Ok(Json(json!({})))
+}
+
+pub async fn konusmalar(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    Ok(Json(
+        json!({ "konusmalar": s.db().konusmalar(&ben.id).map_err(ic)? }),
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct MesajSorgu {
+    once: Option<i64>,
+}
+
+pub async fn mesajlar(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Query(q): Query<MesajSorgu>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let db = s.db();
+    let l = db.mesajlar(&ben.id, &id, q.once, 60).map_err(ic)?;
+    let okunan = db.okundu(&ben.id, &id).map_err(ic)?;
+    drop(db);
+    if okunan > 0 {
+        // Karşı taraf "görüldü"yü, benim diğer bilgisayarım okunmamış sayısını güncellesin.
+        let v = json!({ "tip": "okundu", "kisi": ben.id, "diger": id });
+        s.durum.kisiye(&id, &v);
+        s.durum.kisiye(&ben.id, &v);
+    }
+    Ok(Json(json!({ "mesajlar": l })))
+}
+
+pub async fn mesaj_yaz(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(i): Json<MetinIstek>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    if id == ben.id {
+        return Err(hata(StatusCode::BAD_REQUEST, "Kendine mesaj atamazsın"));
+    }
+    let m =
+        metin(&i.metin).ok_or_else(|| hata(StatusCode::BAD_REQUEST, "Mesaj boş ya da çok uzun"))?;
+    let db = s.db();
+    if db.kullanici(&id).is_none() {
+        return Err(hata(StatusCode::NOT_FOUND, "Böyle biri yok"));
+    }
+    let mesaj = db.mesaj_yaz(&ben.id, &id, &m).map_err(ic)?;
+    drop(db);
+    let v = json!({ "tip": "mesaj", "mesaj": mesaj, "kisi": ben });
+    s.durum.kisiye(&id, &v);
+    s.durum.kisiye(&ben.id, &v);
+    Ok(Json(json!(mesaj)))
+}
+
+/// Kapak/afiş yükleme (en çok 400 KB; JPEG, PNG, WebP, GIF). Aynı resim bir kez saklanır.
+pub async fn resim_yukle(State(s): State<Arc<Sunucu>>, h: HeaderMap, govde: Bytes) -> Sonuc {
+    kim(&s, &h)?;
+    if govde.len() > 400 * 1024 {
+        return Err(hata(StatusCode::PAYLOAD_TOO_LARGE, "Resim çok büyük"));
+    }
+    let uzanti = resim_turu(&govde).ok_or_else(|| hata(StatusCode::BAD_REQUEST, "Resim değil"))?;
+    let ozet: String = Sha256::digest(&govde)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let ad = format!("{ozet}.{uzanti}");
+    let klasor = s.resim_klasoru();
+    let yol = klasor.join(&ad);
+    if !yol.exists() {
+        std::fs::create_dir_all(&klasor).map_err(|e| ic(e.to_string()))?;
+        let gecici = klasor.join(format!("{ad}.yeni"));
+        std::fs::write(&gecici, &govde).map_err(|e| ic(e.to_string()))?;
+        std::fs::rename(&gecici, &yol).map_err(|e| ic(e.to_string()))?;
+    }
+    Ok(Json(json!({ "url": format!("/resim/{ad}") })))
+}
+
+pub fn resim_turu(b: &[u8]) -> Option<&'static str> {
+    if b.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else if b.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("png")
+    } else if b.len() > 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" {
+        Some("webp")
+    } else if b.starts_with(b"GIF8") {
+        Some("gif")
+    } else {
+        None
+    }
+}
+
+pub async fn resim(State(s): State<Arc<Sunucu>>, Path(ad): Path<String>) -> Response {
+    let (ozet, uzanti) = ad.split_once('.').unwrap_or(("", ""));
+    let tur = match uzanti {
+        "jpg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    if ozet.len() != 64
+        || !ozet
+            .bytes()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match tokio::fs::read(s.resim_klasoru().join(&ad)).await {
+        Ok(b) => (
+            [
+                (header::CONTENT_TYPE, tur),
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            b,
+        )
+            .into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resim_turleri() {
+        assert_eq!(resim_turu(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("jpg"));
+        assert_eq!(resim_turu(b"\x89PNG\r\n\x1a\n...."), Some("png"));
+        assert_eq!(resim_turu(b"RIFF\0\0\0\0WEBPVP8 "), Some("webp"));
+        assert_eq!(resim_turu(b"<svg onload=alert(1)>"), None);
+    }
+}

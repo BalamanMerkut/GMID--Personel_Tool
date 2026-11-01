@@ -1,19 +1,20 @@
 [package]
 name = "gmid-sunucu"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "GMID sunucusu: Discord ile giriş, kim çevrim içi / ne oynuyor (ileride sohbet, ortak arşiv, oyun gecesi)"
 publish = false
 
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "net", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "net", "time", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
 ureq = { version = "3", features = ["json"] }
 getrandom = "0.3"
 sha2 = "0.10"
+tower-http = { version = "0.6", features = ["cors"] }
 
 [profile.release]
 opt-level = "s"

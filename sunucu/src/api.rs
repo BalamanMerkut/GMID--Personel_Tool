@@ -9,9 +9,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-type Sonuc = Result<Json<Value>, (StatusCode, Json<Value>)>;
+pub type Sonuc = Result<Json<Value>, (StatusCode, Json<Value>)>;
 
-fn hata(kod: StatusCode, mesaj: impl Into<String>) -> (StatusCode, Json<Value>) {
+pub fn hata(kod: StatusCode, mesaj: impl Into<String>) -> (StatusCode, Json<Value>) {
     (kod, Json(json!({ "hata": mesaj.into() })))
 }
 
@@ -23,7 +23,7 @@ fn anahtar(h: &HeaderMap) -> Option<&str> {
         .map(str::trim)
 }
 
-fn kim(s: &Sunucu, h: &HeaderMap) -> Result<Kullanici, (StatusCode, Json<Value>)> {
+pub fn kim(s: &Sunucu, h: &HeaderMap) -> Result<Kullanici, (StatusCode, Json<Value>)> {
     anahtar(h)
         .and_then(|a| s.oturum(a))
         .ok_or_else(|| hata(StatusCode::UNAUTHORIZED, "Giriş gerekli"))
@@ -34,6 +34,8 @@ pub async fn saglik(State(s): State<Arc<Sunucu>>) -> Json<Value> {
         "durum": "ok",
         "surum": env!("CARGO_PKG_VERSION"),
         "giris": s.ayar.discord.is_some(),
+        // Masaüstü uygulama Discord giriş sayfasını bununla açar (gizli değildir; gizli anahtar burada kalır).
+        "discord": s.ayar.discord.as_ref().map(|d| d.client_id.clone()),
         "cevrimici": s.durum.liste().len(),
     }))
 }

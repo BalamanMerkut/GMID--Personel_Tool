@@ -6,7 +6,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Kisi {
@@ -25,6 +25,8 @@ struct Kayit {
 pub struct Durum {
     ic: Mutex<HashMap<String, Kayit>>,
     yayin: broadcast::Sender<String>,
+    /// Kişiye özel iletiler (özel mesaj, bildirim): kişinin açık bağlantılarının kanalları.
+    kanallar: Mutex<HashMap<String, Vec<mpsc::UnboundedSender<String>>>>,
 }
 
 /// Oyun adı temizlenir: boşsa yok, çok uzunsa kısaltılır.
@@ -38,6 +40,7 @@ impl Default for Durum {
         Durum {
             ic: Mutex::new(HashMap::new()),
             yayin: broadcast::channel(256).0,
+            kanallar: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -47,8 +50,40 @@ impl Durum {
         self.yayin.subscribe()
     }
 
-    fn yay(&self, v: serde_json::Value) {
+    /// Bağlı herkese.
+    pub fn yay(&self, v: serde_json::Value) {
         let _ = self.yayin.send(v.to_string());
+    }
+
+    pub fn kaydol(&self, id: &str, tx: mpsc::UnboundedSender<String>) {
+        let mut k = self.kanallar.lock().unwrap_or_else(|e| e.into_inner());
+        k.entry(id.to_string()).or_default().push(tx);
+    }
+
+    pub fn birak(&self, id: &str, tx: &mpsc::UnboundedSender<String>) {
+        let mut k = self.kanallar.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(l) = k.get_mut(id) {
+            l.retain(|x| !x.same_channel(tx));
+            if l.is_empty() {
+                k.remove(id);
+            }
+        }
+    }
+
+    /// Yalnız o kişiye (açık tüm bağlantılarına).
+    pub fn kisiye(&self, id: &str, v: &serde_json::Value) {
+        let k = self.kanallar.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(l) = k.get(id) {
+            let m = v.to_string();
+            for tx in l {
+                let _ = tx.send(m.clone());
+            }
+        }
+    }
+
+    pub fn kisi(&self, id: &str) -> Option<Kisi> {
+        let ic = self.ic.lock().unwrap_or_else(|e| e.into_inner());
+        ic.get(id).map(|k| k.kisi.clone())
     }
 
     pub fn liste(&self) -> Vec<Kisi> {
@@ -92,15 +127,19 @@ impl Durum {
         }
     }
 
-    pub fn oyun(&self, id: &str, oyun: Option<String>) {
+    /// Oynadığı oyun değiştiyse yayınlar ve `true` döner.
+    pub fn oyun(&self, id: &str, oyun: Option<String>) -> bool {
         let mut ic = self.ic.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(kayit) = ic.get_mut(id) else { return };
+        let Some(kayit) = ic.get_mut(id) else {
+            return false;
+        };
         if kayit.kisi.oyun == oyun {
-            return;
+            return false;
         }
         kayit.kisi.oyun = oyun.clone();
         drop(ic);
         self.yay(json!({ "tip": "durum", "id": id, "oyun": oyun }));
+        true
     }
 }
 
@@ -154,6 +193,23 @@ mod tests {
         assert_eq!(d.liste().len(), 1, "bir bağlantısı hâlâ açık");
         d.ayrildi("1");
         assert!(d.liste().is_empty());
+    }
+
+    #[test]
+    fn kisiye_ozel() {
+        let d = Durum::default();
+        let (a1, mut r1) = mpsc::unbounded_channel();
+        let (a2, mut r2) = mpsc::unbounded_channel();
+        let (b, mut rb) = mpsc::unbounded_channel();
+        d.kaydol("1", a1.clone());
+        d.kaydol("1", a2);
+        d.kaydol("2", b);
+        d.kisiye("1", &json!({"tip": "mesaj"}));
+        assert!(r1.try_recv().is_ok() && r2.try_recv().is_ok());
+        assert!(rb.try_recv().is_err());
+        d.birak("1", &a1);
+        d.kisiye("1", &json!({"tip": "mesaj"}));
+        assert!(r1.try_recv().is_err() && r2.try_recv().is_ok());
     }
 
     #[test]

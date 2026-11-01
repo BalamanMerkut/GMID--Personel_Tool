@@ -17,7 +17,7 @@ pub struct Kullanici {
     pub avatar: Option<String>,
 }
 
-pub struct Db(Connection);
+pub struct Db(pub(crate) Connection);
 
 pub fn simdi() -> i64 {
     std::time::SystemTime::now()
@@ -61,6 +61,7 @@ impl Db {
                kullanici TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
                olusturma INTEGER NOT NULL, son INTEGER NOT NULL);",
         )?;
+        crate::sosyal::kur(&c)?;
         Ok(Db(c))
     }
 

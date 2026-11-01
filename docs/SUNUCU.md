@@ -113,6 +113,20 @@ Discord uygulaması bunun için de kullanılır:
   - `GET /ws` (WebSocket) — ilk mesaj `{"tip":"merhaba","anahtar":"…"}`; sonra `{"tip":"durum","oyun":"CS2"|null}`.
     Sunucudan: `liste`, `geldi`, `gitti`, `durum`, `hata`.
 
+### Sosyal uçlar (0.2)
+
+- `GET /api/kisiler` — kayıtlı herkes (çevrim içi mi, ne oynuyor)
+- `PUT /api/profil` `{oyunlar:[{ad,kapak,dakika,son}], puanlar:[{anahtar,tur,ad,kapak,puan,yorum,durum,yil,guncelleme}]}` —
+  kişinin paylaşmayı seçtikleri; son 7 günde yeni/değişen puanlar akışa düşer (ilk paylaşımda yalnız son 2 gün, en çok 5)
+- `GET /api/profil/{id}` — profil (oyunlar, puanlar, çevrim içi, oyun)
+- `GET /api/akis?once=<ms>&kisi=<id>` — son olaylar (puanladı / oynuyor), beğeni sayısı, beğendim mi, yorumlar
+- `POST /api/akis/{id}/begen` (aç/kapa), `POST /api/akis/{id}/yorum {metin}`, `DELETE /api/akis/{id}` (kendi),
+  `DELETE /api/yorum/{id}` (kendi yorumu ya da kendi paylaşımının altındaki)
+- `GET /api/konusmalar`, `GET /api/mesaj/{id}?once=<mesaj id>` (okundu yapar), `POST /api/mesaj/{id} {metin}`
+- `POST /api/resim` (≤400 KB JPEG/PNG/WebP/GIF, gövde = resim) → `{url:"/resim/<sha256>.jpg"}`; `GET /resim/{ad}`
+- WebSocket'te ek: `akis` (akış değişti), `mesaj`, `okundu`, `bildirim` (paylaşımıma beğeni/yorum)
+- Oyuna girince akışa "oynuyor" (aynı oyun 12 saatte bir)
+
 ## 7. Sıradaki adımlar
 
 1. **GMID Tool tarafı:** Kontrol Odası'nda "Discord ile giriş", yan menüde **Arkadaşlar** (kim çevrim içi, kim ne

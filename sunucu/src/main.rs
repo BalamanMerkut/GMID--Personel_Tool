@@ -8,9 +8,11 @@ mod ayar;
 mod db;
 mod discord;
 mod durum;
+mod sosyal;
+mod sosyal_api;
 mod ws;
 
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -28,6 +30,15 @@ impl Sunucu {
     pub fn oturum(&self, anahtar: &str) -> Option<db::Kullanici> {
         self.db().oturum(anahtar)
     }
+
+    /// Yüklenen kapak/afişler veritabanının yanında durur.
+    pub fn resim_klasoru(&self) -> std::path::PathBuf {
+        self.ayar
+            .veritabani
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("resim")
+    }
 }
 
 pub fn uygulama(s: Arc<Sunucu>) -> Router {
@@ -38,6 +49,30 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/cikis", post(api::cikis))
         .route("/api/cevrimici", get(api::cevrimici))
         .route("/ws", get(ws::baglan))
+        .route("/api/kisiler", get(sosyal_api::kisiler))
+        .route("/api/profil", put(sosyal_api::profil_kaydet))
+        .route("/api/profil/{id}", get(sosyal_api::profil))
+        .route("/api/akis", get(sosyal_api::akis))
+        .route("/api/akis/{id}", delete(sosyal_api::etkinlik_sil))
+        .route("/api/akis/{id}/begen", post(sosyal_api::begen))
+        .route("/api/akis/{id}/yorum", post(sosyal_api::yorum))
+        .route("/api/yorum/{id}", delete(sosyal_api::yorum_sil))
+        .route("/api/konusmalar", get(sosyal_api::konusmalar))
+        .route(
+            "/api/mesaj/{id}",
+            get(sosyal_api::mesajlar).post(sosyal_api::mesaj_yaz),
+        )
+        .route("/api/resim", post(sosyal_api::resim_yukle))
+        .route("/resim/{ad}", get(sosyal_api::resim))
+        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
+        // GMID Tool'un penceresi (tauri.localhost) sunucuya doğrudan istek atar. Giriş çerez değil
+        // Authorization başlığıyla olduğu için her kaynağa izin vermek güvenlidir.
+        .layer(
+            tower_http::cors::CorsLayer::new()
+                .allow_origin(tower_http::cors::Any)
+                .allow_methods(tower_http::cors::Any)
+                .allow_headers(tower_http::cors::Any),
+        )
         .with_state(s)
 }
 
