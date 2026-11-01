@@ -11,7 +11,9 @@
   import type { DictationEntry, DictationStatus, DictRule, ToolProgress, WhisperStatus } from "../types";
 
   let status: DictationStatus | null = $state(null);
-  let whisper: WhisperStatus | null = $state(null);
+  let whisper = $state<WhisperStatus | null>(null);
+  /** "En doğru" seçiliyken sesle yazma "Dengeli" ile çalışır (kuruluysa). */
+  const turboReady = $derived(!!whisper?.models.some((m) => m.id === "turbo" && m.installed));
   let busy: string | null = $state(null);
   let progress: ToolProgress | null = $state(null);
   let lang = $state(getJson<string>("dictation.lang", "tr"));
@@ -231,7 +233,7 @@
     {#if whisper}
       {#each whisper.models as m (m.id)}
         <div class="line tool">
-          <div><b>{m.label}{#if whisper.selected === m.id && m.installed} · kullanılıyor{/if}</b><span class="sub small">{m.detail}</span></div>
+          <div><b>{m.label}{#if whisper.selected === m.id && m.installed}{whisper.selected === "large" && turboReady ? " · Ders Kaydı'nda kullanılıyor" : " · kullanılıyor"}{:else if m.id === "turbo" && m.installed && whisper.selected === "large"} · sesle yazmada kullanılıyor{/if}</b><span class="sub small">{m.detail}</span></div>
           {#if m.installed && whisper.program && whisper.selected === m.id}
             <span class="ok"><Icon name="check" size={15} />Hazır</span>
           {:else}
