@@ -45,4 +45,8 @@ Son güncelleme: 31 Ekim 2026.
 - **GMID Tool:** Kontrol Odası → "Discord ile giriş" (tarayıcıda Discord, 53682'de geçici dinleyici, kod sunucuya;
   `identify guilds` kapsamı), yan menüde Arkadaşlar (çevrim içi + oynadığı oyun), oyun algılanınca durum gönderimi
   (ayardan kapatılabilir), sunucu adresi ayarı.
-- Sonra: sohbet, ortak puan arşivi, oyun gecesi planlayıcı.
+- ✅ (v0.86) Topluluk: akış, beğeni/yorum, profiller, özel mesajlar, paylaşım ayarları.
+- **Kullanıcı:** Discord uygulaması açılıp sunucuya yazılmadan "Discord ile giriş" çalışmaz (SUNUCU.md §4).
+- Sırada: **ortak şarkı çalma** (biri çalar, diğerleri aynı anda dinler; YouTube bağlantısıyla eşzamanlı),
+  oyun gecesi planlayıcı, ortak puan arşivi ("Ben 9 · Ali 7").
+- Fikir: VDS'te **oyun sunucuları** (Minecraft, CS2…): sunucunun işlemci/belleğine ve Mola projesine göre karar.

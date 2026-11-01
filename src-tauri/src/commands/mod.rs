@@ -402,6 +402,36 @@ pub async fn deals_open(url: String, store: String, browser: Option<bool>) -> Cm
 }
 
 /// Bağlantıyı varsayılan tarayıcıda açar (yalnız https).
+/// Topluluk: Discord ile giriş (tarayıcı açılır, onay beklenir). `{ anahtar, kullanici }`.
+#[tauri::command]
+pub async fn social_login(server: String) -> CmdResult<serde_json::Value> {
+    tauri::async_runtime::spawn_blocking(move || crate::social::giris(&server))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Topluluk: paylaşılacak kapak/afiş resminin baytları (arayüz küçültüp sunucuya yükler). Yalnız resim
+/// dosyaları, en çok 15 MB.
+#[tauri::command]
+pub fn social_image(path: String) -> CmdResult<tauri::ipc::Response> {
+    let p = std::path::Path::new(&path);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    if !["jpg", "jpeg", "png", "webp", "gif"].contains(&ext.as_str()) {
+        return Err("Resim değil".into());
+    }
+    let meta = std::fs::metadata(p).map_err(|e| e.to_string())?;
+    if meta.len() > 15 * 1024 * 1024 {
+        return Err("Resim çok büyük".into());
+    }
+    Ok(tauri::ipc::Response::new(
+        std::fs::read(p).map_err(|e| e.to_string())?,
+    ))
+}
+
 #[tauri::command]
 pub fn open_url(url: String) -> CmdResult<()> {
     if !url.starts_with("https://") {

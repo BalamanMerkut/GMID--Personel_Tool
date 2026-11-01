@@ -10,6 +10,7 @@
   import type { UpdateStatus } from "../types";
   import { community, joinDiscord, startCommunity } from "../community.svelte";
   import { dealsBadge, startDealsBadge } from "../dealsBadge.svelte";
+  import { sosyal, sosyalBaslat, toplamOkunmamis } from "../social.svelte";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
   const downloading = $derived(activeSummary().count);
@@ -23,6 +24,7 @@
   onMount(() => {
     startCommunity();
     startDealsBadge();
+    sosyalBaslat();
     void api.update.status().then((s) => (update = s)).catch(() => {});
     const stop = on<UpdateStatus>("update", (s) => (update = s));
     return () => void stop.then((f) => f());
@@ -50,6 +52,7 @@
           <Icon name={g.icon} />
           <span class="label">{g.label}</span>
           {#if g.id === "media" && player.item}<span class="eq" class:paused={!player.playing} title={player.playing ? "Çalıyor" : "Duraklatıldı"}><i></i><i></i><i></i></span>{/if}
+          {#if g.id === "social" && toplamOkunmamis() + sosyal.bildirim}<span class="badge new tnum" title="Okunmamış mesaj ve bildirim">{toplamOkunmamis() + sosyal.bildirim}</span>{/if}
           {#if g.id === "deals" && dealsBadge.count}<span class="badge new tnum" title={dealsBadge.wish ? "İstek listende indirime giren oyun var" : "Yeni ücretsiz oyun var"}>{dealsBadge.count}</span>{/if}
           {#if g.id === "media" && downloading}<span class="badge tnum" title="{downloading} indirme sürüyor">{downloading}</span>{/if}
         </button>

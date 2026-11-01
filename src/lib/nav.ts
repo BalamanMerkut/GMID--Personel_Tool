@@ -44,6 +44,13 @@ export const ROOMS: Room[] = [
     ],
   },
   {
+    name: null,
+    screens: [
+      { id: "social", label: "Topluluk", icon: "users", phase: null,
+        description: "GMID'deki arkadaşların: kim çevrim içi, kim ne oynuyor, kim hangi diziyi kaç puanladı. Beğen, yorum yap, özel mesaj at. Discord ile giriş." },
+    ],
+  },
+  {
     name: "Eğlence Salonu",
     screens: [
       { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: null,
@@ -103,7 +110,13 @@ export interface NavRoom {
 
 /** Sade yan menü: ilgili ekranlar tek girişte toplanır. Adresler (#ping, #timer…) aynı kalır. */
 export const NAV: NavRoom[] = [
-  { name: null, groups: [{ id: "home", label: "Giriş Salonu", icon: "castle", tabs: [{ id: "home", label: "Giriş Salonu" }] }] },
+  {
+    name: null,
+    groups: [
+      { id: "home", label: "Giriş Salonu", icon: "castle", tabs: [{ id: "home", label: "Giriş Salonu" }] },
+      { id: "social", label: "Topluluk", icon: "users", tabs: [{ id: "social", label: "Topluluk" }] },
+    ],
+  },
   {
     name: "Oyun Salonu",
     groups: [

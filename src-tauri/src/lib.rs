@@ -40,6 +40,7 @@ mod scheduler;
 mod screenshot;
 mod search;
 mod servers;
+mod social;
 mod soundpad;
 mod sysinfo;
 mod timers;
@@ -255,6 +256,8 @@ pub fn run() {
             commands::background_remove,
             commands::import_background,
             commands::open_url,
+            commands::social_login,
+            commands::social_image,
             commands::report_create,
             commands::search_all,
             commands::wrapped_get,

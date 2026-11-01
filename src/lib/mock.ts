@@ -911,6 +911,9 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
     case "uninstall_list":
       await wait(400);
       return { programs: mockPrograms, hidden: 37 };
+    case "social_login":
+      await wait(600);
+      throw "Önizlemede Discord girişi yok";
     case "football_leagues":
       return [["tur.1", "Süper Lig"], ["uefa.champions", "Şampiyonlar Ligi"], ["eng.1", "Premier Lig"], ["esp.1", "La Liga"], ["ita.1", "Serie A"], ["ger.1", "Bundesliga"]];
     case "football_week":

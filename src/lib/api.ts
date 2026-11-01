@@ -439,6 +439,11 @@ export const api = {
   },
 
   /** Bağlantıyı varsayılan tarayıcıda açar (yalnız https). */
+  social: {
+    /** Discord ile giriş: tarayıcıda onay beklenir. */
+    login: (server: string) =>
+      call<{ anahtar: string; kullanici: { id: string; ad: string; avatar: string | null } }>("social_login", { server }),
+  },
   openUrl: (url: string) => (inTauri ? invoke<void>("open_url", { url }) : (window.open(url, "_blank"), Promise.resolve())),
 
   /** Notlar, oyunlar, film/diziler, videolar, klipler, hatırlatıcılar. */
