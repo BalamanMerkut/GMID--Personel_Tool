@@ -31,7 +31,7 @@ pub const MODELS: &[Model] = &[
         id: "large",
         file: "ggml-large-v3-q5_0.bin",
         label: "En doğru",
-        detail: "large-v3 · Türkçede en az hata, ders kaydı için iyi; NVIDIA ekran kartıyla önerilir, işlemcide yavaş",
+        detail: "large-v3 · Türkçede en az hata; Ders Kaydı'nda kullanılır (sesle yazma hızlı kalsın diye Dengeli kuruluysa onunla çalışır); NVIDIA ekran kartıyla önerilir",
         size_mb: 1080,
     },
     Model {

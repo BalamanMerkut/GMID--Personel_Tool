@@ -505,9 +505,29 @@ fn paused_for_game(app: &AppHandle) -> bool {
 pub fn warm_up(app: &AppHandle) {
     let (db, dir) = (app.state::<Db>(), app.state::<DataDir>());
     let s = settings(&db);
-    app.state::<Dictation>()
-        .engine
-        .warm_up(dir.root(), &s.whisper, s.tidy);
+    app.state::<Dictation>().engine.warm_up(
+        dir.root(),
+        &for_dictation(dir.root(), &s.whisper),
+        s.tidy,
+    );
+}
+
+/// Sesle yazma her zaman hızlı modelle çalışır: "En doğru" (large-v3) kısa bir diktede bile dakikalar
+/// sürebiliyor (bas-konuş-bırak için olmaz). O model seçiliyse ve "Dengeli" kuruluysa dikte onunla yapılır;
+/// "En doğru" Ders Kaydı'nda kullanılır.
+fn for_dictation(root: &std::path::Path, cfg: &WhisperCfg) -> WhisperCfg {
+    use crate::transcript::whisper::{find_model, model_path};
+    let fast = "turbo";
+    let model = if cfg.model == "large" && model_path(root, find_model(fast)).is_file() {
+        fast.to_string()
+    } else {
+        cfg.model.clone()
+    };
+    WhisperCfg {
+        model,
+        lang: cfg.lang.clone(),
+        gpu: cfg.gpu,
+    }
 }
 
 #[cfg(windows)]
@@ -760,7 +780,7 @@ fn run(
         .engine
         .transcribe(
             dir.root(),
-            &s.whisper,
+            &for_dictation(dir.root(), &s.whisper),
             &to_wav(samples),
             &whisper_prompt(&s),
         )

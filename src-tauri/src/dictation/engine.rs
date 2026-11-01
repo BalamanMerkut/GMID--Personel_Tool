@@ -659,7 +659,9 @@ fn post_inference_as(
         );
     };
     field("temperature", "0.0");
-    field("temperature_inc", "0.2");
+    // Sıcaklık artırarak yeniden deneme (fallback) yalnız dikkatli okumada: kısa diktede ve sessizlikte
+    // Whisper aynı sesi 6 kez baştan çözüp büyük modelde dakikalarca takılıyordu.
+    field("temperature_inc", if careful { "0.2" } else { "0.0" });
     if careful {
         field("beam_size", "5");
         field("best_of", "5");
