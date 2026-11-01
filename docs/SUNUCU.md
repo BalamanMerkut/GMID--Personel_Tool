@@ -94,7 +94,10 @@ Discord uygulaması bunun için de kullanılır:
 
 | Ne | Komut |
 |----|-------|
-| Güncelle (en son sürüm; açılmazsa eskisine döner) | `sudo gmid-guncelle` |
+| Güncelleme | **Kendiliğinden:** her gece ~04:30 GitHub'a bakar, yeni sürüm varsa kurar (yoksa dokunmaz) |
+| Hemen güncelle (açılmazsa eskisine döner) | `sudo gmid-guncelle` |
+| Gece güncellemesi ne zaman çalıştı? | `systemctl list-timers gmid-guncelle` · `journalctl -u gmid-guncelle -n 20` |
+| Gece güncellemesini kapat | `sudo systemctl disable --now gmid-guncelle.timer` |
 | Çalışıyor mu? | `systemctl status gmid-sunucu` |
 | Günlük (son 50 satır) | `journalctl -u gmid-sunucu -n 50` |
 | Yeniden başlat | `sudo systemctl restart gmid-sunucu` |

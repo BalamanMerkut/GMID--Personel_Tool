@@ -95,6 +95,8 @@ mv -f /opt/gmid/gmid-sunucu.yeni /opt/gmid/gmid-sunucu
 curl -fsSL "$HAM/gmid-sunucu.service" -o /etc/systemd/system/gmid-sunucu.service
 curl -fsSL "$HAM/guncelle.sh" -o /usr/local/bin/gmid-guncelle
 chmod 755 /usr/local/bin/gmid-guncelle
+# Her gece yeni sürüm varsa kendiliğinden güncellesin.
+/usr/local/bin/gmid-guncelle --kur || true
 cat > /etc/cron.daily/gmid-yedek <<'CRON'
 #!/bin/sh
 # GMID veritabanının gecelik yedeği (son 14 gün)
@@ -182,4 +184,4 @@ else
   echo; echo "GMID çalışıyor; https birkaç dakika içinde hazır olur: https://$ALAN/saglik"
 fi
 echo "Discord girişi için: sudo nano /etc/gmid/sunucu.env  sonra  sudo systemctl restart gmid-sunucu"
-echo "Güncellemek için: sudo gmid-guncelle"
+echo "Her gece ~04:30'da yeni sürüm varsa kendiliğinden güncellenir. Hemen güncellemek için: sudo gmid-guncelle"
