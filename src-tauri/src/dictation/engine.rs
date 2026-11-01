@@ -126,11 +126,13 @@ const SLOW: &str = "zamanında hazır olmadı";
 fn warm_whisper(port: u16) {
     let started = Instant::now();
     let silence = vec![0i16; 16_000];
-    match post_inference(
+    match post_inference_as(
         port,
         &super::to_wav(&silence),
         "",
         Duration::from_secs(300),
+        "json",
+        false,
         false,
     ) {
         Ok(_) => crate::log!(
@@ -627,13 +629,13 @@ fn post_inference(
     timeout: Duration,
     careful: bool,
 ) -> Result<Heard, String> {
-    match post_inference_as(port, wav, prompt, timeout, "verbose_json", careful) {
+    match post_inference_as(port, wav, prompt, timeout, "verbose_json", careful, true) {
         Ok(v) => Ok(Heard {
             text: verbose_text(&v),
             words: heard_words(&v),
         }),
         Err(e) if e.starts_with("sunucu ") => {
-            post_inference_as(port, wav, prompt, timeout, "json", careful).map(|v| Heard {
+            post_inference_as(port, wav, prompt, timeout, "json", careful, true).map(|v| Heard {
                 text: v["text"].as_str().unwrap_or_default().to_string(),
                 words: Vec::new(),
             })
@@ -649,6 +651,7 @@ fn post_inference_as(
     timeout: Duration,
     format: &str,
     careful: bool,
+    fallback: bool,
 ) -> Result<serde_json::Value, String> {
     let boundary = format!("gmid{}", crate::util::new_id());
     let mut body: Vec<u8> = Vec::with_capacity(wav.len() + 1024);
@@ -659,9 +662,10 @@ fn post_inference_as(
         );
     };
     field("temperature", "0.0");
-    // Sıcaklık artırarak yeniden deneme (fallback) yalnız dikkatli okumada: kısa diktede ve sessizlikte
-    // Whisper aynı sesi 6 kez baştan çözüp büyük modelde dakikalarca takılıyordu.
-    field("temperature_inc", if careful { "0.2" } else { "0.0" });
+    // Emin olamayınca sıcaklığı artırarak yeniden dener (fallback): kapalıyken Whisper ilk, yanlış tahmini
+    // olduğu gibi yazıyordu. (Takılmanın asıl nedeni "En doğru" modeldi; dikte artık hızlı modelle.)
+    // Isınmada (sessizlik) kapalı: sessizlikte yeniden denemek yalnız süreyi uzatır.
+    field("temperature_inc", if fallback { "0.2" } else { "0.0" });
     if careful {
         field("beam_size", "5");
         field("best_of", "5");

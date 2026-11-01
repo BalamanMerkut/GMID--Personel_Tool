@@ -4,6 +4,7 @@ import { api, inTauri } from "./api";
 import { on } from "./bus";
 import { getJson, setJson } from "./settings.svelte";
 import { notify } from "./toast.svelte";
+import { nav } from "./player.svelte";
 import type { Game, Review, Title } from "./types";
 
 export const VARSAYILAN_SUNUCU = "https://gmid.molayazilim.com.tr";
@@ -15,6 +16,8 @@ export interface Kisi {
   cevrimici?: boolean;
   oyun?: string | null;
   son?: number;
+  /** Benimle ilişkisi. */
+  iliski?: "arkadas" | "giden" | "gelen" | null;
 }
 
 export interface Paylasim {
@@ -85,6 +88,12 @@ const ANAHTAR = "social.token";
 const BEN = "social.me";
 const SUNUCU = "social.server";
 const PAYLAS = "social.share";
+const OYUN_HABERI = "social.notifyGames";
+
+export async function oyunHaberiDegistir(v: boolean) {
+  sosyal.oyunHaberi = v;
+  await setJson(OYUN_HABERI, v);
+}
 
 export const sosyal = $state({
   sunucu: VARSAYILAN_SUNUCU,
@@ -100,10 +109,63 @@ export const sosyal = $state({
   bildirim: 0,
   /** Akış her değiştiğinde artar; ekran buna bakıp yeniler. */
   akisSurum: 0,
-  /** Açık konuşma (gelen mesaj okunmamış sayılmasın). */
-  acikKonusma: null as string | null,
   paylas: { oyunlar: true, oyunPuan: true, filmPuan: true, simdi: true } as Paylasim,
+  /** Arkadaşlar ve istekler. */
+  arkadaslar: [] as Kisi[],
+  gelen: [] as Kisi[],
+  giden: [] as Kisi[],
+  /** Profil ekranında gösterilen kişi (boşsa ben). */
+  profilId: null as string | null,
+  /** Arkadaş listesi paneli ve sohbet penceresi (her ekranda). */
+  liste: false,
+  sohbetler: [] as Kisi[],
+  aktifSohbet: null as string | null,
+  sohbetAcik: false,
+  /** Arkadaş oyuna girince sağ altta haber ver. */
+  oyunHaberi: true,
 });
+
+export const arkadasMi = (id: string) => sosyal.arkadaslar.some((k) => k.id === id);
+
+export async function arkadaslariYukle() {
+  if (!sosyal.anahtar) return;
+  const r = await istek<{ arkadaslar: Kisi[]; gelen: Kisi[]; giden: Kisi[] }>("GET", "/api/arkadaslar");
+  sosyal.arkadaslar = r.arkadaslar;
+  sosyal.gelen = r.gelen;
+  sosyal.giden = r.giden;
+}
+
+/** İstek gönderir ya da gelen isteği kabul eder. */
+export async function arkadasEkle(k: Kisi) {
+  const r = await istek<{ durum: string }>("POST", `/api/arkadas/${k.id}`);
+  notify(r.durum === "kabul" ? `${k.ad} artık arkadaşın` : r.durum === "istek" ? `${k.ad} kişisine arkadaşlık isteği gönderildi` : `${k.ad} zaten arkadaşın`, "users");
+  await arkadaslariYukle();
+}
+
+/** Arkadaşlıktan çıkarır, isteği reddeder ya da geri alır. */
+export async function arkadasSil(k: Kisi) {
+  await istek("DELETE", `/api/arkadas/${k.id}`);
+  sosyal.sohbetler = sosyal.sohbetler.filter((x) => x.id !== k.id);
+  await arkadaslariYukle();
+}
+
+export function profilGoster(id: string | null) {
+  sosyal.profilId = id;
+  nav.go("profile");
+}
+
+/** Sohbet penceresinde o kişinin sekmesini açar (her ekranda). */
+export function sohbetAc(k: Kisi) {
+  if (!sosyal.sohbetler.some((x) => x.id === k.id)) sosyal.sohbetler = [...sosyal.sohbetler, k];
+  sosyal.aktifSohbet = k.id;
+  sosyal.sohbetAcik = true;
+}
+
+export function sohbetKapat(id: string) {
+  sosyal.sohbetler = sosyal.sohbetler.filter((x) => x.id !== id);
+  if (sosyal.aktifSohbet === id) sosyal.aktifSohbet = sosyal.sohbetler.at(-1)?.id ?? null;
+  if (!sosyal.sohbetler.length) sosyal.sohbetAcik = false;
+}
 
 export const toplamOkunmamis = () => Object.values(sosyal.okunmamis).reduce((a, b) => a + b, 0);
 
@@ -189,7 +251,18 @@ function baglan() {
       }
       case "durum": {
         const k = sosyal.cevrimici[v.id as string];
-        if (k) sosyal.cevrimici = { ...sosyal.cevrimici, [k.id]: { ...k, oyun: (v.oyun as string | null) ?? null } };
+        const oyun = (v.oyun as string | null) ?? null;
+        if (k) {
+          if (oyun && oyun !== k.oyun && sosyal.oyunHaberi && arkadasMi(k.id)) notify(`${k.ad} ${oyun} oynamaya başladı`, "library");
+          sosyal.cevrimici = { ...sosyal.cevrimici, [k.id]: { ...k, oyun } };
+        }
+        break;
+      }
+      case "arkadas": {
+        const kisi = v.kisi as Kisi | undefined;
+        if (v.olay === "istek" && kisi) notify(`${kisi.ad} sana arkadaşlık isteği gönderdi`, "users");
+        if (v.olay === "kabul" && kisi) notify(`${kisi.ad} arkadaşlık isteğini kabul etti`, "users");
+        void arkadaslariYukle().catch(() => {});
         break;
       }
       case "akis":
@@ -198,7 +271,10 @@ function baglan() {
       case "mesaj": {
         const m = v.mesaj as Mesaj;
         const kisi = v.kisi as Kisi;
-        if (m.kimden !== sosyal.ben?.id && sosyal.acikKonusma !== m.kimden) {
+        const gorunur = sosyal.sohbetAcik && sosyal.aktifSohbet === m.kimden && document.hasFocus();
+        if (m.kimden !== sosyal.ben?.id && !gorunur) {
+          // Pencerede sekmesi yoksa açılmadan eklenir (sohbet listesinde görünsün).
+          if (!sosyal.sohbetler.some((x) => x.id === kisi.id)) sosyal.sohbetler = [...sosyal.sohbetler, kisi];
           sosyal.okunmamis = { ...sosyal.okunmamis, [m.kimden]: (sosyal.okunmamis[m.kimden] ?? 0) + 1 };
           notify(`${kisi.ad}: ${m.metin.slice(0, 60)}`, "chat");
         }
@@ -386,6 +462,12 @@ export function cikis(sunucuya = true) {
   sosyal.ben = null;
   sosyal.okunmamis = {};
   sosyal.bildirim = 0;
+  sosyal.arkadaslar = [];
+  sosyal.gelen = [];
+  sosyal.giden = [];
+  sosyal.sohbetler = [];
+  sosyal.sohbetAcik = false;
+  sosyal.liste = false;
   ws?.close();
   ws = null;
   void setJson(ANAHTAR, null);
@@ -416,6 +498,7 @@ function baslat() {
   baglan();
   esitle(8000);
   void okunmamislariYukle().catch(() => {});
+  void arkadaslariYukle().catch(() => {});
   if (!dinliyor) {
     dinliyor = true;
     void on("games-changed", () => {
@@ -432,5 +515,6 @@ export function sosyalBaslat() {
   sosyal.anahtar = getJson<string | null>(ANAHTAR, null);
   sosyal.ben = getJson<Kisi | null>(BEN, null);
   sosyal.paylas = { ...sosyal.paylas, ...getJson<Partial<Paylasim>>(PAYLAS, {}) };
+  sosyal.oyunHaberi = getJson<boolean>(OYUN_HABERI, true);
   if (sosyal.anahtar) baslat();
 }

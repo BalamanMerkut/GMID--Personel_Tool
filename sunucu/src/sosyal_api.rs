@@ -2,7 +2,7 @@
 //! Hepsi giriş ister (`Authorization: Bearer …`), resimlerin kendisi hariç (adları tahmin edilemez özet).
 
 use crate::api::{hata, kim, Sonuc};
-use crate::sosyal::{metin, Profil};
+use crate::sosyal::{metin, Istek, Profil};
 use crate::Sunucu;
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
@@ -19,13 +19,15 @@ fn ic(e: String) -> (StatusCode, Json<serde_json::Value>) {
 }
 
 pub async fn kisiler(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
-    kim(&s, &h)?;
-    let l = s.db().kisiler().map_err(ic)?;
+    let ben = kim(&s, &h)?;
+    let db = s.db();
+    let l = db.kisiler().map_err(ic)?;
     let l: Vec<_> = l
         .into_iter()
         .map(|(k, son)| {
             let c = s.durum.kisi(&k.id);
-            json!({ "id": k.id, "ad": k.ad, "avatar": k.avatar, "son": son,
+            let iliski = db.iliski(&ben.id, &k.id);
+            json!({ "id": k.id, "ad": k.ad, "avatar": k.avatar, "son": son, "iliski": iliski,
                     "cevrimici": c.is_some(), "oyun": c.and_then(|c| c.oyun) })
         })
         .collect();
@@ -33,7 +35,7 @@ pub async fn kisiler(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
 }
 
 pub async fn profil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<String>) -> Sonuc {
-    kim(&s, &h)?;
+    let ben = kim(&s, &h)?;
     let db = s.db();
     let k = db
         .kullanici(&id)
@@ -43,6 +45,7 @@ pub async fn profil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<S
     Ok(Json(json!({
         "kisi": k, "cevrimici": c.is_some(), "oyun": c.and_then(|c| c.oyun),
         "profil": p, "guncelleme": t,
+        "iliski": db.iliski(&ben.id, &id), "arkadas": db.arkadas_sayisi(&id),
     })))
 }
 
@@ -64,13 +67,21 @@ pub struct AkisSorgu {
     once: Option<i64>,
     kisi: Option<String>,
     sayi: Option<i64>,
+    /// 1: yalnız arkadaşlar
+    arkadaslar: Option<u8>,
 }
 
 pub async fn akis(State(s): State<Arc<Sunucu>>, h: HeaderMap, Query(q): Query<AkisSorgu>) -> Sonuc {
     let ben = kim(&s, &h)?;
     let l = s
         .db()
-        .akis(&ben.id, q.once, q.kisi.as_deref(), q.sayi.unwrap_or(30))
+        .akis_suz(
+            &ben.id,
+            q.once,
+            q.kisi.as_deref(),
+            q.arkadaslar == Some(1),
+            q.sayi.unwrap_or(30),
+        )
         .map_err(ic)?;
     Ok(Json(json!({ "olaylar": l })))
 }
@@ -194,12 +205,79 @@ pub async fn mesaj_yaz(
     if db.kullanici(&id).is_none() {
         return Err(hata(StatusCode::NOT_FOUND, "Böyle biri yok"));
     }
+    if !db.arkadas_mi(&ben.id, &id) {
+        return Err(hata(
+            StatusCode::FORBIDDEN,
+            "Mesaj atmak için önce arkadaş olun",
+        ));
+    }
     let mesaj = db.mesaj_yaz(&ben.id, &id, &m).map_err(ic)?;
     drop(db);
     let v = json!({ "tip": "mesaj", "mesaj": mesaj, "kisi": ben });
     s.durum.kisiye(&id, &v);
     s.durum.kisiye(&ben.id, &v);
     Ok(Json(json!(mesaj)))
+}
+
+pub async fn arkadaslar(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let (ark, gelen, giden) = s.db().arkadaslar(&ben.id).map_err(ic)?;
+    let ark: Vec<_> = ark
+        .into_iter()
+        .map(|k| {
+            let c = s.durum.kisi(&k.id);
+            json!({ "id": k.id, "ad": k.ad, "avatar": k.avatar,
+                    "cevrimici": c.is_some(), "oyun": c.and_then(|c| c.oyun) })
+        })
+        .collect();
+    Ok(Json(
+        json!({ "arkadaslar": ark, "gelen": gelen, "giden": giden }),
+    ))
+}
+
+/// Arkadaş ekle: istek gönderir ya da gelen isteği kabul eder.
+pub async fn arkadas_ekle(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    if id == ben.id {
+        return Err(hata(StatusCode::BAD_REQUEST, "Kendini ekleyemezsin"));
+    }
+    let db = s.db();
+    if db.kullanici(&id).is_none() {
+        return Err(hata(StatusCode::NOT_FOUND, "Böyle biri yok"));
+    }
+    let r = db.arkadas_ekle(&ben.id, &id).map_err(ic)?;
+    drop(db);
+    let olay = match r {
+        Istek::Gonderildi => "istek",
+        Istek::Kabul => "kabul",
+        Istek::ZatenArkadas => "arkadas",
+    };
+    if r != Istek::ZatenArkadas {
+        s.durum
+            .kisiye(&id, &json!({ "tip": "arkadas", "olay": olay, "kisi": ben }));
+        s.durum
+            .kisiye(&ben.id, &json!({ "tip": "arkadas", "olay": "guncel" }));
+    }
+    Ok(Json(json!({ "durum": olay })))
+}
+
+/// Arkadaşlıktan çıkar, isteği reddet ya da geri al.
+pub async fn arkadas_sil(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    if s.db().arkadas_sil(&ben.id, &id).map_err(ic)? {
+        let v = json!({ "tip": "arkadas", "olay": "guncel" });
+        s.durum.kisiye(&id, &v);
+        s.durum.kisiye(&ben.id, &v);
+    }
+    Ok(Json(json!({})))
 }
 
 /// Kapak/afiş yükleme (en çok 400 KB; JPEG, PNG, WebP, GIF). Aynı resim bir kez saklanır.

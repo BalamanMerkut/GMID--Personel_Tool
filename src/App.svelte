@@ -22,7 +22,10 @@
   import GameMode from "./lib/screens/GameMode.svelte";
   import Films from "./lib/screens/Films.svelte";
   import Football from "./lib/screens/Football.svelte";
-  import Social from "./lib/screens/Social.svelte";
+  import Community from "./lib/screens/Community.svelte";
+  import Feed from "./lib/screens/Feed.svelte";
+  import Profile from "./lib/screens/Profile.svelte";
+  import FriendsDock from "./lib/components/social/FriendsDock.svelte";
   import Fun from "./lib/screens/Fun.svelte";
   import Ping from "./lib/screens/Ping.svelte";
   import Install from "./lib/screens/Install.svelte";
@@ -201,7 +204,11 @@
         {:else if route === "football"}
           <Football />
         {:else if route === "social"}
-          <Social />
+          <Community />
+        {:else if route === "feed"}
+          <Feed />
+        {:else if route === "profile"}
+          <Profile />
         {:else if route === "fun"}
           <Fun />
         {:else if route === "ping"}
@@ -239,6 +246,9 @@
   </div>
 
   <SearchPalette bind:open={searchOpen} onnavigate={navigate} />
+
+  <!-- Steam'deki gibi: arkadaş listesi ve sohbet her ekranda sağ altta. -->
+  <FriendsDock />
 
   {#if player.item}
     <!-- Ekran değişse de çalmaya devam eder; küçültülünce altta çalma çubuğu. -->

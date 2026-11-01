@@ -40,7 +40,14 @@ pub fn kur(c: &Connection) -> rusqlite::Result<()> {
            kime TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
            metin TEXT NOT NULL, zaman INTEGER NOT NULL, okundu INTEGER NOT NULL DEFAULT 0);
          CREATE INDEX IF NOT EXISTS mesaj_kime ON mesajlar (kime, okundu);
-         CREATE INDEX IF NOT EXISTS mesaj_kimden ON mesajlar (kimden, kime, id);",
+         CREATE INDEX IF NOT EXISTS mesaj_kimden ON mesajlar (kimden, kime, id);
+         CREATE TABLE IF NOT EXISTS arkadaslar (
+           kimden TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+           kime TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+           -- istek | arkadas
+           durum TEXT NOT NULL, zaman INTEGER NOT NULL,
+           PRIMARY KEY (kimden, kime));
+         CREATE INDEX IF NOT EXISTS arkadas_kime ON arkadaslar (kime);",
     )
 }
 
@@ -184,7 +191,128 @@ fn e(x: rusqlite::Error) -> String {
     x.to_string()
 }
 
+/// İki kişi arasındaki ilişki (benim gözümden).
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Iliski {
+    Arkadas,
+    /// Ben istek gönderdim, bekliyor.
+    Giden,
+    /// Bana istek geldi.
+    Gelen,
+}
+
+/// Arkadaş isteği sonucu.
+#[derive(Debug, PartialEq)]
+pub enum Istek {
+    Gonderildi,
+    /// Karşı taraf zaten istek göndermişti: artık arkadaşız.
+    Kabul,
+    ZatenArkadas,
+}
+
 impl Db {
+    pub fn iliski(&self, ben: &str, diger: &str) -> Option<Iliski> {
+        let r: Option<(String, String)> = self
+            .0
+            .query_row(
+                "SELECT kimden, durum FROM arkadaslar
+                 WHERE (kimden = ?1 AND kime = ?2) OR (kimden = ?2 AND kime = ?1)",
+                params![ben, diger],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .ok()
+            .flatten();
+        r.map(|(kimden, durum)| match durum.as_str() {
+            "arkadas" => Iliski::Arkadas,
+            _ if kimden == ben => Iliski::Giden,
+            _ => Iliski::Gelen,
+        })
+    }
+
+    pub fn arkadas_mi(&self, a: &str, b: &str) -> bool {
+        self.iliski(a, b) == Some(Iliski::Arkadas)
+    }
+
+    /// Arkadaş ekle: karşıdan istek varsa kabul edilir, yoksa istek gönderilir.
+    pub fn arkadas_ekle(&self, ben: &str, diger: &str) -> R<Istek> {
+        match self.iliski(ben, diger) {
+            Some(Iliski::Arkadas) => Ok(Istek::ZatenArkadas),
+            Some(Iliski::Giden) => Ok(Istek::Gonderildi),
+            Some(Iliski::Gelen) => {
+                self.0
+                    .execute(
+                        "UPDATE arkadaslar SET durum = 'arkadas', zaman = ?3 WHERE kimden = ?2 AND kime = ?1",
+                        params![ben, diger, simdi()],
+                    )
+                    .map_err(e)?;
+                Ok(Istek::Kabul)
+            }
+            None => {
+                self.0
+                    .execute(
+                        "INSERT INTO arkadaslar (kimden, kime, durum, zaman) VALUES (?1, ?2, 'istek', ?3)",
+                        params![ben, diger, simdi()],
+                    )
+                    .map_err(e)?;
+                Ok(Istek::Gonderildi)
+            }
+        }
+    }
+
+    /// Arkadaşlıktan çıkar / isteği reddet / isteği geri al.
+    pub fn arkadas_sil(&self, ben: &str, diger: &str) -> R<bool> {
+        let n = self
+            .0
+            .execute(
+                "DELETE FROM arkadaslar WHERE (kimden = ?1 AND kime = ?2) OR (kimden = ?2 AND kime = ?1)",
+                params![ben, diger],
+            )
+            .map_err(e)?;
+        Ok(n > 0)
+    }
+
+    /// (arkadaşlar, gelen istekler, giden istekler)
+    pub fn arkadaslar(&self, ben: &str) -> R<(Vec<Kullanici>, Vec<Kullanici>, Vec<Kullanici>)> {
+        let mut st = self
+            .0
+            .prepare(
+                "SELECT k.id, k.ad, k.avatar, a.durum, a.kimden = ?1 FROM arkadaslar a
+                 JOIN kullanicilar k ON k.id = CASE WHEN a.kimden = ?1 THEN a.kime ELSE a.kimden END
+                 WHERE a.kimden = ?1 OR a.kime = ?1 ORDER BY lower(k.ad)",
+            )
+            .map_err(e)?;
+        let (mut ark, mut gelen, mut giden) = (Vec::new(), Vec::new(), Vec::new());
+        let satirlar = st
+            .query_map([ben], |r| {
+                Ok((
+                    kullanici(r, 0)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, bool>(4)?,
+                ))
+            })
+            .map_err(e)?;
+        for (k, durum, benden) in satirlar.filter_map(Result::ok) {
+            match (durum.as_str(), benden) {
+                ("arkadas", _) => ark.push(k),
+                (_, true) => giden.push(k),
+                _ => gelen.push(k),
+            }
+        }
+        Ok((ark, gelen, giden))
+    }
+
+    pub fn arkadas_sayisi(&self, id: &str) -> i64 {
+        self.0
+            .query_row(
+                "SELECT COUNT(*) FROM arkadaslar WHERE durum = 'arkadas' AND (kimden = ?1 OR kime = ?1)",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+    }
+
     pub fn kisiler(&self) -> R<Vec<(Kullanici, i64)>> {
         let mut st = self
             .0
@@ -335,6 +463,18 @@ impl Db {
         kisi: Option<&str>,
         sayi: i64,
     ) -> R<Vec<Etkinlik>> {
+        self.akis_suz(ben, once, kisi, false, sayi)
+    }
+
+    /// `arkadaslar`: yalnız arkadaşlarımın ve benim olaylarım.
+    pub fn akis_suz(
+        &self,
+        ben: &str,
+        once: Option<i64>,
+        kisi: Option<&str>,
+        arkadaslar: bool,
+        sayi: i64,
+    ) -> R<Vec<Etkinlik>> {
         let mut st = self
             .0
             .prepare(
@@ -343,22 +483,27 @@ impl Db {
                    EXISTS (SELECT 1 FROM begeniler b WHERE b.etkinlik = e.id AND b.kullanici = ?1)
                  FROM etkinlikler e JOIN kullanicilar k ON k.id = e.kullanici
                  WHERE (?2 IS NULL OR e.zaman < ?2) AND (?3 IS NULL OR e.kullanici = ?3)
+                   AND (?5 = 0 OR e.kullanici = ?1 OR EXISTS (SELECT 1 FROM arkadaslar a WHERE a.durum = 'arkadas'
+                        AND ((a.kimden = ?1 AND a.kime = e.kullanici) OR (a.kime = ?1 AND a.kimden = e.kullanici))))
                  ORDER BY e.zaman DESC, e.id DESC LIMIT ?4",
             )
             .map_err(e)?;
         let mut l: Vec<Etkinlik> = st
-            .query_map(params![ben, once, kisi, sayi.clamp(1, 100)], |r| {
-                Ok(Etkinlik {
-                    id: r.get(0)?,
-                    kisi: kullanici(r, 1)?,
-                    tur: r.get(4)?,
-                    veri: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or(Value::Null),
-                    zaman: r.get(6)?,
-                    begeni: r.get(7)?,
-                    begendim: r.get(8)?,
-                    yorumlar: Vec::new(),
-                })
-            })
+            .query_map(
+                params![ben, once, kisi, sayi.clamp(1, 100), arkadaslar as i64],
+                |r| {
+                    Ok(Etkinlik {
+                        id: r.get(0)?,
+                        kisi: kullanici(r, 1)?,
+                        tur: r.get(4)?,
+                        veri: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or(Value::Null),
+                        zaman: r.get(6)?,
+                        begeni: r.get(7)?,
+                        begendim: r.get(8)?,
+                        yorumlar: Vec::new(),
+                    })
+                },
+            )
             .map_err(e)?
             .filter_map(Result::ok)
             .collect();
@@ -665,6 +810,41 @@ mod tests {
         assert!(db.mesajlar("3", "1", None, 50).unwrap().is_empty());
         assert_eq!(db.okundu("2", "1").unwrap(), 1);
         assert_eq!(db.konusmalar("2").unwrap()[1].okunmamis, 0);
+    }
+
+    #[test]
+    fn arkadaslik() {
+        let db = Db::bellekte();
+        kisi(&db, "1", "Ali");
+        kisi(&db, "2", "Veli");
+        kisi(&db, "3", "Can");
+        assert_eq!(db.arkadas_ekle("1", "2").unwrap(), Istek::Gonderildi);
+        assert_eq!(db.iliski("1", "2"), Some(Iliski::Giden));
+        assert_eq!(db.iliski("2", "1"), Some(Iliski::Gelen));
+        let (a, gelen, _) = db.arkadaslar("2").unwrap();
+        assert!(a.is_empty());
+        assert_eq!(gelen[0].ad, "Ali");
+        // Karşı taraf "ekle" deyince kabul.
+        assert_eq!(db.arkadas_ekle("2", "1").unwrap(), Istek::Kabul);
+        assert!(db.arkadas_mi("1", "2") && db.arkadas_mi("2", "1"));
+        assert_eq!(db.arkadas_ekle("1", "2").unwrap(), Istek::ZatenArkadas);
+        assert_eq!(db.arkadas_sayisi("1"), 1);
+        // Akış: yalnız arkadaşlar süzgeci.
+        let t = simdi();
+        for id in ["2", "3"] {
+            let p = Profil {
+                oyunlar: vec![],
+                puanlar: vec![puan("game:1", "Oyun", 7.0, t)],
+            };
+            db.profil_kaydet(id, p).unwrap();
+        }
+        assert_eq!(db.akis_suz("1", None, None, false, 30).unwrap().len(), 2);
+        let yalniz = db.akis_suz("1", None, None, true, 30).unwrap();
+        assert_eq!(yalniz.len(), 1);
+        assert_eq!(yalniz[0].kisi.ad, "Veli");
+        // Çıkarma.
+        assert!(db.arkadas_sil("2", "1").unwrap());
+        assert_eq!(db.iliski("1", "2"), None);
     }
 
     #[test]

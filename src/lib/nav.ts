@@ -47,12 +47,16 @@ export const ROOMS: Room[] = [
     name: null,
     screens: [
       { id: "social", label: "Topluluk", icon: "users", phase: null,
-        description: "GMID'deki arkadaşların: kim çevrim içi, kim ne oynuyor, kim hangi diziyi kaç puanladı. Beğen, yorum yap, özel mesaj at. Discord ile giriş." },
+        description: "GMID Discord malikânesi: tanıtım, Discord sunucusuna katıl, Discord ile giriş, üyeler ve arkadaş ekleme." },
+      { id: "profile", label: "Profil", icon: "user", phase: null,
+        description: "Steam tarzı profil: favori oyunlar, en çok oynananlar, film ve dizi vitrinleri, son etkinlik." },
     ],
   },
   {
     name: "Eğlence Salonu",
     screens: [
+      { id: "feed", label: "Sosyal", icon: "sparkle", phase: null,
+        description: "Arkadaşlarının son olayları: kim neyi kaç puanladı, kim hangi oyuna girdi. Beğen, yorum yap." },
       { id: "films", label: "Film & Dizi Arşivi", icon: "film", phase: null,
         description: "Film ve dizileri aynı sade kartla puanla; afiş, özet, yönetmen ve oyuncular Vikipedi'den kendiliğinden gelir." },
       { id: "football", label: "Futbol", icon: "trophy", phase: null,
@@ -114,7 +118,15 @@ export const NAV: NavRoom[] = [
     name: null,
     groups: [
       { id: "home", label: "Giriş Salonu", icon: "castle", tabs: [{ id: "home", label: "Giriş Salonu" }] },
-      { id: "social", label: "Topluluk", icon: "users", tabs: [{ id: "social", label: "Topluluk" }] },
+      {
+        id: "social",
+        label: "Topluluk",
+        icon: "users",
+        tabs: [
+          { id: "social", label: "Topluluk" },
+          { id: "profile", label: "Profil" },
+        ],
+      },
     ],
   },
   {
@@ -157,6 +169,7 @@ export const NAV: NavRoom[] = [
           { id: "videos", label: "İndirici" },
         ],
       },
+      { id: "feed", label: "Sosyal", icon: "sparkle", tabs: [{ id: "feed", label: "Sosyal" }] },
       { id: "films", label: "Film & Dizi", icon: "film", tabs: [{ id: "films", label: "Film & Dizi" }] },
       { id: "football", label: "Futbol", icon: "trophy", tabs: [{ id: "football", label: "Futbol" }] },
       { id: "fun", label: "Çark & Çekiliş", icon: "wheel", tabs: [{ id: "fun", label: "Çark & Çekiliş" }] },

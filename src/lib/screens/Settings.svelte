@@ -11,6 +11,7 @@
   import Appearance from "../settings/Appearance.svelte";
   import Data from "../settings/Data.svelte";
   import Dictation from "../settings/Dictation.svelte";
+  import CommunitySettings from "../settings/Community.svelte";
   import Downloader from "../settings/Downloader.svelte";
   import Update from "../settings/Update.svelte";
   import Report from "../settings/Report.svelte";
@@ -52,6 +53,7 @@
     { id: "bildirimler", label: "Bildirimler", icon: "bell", keys: "bildirim ses uyarı hatırlatıcı windows sayaç indirme bitti" },
     { id: "indirici", label: "Video İndirici", icon: "download", keys: "video indirme yt-dlp ffmpeg deno araç güncelle eklenti chrome opera aynı anda klasör" },
     { id: "oyunlar", label: "Oyunlar", icon: "library", keys: "oyun kütüphane algılama oturum süre steam epic oynama takip klip kayıt nvidia xbox obs medal ekran görüntüsü" },
+    { id: "topluluk", label: "Topluluk", icon: "users", keys: "topluluk discord giriş hesap paylaşım profil arkadaş sosyal akış gizlilik çıkış" },
     { id: "sunucular", label: "Sunucular", icon: "server", keys: "sunucu topluluk liste adres github" },
     { id: "sistem", label: "Sistem özellikleri", icon: "monitor", keys: "sistem özellik donanım işlemci cpu ekran kartı gpu ram bellek anakart disk ssd monitör fare klavye ses ağ windows sürüm" },
     { id: "veri", label: "Veri ve yedekler", icon: "shield", keys: "veri klasör yedek yedekle günlük log sorun geri yükle format zip" },
@@ -346,6 +348,8 @@
         </div>
       </section>
       <ClipsSettings />
+    {:else if tab === "topluluk"}
+      <CommunitySettings />
     {:else if tab === "sunucular"}
       <ServersList />
     {:else if tab === "veri"}
