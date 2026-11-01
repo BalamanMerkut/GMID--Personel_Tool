@@ -87,39 +87,69 @@ pub async fn clips_fit_discord(
     .map_err(|e| e.to_string())?
 }
 
-/// Klibi Sosyal'de paylaş: küçültülür (H.264, en çok 50 MB; ilerleme "clip-fit" olayıyla), sonra GMID
-/// sunucusuna yüklenir. Akışta 7 gün görünür; aldığı beğeniler profilde kalır.
-#[tauri::command]
-pub async fn clips_share_social(
-    app: AppHandle,
+/// Sosyal'de paylaşma isteği (paylaşım penceresinden).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareRequest {
     id: String,
     server: String,
     token: String,
     title: Option<String>,
     game: Option<String>,
+    /// Kısa açıklama.
+    note: Option<String>,
+    /// Seçilen bölüm (saniye); yoksa klibin tamamı.
+    start: Option<f64>,
+    end: Option<f64>,
+}
+
+/// Klibi Sosyal'de paylaş: (istenirse kırpılıp) küçültülür (H.264, en çok 50 MB; ilerleme "clip-fit"
+/// olayıyla), sonra GMID sunucusuna yüklenir. Akışta 7 gün görünür; aldığı beğeniler profilde kalır.
+#[tauri::command]
+pub async fn clips_share_social(
+    app: AppHandle,
+    request: ShareRequest,
 ) -> CmdResult<serde_json::Value> {
     tauri::async_runtime::spawn_blocking(move || {
-        let clip = clips::lookup(&app.state::<Db>(), &id)?;
+        let r = request;
+        let clip = clips::lookup(&app.state::<Db>(), &r.id)?;
         if clip.kind != "clip" {
             return Err("Yalnız video klipler paylaşılabilir".to_string());
         }
-        let hazir = app.state::<Clips>().fit_for_share(&app, &id)?;
-        let ad = title
+        let (hazir, kapak) = app
+            .state::<Clips>()
+            .fit_for_share(&app, &r.id, r.start, r.end)?;
+        let ad = r
+            .title
             .filter(|t| !t.trim().is_empty())
             .or(clip.title.clone())
             .unwrap_or(clip.name.clone());
+        // Kırpıldıysa seçilen bölümün uzunluğu.
+        let sure = r
+            .end
+            .or(clip.duration)
+            .map(|e| (e - r.start.unwrap_or(0.0).max(0.0)).max(0.0));
+        let bilgi = crate::social::KlipBilgi {
+            ad: &ad,
+            oyun: r.game.as_deref(),
+            not: r.note.as_deref(),
+            sure,
+        };
         let sonuc = crate::social::klip_yukle(
-            &server,
-            &token,
+            &r.server,
+            &r.token,
             std::path::Path::new(&hazir.path),
-            clip.thumb.as_deref().map(std::path::Path::new),
-            &ad,
-            game.as_deref(),
-            clip.duration,
+            kapak
+                .as_deref()
+                .or(clip.thumb.as_deref().map(std::path::Path::new)),
+            &bilgi,
         );
-        // Yüklenen kopya artık gerekmiyor (klibin kendisi yerinde duruyor).
+        // Yüklenen kopya ve kapağı artık gerekmiyor (klibin kendisi yerinde duruyor).
         if !hazir.original {
             let _ = std::fs::remove_file(&hazir.path);
+        }
+        if let Some(k) = kapak {
+            let _ = std::fs::remove_file(k);
         }
         sonuc
     })

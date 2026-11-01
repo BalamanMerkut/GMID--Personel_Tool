@@ -2,15 +2,27 @@
   // Discord'a hazırla: başlangıç/bitiş seç, hazır seçeneklerden birini seç (boyut, çözünürlük, kare hızı, beklenen
   // MB ve netlik yanında yazar), hazırla, sonucu burada izle; beğenmezsen başka seçenekle dene. Kısa seçim = daha
   // net görüntü (aynı boyuta daha az saniye düşer).
+  // "sosyal" kipi: aynı kırpma, ama seçenekler yerine ad ve açıklama; GMID Sosyal'de paylaşılır (7 gün durur).
   import { onMount } from "svelte";
   import { api } from "../api";
   import { on } from "../bus";
   import Icon from "../Icon.svelte";
   import { getJson, setJson } from "../settings.svelte";
+  import { klipPaylas } from "../social.svelte";
   import { notify } from "../toast.svelte";
   import type { Clip, FitChoice, FitOptions, FitResult } from "../types";
 
-  let { clip, onclose, onsaved }: { clip: Clip; onclose: () => void; onsaved?: () => void } = $props();
+  let {
+    clip,
+    onclose,
+    onsaved,
+    mode = "discord",
+    oyun = null,
+  }: { clip: Clip; onclose: () => void; onsaved?: () => void; mode?: "discord" | "sosyal"; oyun?: string | null } = $props();
+  const sosyalKip = $derived(mode === "sosyal");
+  // Sosyal kipinde akışta görünecek ad ve isteğe bağlı açıklama.
+  let ad = $state("");
+  let not = $state("");
   /** Medya'daki indirilen video (kimlik "dl:…"): kırpılmış kopyası Videolar'a yeni video olarak eklenir. */
   const isVideo = $derived(clip.id.startsWith("dl:"));
 
@@ -62,10 +74,15 @@
   const choice = $derived(list.find((c) => c.key === selected) ?? list.find((c) => c.recommended) ?? list[0] ?? null);
   /** Ücretsiz sınırda en iyisi bile net değilse: kısaltmayı öner. */
   const suggestCut = $derived(
-    length > 40 && !choices.some((c) => c.options.limitMb === 10 && (c.quality === "great" || c.quality === "good")),
+    !sosyalKip && length > 40 && !choices.some((c) => c.options.limitMb === 10 && (c.quality === "great" || c.quality === "good")),
   );
+  /** Sosyal: 50 MB'a sığan uzun klip bulanıklaşır; kısaltmayı öner. */
+  const sosyalUzun = $derived(sosyalKip && length > 150);
+  /** Sosyal: küçültme bitti, sunucuya yükleniyor. */
+  const yukleniyor = $derived(sosyalKip && progress !== null && progress >= 1);
 
   onMount(() => {
+    ad = clip.title ?? clip.name;
     duration = clip.duration ?? 0;
     end = duration;
     const stop = on<{ id: string; progress: number }>("clip-fit", (e) => {
@@ -126,7 +143,7 @@
   $effect(() => {
     const s = trimmed ? start : null;
     const e = trimmed ? end : null;
-    if (!duration) return;
+    if (!duration || sosyalKip) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
       void api.clips.choices(clip.id, s, e).then((c) => (choices = c)).catch(() => (choices = []));
@@ -140,7 +157,30 @@
     }
   }
 
+  /** Sosyal'de paylaş: seçilen bölüm küçültülüp yüklenir; bitince pencere kapanır. */
+  async function paylas() {
+    progress = 0;
+    video?.pause();
+    try {
+      await klipPaylas({
+        id: clip.id,
+        ad: ad.trim() || null,
+        oyun,
+        not: not.trim() || null,
+        start: trimmed ? start : null,
+        end: trimmed ? end : null,
+      });
+      notify("Sosyal'de paylaşıldı · 7 gün sonra silinir, beğeniler profilinde kalır", "check");
+      onclose();
+    } catch (e) {
+      notify(String(e instanceof Error ? e.message : e), "info");
+    } finally {
+      progress = null;
+    }
+  }
+
   async function go() {
+    if (sosyalKip) return paylas();
     if (!choice) return;
     const c = choice;
     progress = 0;
@@ -201,9 +241,11 @@
 <svelte:window onkeydown={onkey} />
 
 <div class="back" role="presentation" onclick={(e) => e.target === e.currentTarget && progress === null && onclose()}>
-  <div class="dlg panel" role="dialog" aria-label="Discord'a hazırla">
+  <div class="dlg panel" role="dialog" aria-label={sosyalKip ? "Sosyal'de paylaş" : "Discord'a hazırla"}>
     <div class="spread">
-      <h3 class="h2"><Icon name="clip" />{isVideo ? "Kırp ve Discord'a hazırla" : "Discord'a hazırla"}</h3>
+      <h3 class="h2">
+        {#if sosyalKip}<Icon name="send" />Sosyal'de paylaş{:else}<Icon name="clip" />{isVideo ? "Kırp ve Discord'a hazırla" : "Discord'a hazırla"}{/if}
+      </h3>
       <button class="x" onclick={onclose} disabled={progress !== null} title="Kapat"><Icon name="x" size={18} /></button>
     </div>
 
@@ -249,6 +291,28 @@
       </div>
     {/if}
 
+    {#if sosyalUzun}
+      <div class="tip">
+        <Icon name="info" size={16} />
+        <span>{fmt(length)} uzunluğunda bir klip 50 MB'a sığarken netliği düşer. En güzel anı seçersen daha net görünür.</span>
+        <button class="btn sm" onclick={() => lastSeconds(60)}>Son 60 sn</button>
+        <button class="btn ghost sm" onclick={() => lastSeconds(30)}>Son 30 sn</button>
+      </div>
+    {/if}
+
+    {#if sosyalKip}
+      <div class="paylas">
+        <label>
+          <span class="label">Ad</span>
+          <input bind:value={ad} maxlength="120" placeholder="Klibin adı" disabled={progress !== null} />
+        </label>
+        <label>
+          <span class="label">Açıklama <em>(isteğe bağlı)</em></span>
+          <textarea bind:value={not} maxlength="300" rows="2" placeholder="Ne oldu bu klipte?" disabled={progress !== null}></textarea>
+        </label>
+        <span class="sub small">{oyun ? `${oyun} · ` : ""}{fmt(length)} · H.264, en çok 50 MB</span>
+      </div>
+    {:else}
     <div class="choices">
       {#each list as c (c.key)}
         {@const q = QUALITY[c.quality]}
@@ -263,8 +327,9 @@
         <p class="sub small">Seçenekler hesaplanıyor…</p>
       {/each}
     </div>
+    {/if}
 
-    {#if results.length}
+    {#if results.length && !sosyalKip}
       <div class="results">
         <span class="label">Hazırlananlar</span>
         {#each results as r (r.path)}
@@ -283,17 +348,27 @@
     </div>
 
     <div class="foot">
-      {#if progress !== null}
+      {#if yukleniyor}
+        <div class="prog"><span class="small">Sosyal'e yükleniyor…</span><span class="pbar bekle"><i></i></span></div>
+      {:else if progress !== null}
         <div class="prog"><span class="small">Hazırlanıyor · %{Math.round(progress * 100)}</span><span class="pbar"><i style:width="{progress * 100}%"></i></span></div>
+      {:else if sosyalKip}
+        <span class="sub small">Akışta 7 gün görünür, sonra video da paylaşım da silinir; aldığı beğeniler profilinde kalır. Klibin kendisine dokunulmaz.</span>
       {:else}
         <span class="sub small">
           {choice?.options.limitMb === null ? "Kopya klibin yanına kaydedilir; orijinale dokunulmaz." : "Kopya panoya gelir: Discord'da Ctrl+V. Beğenmezsen başka seçenekle yeniden dene; orijinale dokunulmaz."}
         </span>
       {/if}
+      {#if sosyalKip}
+        <button class="btn" disabled={progress !== null || length < 0.5} onclick={go}>
+          <Icon name="send" size={15} />{progress !== null ? "Paylaşılıyor…" : "Sosyal'de paylaş"}
+        </button>
+      {:else}
       <button class="btn" disabled={progress !== null || length < 0.5 || !choice} onclick={go}>
         <Icon name={choice?.options.limitMb === null ? "clip" : "copy"} size={15} />
         {choice?.options.limitMb === null ? "Kırpılmış kopyayı kaydet" : choice ? `${choice.title} · hazırla ve kopyala` : "Hazırla"}
       </button>
+      {/if}
     </div>
   </div>
 </div>
@@ -347,4 +422,12 @@
   .prog { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
   .pbar { display: block; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
   .pbar i { display: block; height: 100%; background: var(--gold); transition: width 0.25s; }
+  .pbar.bekle i { width: 35%; animation: bekle 1.1s ease-in-out infinite; }
+  @keyframes bekle { from { margin-left: -35%; } to { margin-left: 100%; } }
+  .paylas { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px 14px; align-items: start; }
+  .paylas label { display: flex; flex-direction: column; gap: 6px; }
+  .paylas em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(--dim); font-weight: 400; }
+  .paylas input, .paylas textarea { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 12px; color: var(--text); font: inherit; font-size: 14px; outline: none; resize: vertical; }
+  .paylas input:focus, .paylas textarea:focus { border-color: var(--gold-dim); }
+  .paylas > .sub { grid-column: 1 / -1; }
 </style>

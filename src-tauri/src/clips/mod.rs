@@ -512,14 +512,30 @@ impl Clips {
 
     /// Sosyal'de paylaşmak için kopya: her yerde oynayan H.264 MP4, en çok 50 MB; panoya konmaz.
     /// Klip zaten küçük olsa da yeniden kodlanır (HEVC/MKV kayıtlar uygulamanın oynatıcısında açılmayabilir).
-    pub fn fit_for_share(&self, app: &AppHandle, id: &str) -> Result<FitResult, String> {
+    /// `start`/`end`: paylaşım penceresinde seçilen bölüm. Dönen: kopya ve (çıkarılabildiyse) kopyadan bir kapak
+    /// karesi (kırpılmış klipte kapak seçilen bölümden olsun).
+    pub fn fit_for_share(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        start: Option<f64>,
+        end: Option<f64>,
+    ) -> Result<(FitResult, Option<PathBuf>), String> {
         let opts = FitOptions {
+            start,
+            end,
             limit_mb: Some(SHARE_MB),
             codec: media::Codec::H264,
             keep: false,
             ..FitOptions::default()
         };
-        self.fit(app, id, opts, false)
+        let r = self.fit(app, id, opts, false)?;
+        let out = PathBuf::from(&r.path);
+        let kapak = out.with_extension("kapak.jpg");
+        let kapak = ffmpeg(app.state::<DataDir>().root())
+            .and_then(|ff| media::thumbnail(&ff, &out, &kapak, true).ok())
+            .map(|_| kapak);
+        Ok((r, kapak))
     }
 
     fn fit(

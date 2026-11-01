@@ -30,8 +30,8 @@
     }
   }
 
-  async function sil(o: Olay) {
-    await istek("DELETE", `/api/akis/${o.id}`).catch((e) => notify(String(e.message ?? e), "info"));
+  /** Kart sunucudan sildi; listeden de çıkar. */
+  function sil(o: Olay) {
     olaylar = olaylar.filter((x) => x.id !== o.id);
   }
 

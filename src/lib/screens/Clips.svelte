@@ -10,7 +10,7 @@
   import Icon from "../Icon.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
-  import { klipPaylas, sosyal } from "../social.svelte";
+  import { sosyal } from "../social.svelte";
   import type { Clip, ClipRoot, Game } from "../types";
 
   interface Props {
@@ -35,8 +35,8 @@
   let expanded: string[] = $state([]);
   let now = $state(Date.now());
   let fitting: Record<string, number> = $state({});
-  /** Sosyal'e yüklenen klipler (küçültme bitince "Yükleniyor"). */
-  let paylasiliyor: Record<string, true> = $state({});
+  /** Sosyal'de paylaşma penceresi açık olan klip. */
+  let paylasilan: Clip | null = $state(null);
   let hover: string | null = $state(null);
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -165,28 +165,16 @@
     }
   }
 
-  /** Tek tık: klibi Sosyal'de paylaş (küçült, yükle). 7 gün sonra silinir; beğeniler profilde kalır. */
-  async function paylas(c: Clip) {
+  /** Sosyal'de paylaş: önce pencere (kırp, ad, açıklama). 7 gün sonra silinir; beğeniler profilde kalır. */
+  function paylas(c: Clip) {
     if (!sosyal.anahtar) {
       notify("Sosyal'de paylaşmak için önce Topluluk'tan Discord ile giriş yap", "info");
       onnavigate("social");
       return;
     }
-    if (c.id in fitting || c.id in paylasiliyor) return;
-    fitting = { ...fitting, [c.id]: 0 };
-    paylasiliyor = { ...paylasiliyor, [c.id]: true };
-    try {
-      const oyun = c.gameId ? (byId.get(c.gameId)?.name ?? null) : null;
-      await klipPaylas(c.id, c.title ?? null, oyun);
-      notify("Sosyal'de paylaşıldı · 7 gün sonra silinir, beğeniler profilinde kalır", "check");
-    } catch (e) {
-      notify(String(e instanceof Error ? e.message : e), "info");
-    } finally {
-      const { [c.id]: _, ...rest } = fitting;
-      fitting = rest;
-      const { [c.id]: __, ...kalan } = paylasiliyor;
-      paylasiliyor = kalan;
-    }
+    if (c.id in fitting) return;
+    view = null;
+    paylasilan = c;
   }
 
   // Aramadan gelen istek: o klibi büyük görünümde aç.
@@ -329,13 +317,11 @@
                     <span class="dcs">
                       <button class="dc" onclick={(e) => (e.stopPropagation(), fit(c))} title="Tek tık: çözünürlük korunarak küçültülür, panoya kopyalanır (Discord'da Ctrl+V)">Discord'a sığdır</button>
                       <button class="dc more" onclick={(e) => (e.stopPropagation(), (trim = c))} title="Seçenekler: boyut, kırpma, önizleme"><Icon name="gear" size={13} /></button>
-                      <button class="sos" onclick={(e) => (e.stopPropagation(), paylas(c))} title="Tek tık: GMID Sosyal akışında paylaş (7 gün sonra silinir, beğeniler profilinde kalır)"><Icon name="send" size={13} />Sosyal</button>
+                      <button class="sos" onclick={(e) => (e.stopPropagation(), paylas(c))} title="GMID Sosyal akışında paylaş: kırp, ad ve açıklama yaz (7 gün sonra silinir, beğeniler profilinde kalır)"><Icon name="send" size={13} />Sosyal</button>
                     </span>
                   {/if}
                   {#if c.id in fitting}
-                    <div class="fit"><span>{c.id in paylasiliyor ? "Sosyal için hazırlanıyor" : "Hazırlanıyor"} %{Math.round(fitting[c.id] * 100)}</span><span class="pb"><span style={`width:${fitting[c.id] * 100}%`}></span></span></div>
-                  {:else if c.id in paylasiliyor}
-                    <div class="fit"><span>Sosyal'e yükleniyor…</span><span class="pb yukle"><span></span></span></div>
+                    <div class="fit"><span>Hazırlanıyor %{Math.round(fitting[c.id] * 100)}</span><span class="pb"><span style={`width:${fitting[c.id] * 100}%`}></span></span></div>
                   {/if}
                 </div>
                 <b class="nm">{label(c)}</b>
@@ -405,8 +391,8 @@
             </button>
           {/if}
           {#if c.kind === "clip"}
-            <button class="btn ghost sm" disabled={c.id in paylasiliyor} onclick={() => paylas(c)} title="GMID Sosyal akışında paylaş; 7 gün sonra silinir, beğeniler profilinde kalır">
-              <Icon name="send" size={15} />{c.id in paylasiliyor ? "Paylaşılıyor…" : "Sosyal'de paylaş"}
+            <button class="btn ghost sm" disabled={c.id in fitting} onclick={() => paylas(c)} title="GMID Sosyal akışında paylaş; 7 gün sonra silinir, beğeniler profilinde kalır">
+              <Icon name="send" size={15} />Sosyal'de paylaş
             </button>
           {/if}
           <button class="btn ghost sm favb" class:on={c.favorite} onclick={() => act(api.clips.setFavorite(c.id, !c.favorite))}>
@@ -433,6 +419,19 @@
       const { [trim!.id]: _, ...rest } = fitting;
       fitting = rest;
       trim = null;
+    }}
+  />
+{/if}
+
+{#if paylasilan}
+  <ClipTrim
+    clip={paylasilan}
+    mode="sosyal"
+    oyun={paylasilan.gameId ? (byId.get(paylasilan.gameId)?.name ?? null) : null}
+    onclose={() => {
+      const { [paylasilan!.id]: _, ...rest } = fitting;
+      fitting = rest;
+      paylasilan = null;
     }}
   />
 {/if}
@@ -471,8 +470,6 @@
   .dc:hover { background: #4752c4; }
   .sos { margin-left: 4px; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 7px; padding: 4px 9px; font-size: 12px; font-weight: 700; background: var(--gold); color: #1b1608; }
   .sos:hover { background: var(--gold-glow); }
-  .pb.yukle > span { width: 35% !important; animation: yukle 1.1s ease-in-out infinite; }
-  @keyframes yukle { from { margin-left: -35%; } to { margin-left: 100%; } }
   .card:hover .fav, .card:hover .dcs, .card:focus-within .dcs { opacity: 1; }
   .fit { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; background: rgba(8, 10, 12, 0.72); font-size: 13px; font-weight: 700; }
   .pb { width: 70%; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }

@@ -31,6 +31,8 @@ pub struct KlipSorgu {
     sure: Option<f64>,
     /// Önceden /api/resim ile yüklenmiş kapak ("/resim/…").
     kapak: Option<String>,
+    /// Paylaşanın yazdığı kısa açıklama.
+    not: Option<String>,
 }
 
 fn kisalt(s: Option<String>, n: usize) -> Option<String> {
@@ -109,6 +111,7 @@ pub async fn yukle(
     let veri = json!({
         "ad": kisalt(q.ad, 120).unwrap_or_else(|| "Klip".into()),
         "oyun": kisalt(q.oyun, 120),
+        "not": kisalt(q.not, 300),
         "sure": q.sure.filter(|x| x.is_finite() && *x > 0.0).map(|x| x.min(36000.0)),
         "kapak": kapak,
         "url": format!("/klip/{ad}"),

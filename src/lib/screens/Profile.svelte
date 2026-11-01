@@ -213,7 +213,7 @@
           <section class="vitrin">
             {@render vitrin("Son etkinlik", "sparkle", "")}
             <div class="olaylar">
-              {#each olaylar as o (o.id)}<FeedCard {o} ondegisti={() => id && yukle(id)} onsil={() => id && yukle(id)} />{/each}
+              {#each olaylar as o (o.id)}<FeedCard {o} ondegisti={() => id && yukle(id)} onsil={(x) => (olaylar = olaylar.filter((y) => y.id !== x.id))} />{/each}
             </div>
           </section>
         {/if}

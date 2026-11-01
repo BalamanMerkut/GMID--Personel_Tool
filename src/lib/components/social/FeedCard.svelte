@@ -10,6 +10,9 @@
   let { o, ondegisti, onsil }: { o: Olay; ondegisti: () => void; onsil: (o: Olay) => void } = $props();
   let taslak = $state("");
   let acik = $state(false);
+  /** Silme iki tıkla: ilk tık "Silinsin mi?" olur, birkaç saniye içinde ikinci tık siler. */
+  let silOnay = $state(false);
+  let silZaman: ReturnType<typeof setTimeout> | undefined;
 
   const hata = (e: unknown) => notify(String(e instanceof Error ? e.message : e), "info");
 
@@ -39,6 +42,24 @@
     }
   }
 
+  async function sil() {
+    if (!silOnay) {
+      silOnay = true;
+      clearTimeout(silZaman);
+      silZaman = setTimeout(() => (silOnay = false), 4000);
+      return;
+    }
+    clearTimeout(silZaman);
+    silOnay = false;
+    try {
+      await istek("DELETE", `/api/akis/${o.id}`);
+      notify(o.tur === "klip" ? "Klip Sosyal'den kaldırıldı" : "Paylaşım kaldırıldı", "check");
+      onsil(o);
+    } catch (e) {
+      hata(e);
+    }
+  }
+
   async function yorumSil(id: number) {
     await istek("DELETE", `/api/yorum/${id}`).catch(hata);
     ondegisti();
@@ -54,11 +75,14 @@
       <span class="zaman" title={new Date(o.zaman).toLocaleString("tr-TR")}>{once(o.zaman)}</span>
     </div>
     {#if o.kisi.id === sosyal.ben?.id}
-      <button class="ic" title="Paylaşımı kaldır" aria-label="Paylaşımı kaldır" onclick={() => onsil(o)}><Icon name="trash" size={15} /></button>
+      <button class="ic sil" class:onay={silOnay} title={silOnay ? "Silmek için yeniden tıkla" : "Paylaşımı kaldır"} aria-label="Paylaşımı kaldır" onclick={sil}>
+        <Icon name="trash" size={15} />{#if silOnay}<span>Silinsin mi?</span>{/if}
+      </button>
     {/if}
   </header>
   {#if o.tur === "klip"}
     <!-- Paylaşılan klip: 7 gün durur, sonra video da paylaşım da silinir (beğeniler profilde kalır). -->
+    {#if o.veri.not}<p class="not">{o.veri.not}</p>{/if}
     <div class="klip">
       <!-- svelte-ignore a11y_media_has_caption -->
       <video src={tamAdres(o.veri.url)} poster={tamAdres(o.veri.kapak) ?? undefined} controls preload="metadata" playsinline></video>
@@ -117,6 +141,7 @@
   .ad { border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--text); cursor: pointer; }
   .ad:hover { color: var(--gold-glow); }
   .zaman { font-size: 12px; color: var(--dim); }
+  .not { margin: 0; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
   .klip { border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
   .klip video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }
   .klip-alt { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 0 2px; }
@@ -137,6 +162,8 @@
   .ic:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.06); }
   .ic:disabled { opacity: 0.35; cursor: default; }
   .ic.kucuk { width: 24px; height: 24px; opacity: 0; }
+  .ic.sil { display: inline-flex; align-items: center; gap: 6px; }
+  .ic.sil.onay, .ic.sil.onay:hover { width: auto; padding: 0 12px; background: rgba(229, 72, 77, 0.18); color: #ff8a8d; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
   .yorum:hover .ic.kucuk { opacity: 1; }
   .yorumlar { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
   .yorum { display: flex; align-items: flex-start; gap: 8px; }

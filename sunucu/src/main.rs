@@ -317,7 +317,7 @@ mod tests {
         govde.resize(3 * 1024 * 1024, 7);
         let (kod, cevap) = iste(
             &s,
-            Request::post("/api/klip?ad=Ace&oyun=Valorant&sure=12.5")
+            Request::post("/api/klip?ad=Ace&oyun=Valorant&sure=12.5&not=Son%20saniye%21")
                 .header("authorization", yetki(&a))
                 .body(Body::from(govde))
                 .unwrap(),
@@ -328,6 +328,7 @@ mod tests {
         let akis = s.db().akis("2", None, None, 10).unwrap();
         assert_eq!(akis[0].tur, "klip");
         assert_eq!(akis[0].veri["oyun"], "Valorant");
+        assert_eq!(akis[0].veri["not"], "Son saniye!");
         // Veli beğenir, Ali kendi klibini beğenir (kendi beğenisi puana sayılmaz).
         s.db().begen("2", id).unwrap();
         s.db().begen("1", id).unwrap();

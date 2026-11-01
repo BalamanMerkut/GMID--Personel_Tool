@@ -376,9 +376,17 @@ export const api = {
     reveal: (id: string) => call<void>("clips_reveal", { id }),
     /** Seçilen boyuta sığan (istersen kırpılmış) kopya panoya; kopyanın yolu. Seçenek yoksa kayıtlı varsayılanlar. */
     fitDiscord: (id: string, options?: FitOptions) => call<FitResult>("clips_fit_discord", { id, options: options ?? null }),
-    /** Sosyal'de paylaş: küçültülüp (ilerleme "clip-fit") GMID sunucusuna yüklenir; 7 gün durur. */
-    shareSocial: (id: string, server: string, token: string, title: string | null, game: string | null) =>
-      call<{ id: number; url: string; bitis: number }>("clips_share_social", { id, server, token, title, game }),
+    /** Sosyal'de paylaş: (seçilen bölüm) küçültülüp (ilerleme "clip-fit") GMID sunucusuna yüklenir; 7 gün durur. */
+    shareSocial: (request: {
+      id: string;
+      server: string;
+      token: string;
+      title: string | null;
+      game: string | null;
+      note: string | null;
+      start: number | null;
+      end: number | null;
+    }) => call<{ id: number; url: string; bitis: number }>("clips_share_social", { request }),
     /** "Discord'a hazırla" seçenekleri (seçime göre). */
     choices: (id: string, start: number | null, end: number | null) => call<FitChoice[]>("clips_choices", { id, start, end }),
     /** Hazırlanan kopyayı yeniden panoya koyar. */

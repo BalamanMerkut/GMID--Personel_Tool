@@ -83,16 +83,30 @@ fn json_al(
     Ok((kod, serde_json::from_str(&metin).unwrap_or(Value::Null)))
 }
 
+/// Paylaşılan klibin akışta görünen bilgileri.
+pub struct KlipBilgi<'a> {
+    pub ad: &'a str,
+    pub oyun: Option<&'a str>,
+    /// Kısa açıklama.
+    pub not: Option<&'a str>,
+    /// Süre (saniye).
+    pub sure: Option<f64>,
+}
+
 /// Klibi GMID sunucusuna yükler (önce kapağı); akışta 7 gün görünür. Dönen: sunucunun cevabı (`id`, `url`, `bitis`).
 pub fn klip_yukle(
     sunucu: &str,
     anahtar: &str,
     video: &std::path::Path,
     kapak: Option<&std::path::Path>,
-    ad: &str,
-    oyun: Option<&str>,
-    sure: Option<f64>,
+    b: &KlipBilgi,
 ) -> Result<Value, String> {
+    let KlipBilgi {
+        ad,
+        oyun,
+        not,
+        sure,
+    } = *b;
     let sunucu = adres(sunucu)?;
     let yetki = format!("Bearer {anahtar}");
     let ajan = crate::net::agent(Duration::from_secs(15), Duration::from_secs(120));
@@ -112,6 +126,9 @@ pub fn klip_yukle(
     let mut url = format!("{sunucu}/api/klip?ad={}", kodla(ad));
     if let Some(o) = oyun.filter(|o| !o.trim().is_empty()) {
         url += &format!("&oyun={}", kodla(o));
+    }
+    if let Some(n) = not.map(str::trim).filter(|n| !n.is_empty()) {
+        url += &format!("&not={}", kodla(n));
     }
     if let Some(s) = sure.filter(|s| s.is_finite() && *s > 0.0) {
         url += &format!("&sure={s:.1}");

@@ -65,8 +65,9 @@ export interface Olay {
   veri: Partial<Puan> & {
     ad: string;
     kapak?: string | null;
-    /** Klip: video adresi ("/klip/….mp4"), oyun, süre (sn), silineceği an (ms). */
+    /** Klip: video adresi ("/klip/….mp4"), oyun, açıklama, süre (sn), silineceği an (ms). */
     url?: string;
+    not?: string | null;
     oyun?: string | null;
     sure?: number | null;
     bitis?: number;
@@ -527,10 +528,26 @@ export function sosyalBaslat() {
   if (sosyal.anahtar) baslat();
 }
 
-/** Klibi Sosyal'de paylaş (tek tık): küçültülür, sunucuya yüklenir; 7 gün sonra video da paylaşım da silinir. */
-export async function klipPaylas(id: string, ad: string | null, oyun: string | null) {
+/** Klibi Sosyal'de paylaş: (seçilen bölüm) küçültülür, sunucuya yüklenir; 7 gün sonra video da paylaşım da silinir. */
+export async function klipPaylas(p: {
+  id: string;
+  ad: string | null;
+  oyun: string | null;
+  not: string | null;
+  start: number | null;
+  end: number | null;
+}) {
   if (!sosyal.anahtar) throw new Error("Önce Topluluk'tan Discord ile giriş yap");
-  const r = await api.clips.shareSocial(id, sosyal.sunucu, sosyal.anahtar, ad, oyun);
+  const r = await api.clips.shareSocial({
+    id: p.id,
+    server: sosyal.sunucu,
+    token: sosyal.anahtar,
+    title: p.ad,
+    game: p.oyun,
+    note: p.not,
+    start: p.start,
+    end: p.end,
+  });
   sosyal.akisSurum++;
   return r;
 }
