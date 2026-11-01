@@ -42,10 +42,13 @@ pub async fn profil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<S
         .ok_or_else(|| hata(StatusCode::NOT_FOUND, "Böyle biri yok"))?;
     let (p, t) = db.profil(&id).unzip();
     let c = s.durum.kisi(&id);
+    // Başkalarından alınan beğeni ve yorumlar (süresi dolup silinen kliplerinki dahil).
+    let puan = db.toplam_puan(&id);
     Ok(Json(json!({
         "kisi": k, "cevrimici": c.is_some(), "oyun": c.and_then(|c| c.oyun),
         "profil": p, "guncelleme": t,
         "iliski": db.iliski(&ben.id, &id), "arkadas": db.arkadas_sayisi(&id),
+        "begeni": puan.0, "yorum": puan.1,
     })))
 }
 
@@ -147,11 +150,21 @@ pub async fn etkinlik_sil(
     Path(id): Path<i64>,
 ) -> Sonuc {
     let ben = kim(&s, &h)?;
-    if !s.db().etkinlik_sil(&ben.id, id).map_err(ic)? {
+    let silinen = s.db().etkinlik_sil(&ben.id, id).map_err(ic)?;
+    let Some((tur, veri)) = silinen else {
         return Err(hata(
             StatusCode::FORBIDDEN,
             "Yalnız kendi paylaşımını silebilirsin",
         ));
+    };
+    if tur == "klip" {
+        if let Some(ozet) = veri["url"]
+            .as_str()
+            .and_then(|u| u.strip_prefix("/klip/"))
+            .and_then(|u| u.strip_suffix(".mp4"))
+        {
+            crate::klip::dosyayi_sil(&s, ozet);
+        }
     }
     s.durum.yay(json!({ "tip": "akis" }));
     Ok(Json(json!({})))

@@ -1,6 +1,6 @@
 [package]
 name = "gmid-sunucu"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "GMID sunucusu: Discord ile giriş, kim çevrim içi / ne oynuyor (ileride sohbet, ortak arşiv, oyun gecesi)"
 publish = false
@@ -14,7 +14,7 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 ureq = { version = "3", features = ["json"] }
 getrandom = "0.3"
 sha2 = "0.10"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
 
 [profile.release]
 opt-level = "s"

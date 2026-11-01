@@ -51,6 +51,21 @@ UNIT
   systemctl enable --now gmid-guncelle.timer >/dev/null 2>&1
   yaz "Gece otomatik güncelleme açıldı (her gece ~04:30, yalnız yeni sürüm varsa)."
 fi
+
+# ---------- nginx: klip yükleme sınırı (eski kurulumlarda yoktu; yalnız GMID'in kendi dosyası) ----------
+for NG in /etc/nginx/sites-available/gmid-sunucu /etc/nginx/conf.d/gmid-sunucu.conf; do
+  [ -f "$NG" ] && command -v nginx >/dev/null || continue
+  grep -q client_max_body_size "$NG" && continue
+  grep -q "proxy_read_timeout 3600s;" "$NG" || continue
+  cp -f "$NG" "$gecici/nginx-yedek"
+  sed -i 's/^\( *\)proxy_read_timeout 3600s;/&\n\1client_max_body_size 64m;/' "$NG"
+  if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx && yaz "nginx: klip yükleme sınırı 64 MB yapıldı."
+  else
+    cp -f "$gecici/nginx-yedek" "$NG"
+    yaz "nginx ayarı denetimden geçmedi; dokunulmadı."
+  fi
+done
 [ "$KIP" = "--kur" ] && exit 0
 
 # ---------- yeni sürüm var mı? ----------

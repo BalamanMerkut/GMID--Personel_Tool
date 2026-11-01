@@ -453,6 +453,7 @@ pub fn run() {
             commands::clips::clips_open,
             commands::clips::clips_reveal,
             commands::clips::clips_fit_discord,
+            commands::clips::clips_share_social,
             commands::clips::clips_choices,
             commands::clips::clips_ready_copy,
             commands::clips::clips_ready_reveal,

@@ -2,10 +2,10 @@
   // Akıştaki bir paylaşım: kim, ne yaptı (puanladı / izledi / oynamaya başladı), konu kartı, beğeni ve yorumlar.
   import Icon from "../../Icon.svelte";
   import { notify } from "../../toast.svelte";
-  import { istek, profilGoster, sosyal, type Olay } from "../../social.svelte";
+  import { istek, profilGoster, sosyal, tamAdres, type Olay } from "../../social.svelte";
   import Avatar from "./Avatar.svelte";
   import Cover from "./Cover.svelte";
-  import { eylem, once, puanYaz, TUR_AD } from "./metin";
+  import { eylem, kalan, once, puanYaz, sure, TUR_AD } from "./metin";
 
   let { o, ondegisti, onsil }: { o: Olay; ondegisti: () => void; onsil: (o: Olay) => void } = $props();
   let taslak = $state("");
@@ -57,6 +57,18 @@
       <button class="ic" title="Paylaşımı kaldır" aria-label="Paylaşımı kaldır" onclick={() => onsil(o)}><Icon name="trash" size={15} /></button>
     {/if}
   </header>
+  {#if o.tur === "klip"}
+    <!-- Paylaşılan klip: 7 gün durur, sonra video da paylaşım da silinir (beğeniler profilde kalır). -->
+    <div class="klip">
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video src={tamAdres(o.veri.url)} poster={tamAdres(o.veri.kapak) ?? undefined} controls preload="metadata" playsinline></video>
+    </div>
+    <div class="klip-alt">
+      <b>{o.veri.ad}</b>
+      <span class="sub small">{[o.veri.oyun, o.veri.sure ? sure(o.veri.sure) : null].filter(Boolean).join(" · ")}</span>
+      <span class="kalan" title="Klipler 7 gün sonra silinir; aldığı beğeniler profilinde kalır"><Icon name="clock" size={13} />{kalan(o.veri.bitis ?? o.zaman + 7 * 86400000)}</span>
+    </div>
+  {:else}
   <div class="konu">
     <Cover url={o.veri.kapak} ad={o.veri.ad} en="58px" kose={8} />
     <div class="konu-yazi">
@@ -66,6 +78,7 @@
     </div>
     {#if puanYaz(o.veri.puan)}<span class="puan tnum">{puanYaz(o.veri.puan)}</span>{/if}
   </div>
+  {/if}
   <footer>
     <button class="eylem" class:begendi={o.begendim} onclick={begen} aria-pressed={o.begendim} title="Beğen">
       <Icon name="heart" size={16} /><span class="tnum">{o.begeni || ""}</span>
@@ -104,6 +117,11 @@
   .ad { border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--text); cursor: pointer; }
   .ad:hover { color: var(--gold-glow); }
   .zaman { font-size: 12px; color: var(--dim); }
+  .klip { border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
+  .klip video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }
+  .klip-alt { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 0 2px; }
+  .klip-alt b { font-size: 15px; }
+  .kalan { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); }
   .konu { display: flex; align-items: center; gap: 13px; padding: 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.18); }
   .konu-yazi { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
   .konu-yazi b { font-size: 15px; }

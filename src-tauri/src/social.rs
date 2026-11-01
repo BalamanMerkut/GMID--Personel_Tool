@@ -83,6 +83,62 @@ fn json_al(
     Ok((kod, serde_json::from_str(&metin).unwrap_or(Value::Null)))
 }
 
+/// Klibi GMID sunucusuna yükler (önce kapağı); akışta 7 gün görünür. Dönen: sunucunun cevabı (`id`, `url`, `bitis`).
+pub fn klip_yukle(
+    sunucu: &str,
+    anahtar: &str,
+    video: &std::path::Path,
+    kapak: Option<&std::path::Path>,
+    ad: &str,
+    oyun: Option<&str>,
+    sure: Option<f64>,
+) -> Result<Value, String> {
+    let sunucu = adres(sunucu)?;
+    let yetki = format!("Bearer {anahtar}");
+    let ajan = crate::net::agent(Duration::from_secs(15), Duration::from_secs(120));
+    let kapak_url = kapak
+        .and_then(|k| std::fs::read(k).ok())
+        .filter(|b| !b.is_empty() && b.len() <= 400 * 1024)
+        .and_then(|b| {
+            let r = ajan
+                .post(&format!("{sunucu}/api/resim"))
+                .header("Authorization", &yetki)
+                .header("Content-Type", "image/jpeg")
+                .send(&b[..]);
+            json_al(r, "Kapak").ok()
+        })
+        .and_then(|(kod, v)| (kod == 200).then(|| v["url"].as_str().map(String::from))?);
+    let govde = std::fs::read(video).map_err(|e| format!("Klip okunamadı: {e}"))?;
+    let mut url = format!("{sunucu}/api/klip?ad={}", kodla(ad));
+    if let Some(o) = oyun.filter(|o| !o.trim().is_empty()) {
+        url += &format!("&oyun={}", kodla(o));
+    }
+    if let Some(s) = sure.filter(|s| s.is_finite() && *s > 0.0) {
+        url += &format!("&sure={s:.1}");
+    }
+    if let Some(k) = kapak_url {
+        url += &format!("&kapak={}", kodla(&k));
+    }
+    let r = ajan
+        .post(&url)
+        .header("Authorization", &yetki)
+        .header("Content-Type", "video/mp4")
+        .send(&govde[..]);
+    let (kod, v) = json_al(r, "Klip")?;
+    match kod {
+        200 => Ok(v),
+        413 if v["hata"].is_null() => Err(
+            "Sunucu klibi kabul etmedi (yükleme sınırı). Sunucuda bir kez gmid-guncelle çalıştırılmalı."
+                .into(),
+        ),
+        401 => Err("Oturum kapanmış; Topluluk'tan yeniden giriş yap".into()),
+        _ => Err(v["hata"]
+            .as_str()
+            .map(String::from)
+            .unwrap_or_else(|| format!("Klip yüklenemedi ({kod})"))),
+    }
+}
+
 const SAYFA: &str = r#"<!doctype html><meta charset="utf-8"><title>GMID</title>
 <body style="font-family:system-ui;background:#16181c;color:#eee;display:grid;place-items:center;height:100vh;margin:0">
 <div style="text-align:center"><h2 style="color:#e3c270">{BASLIK}</h2><p>{METIN}</p></div></body>"#;

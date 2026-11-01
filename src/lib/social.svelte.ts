@@ -61,8 +61,16 @@ export interface Yorum {
 export interface Olay {
   id: number;
   kisi: Kisi;
-  tur: "puan" | "oyun";
-  veri: Partial<Puan> & { ad: string; kapak?: string | null };
+  tur: "puan" | "oyun" | "klip";
+  veri: Partial<Puan> & {
+    ad: string;
+    kapak?: string | null;
+    /** Klip: video adresi ("/klip/….mp4"), oyun, süre (sn), silineceği an (ms). */
+    url?: string;
+    oyun?: string | null;
+    sure?: number | null;
+    bitis?: number;
+  };
   zaman: number;
   begeni: number;
   begendim: boolean;
@@ -517,4 +525,12 @@ export function sosyalBaslat() {
   sosyal.paylas = { ...sosyal.paylas, ...getJson<Partial<Paylasim>>(PAYLAS, {}) };
   sosyal.oyunHaberi = getJson<boolean>(OYUN_HABERI, true);
   if (sosyal.anahtar) baslat();
+}
+
+/** Klibi Sosyal'de paylaş (tek tık): küçültülür, sunucuya yüklenir; 7 gün sonra video da paylaşım da silinir. */
+export async function klipPaylas(id: string, ad: string | null, oyun: string | null) {
+  if (!sosyal.anahtar) throw new Error("Önce Topluluk'tan Discord ile giriş yap");
+  const r = await api.clips.shareSocial(id, sosyal.sunucu, sosyal.anahtar, ad, oyun);
+  sosyal.akisSurum++;
+  return r;
 }

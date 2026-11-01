@@ -167,7 +167,7 @@ pub fn list(db: &Db) -> Result<Vec<Clip>, String> {
 pub const DL_PREFIX: &str = "dl:";
 
 /// Klip ya da (kimlik "dl:" ile başlıyorsa) indirilen video.
-fn lookup(db: &Db, id: &str) -> Result<Clip, String> {
+pub fn lookup(db: &Db, id: &str) -> Result<Clip, String> {
     let Some(dl) = id.strip_prefix(DL_PREFIX) else {
         return get(db, id);
     };
@@ -507,6 +507,28 @@ impl Clips {
         id: &str,
         opts: FitOptions,
     ) -> Result<FitResult, String> {
+        self.fit(app, id, opts, true)
+    }
+
+    /// Sosyal'de paylaşmak için kopya: her yerde oynayan H.264 MP4, en çok 50 MB; panoya konmaz.
+    /// Klip zaten küçük olsa da yeniden kodlanır (HEVC/MKV kayıtlar uygulamanın oynatıcısında açılmayabilir).
+    pub fn fit_for_share(&self, app: &AppHandle, id: &str) -> Result<FitResult, String> {
+        let opts = FitOptions {
+            limit_mb: Some(SHARE_MB),
+            codec: media::Codec::H264,
+            keep: false,
+            ..FitOptions::default()
+        };
+        self.fit(app, id, opts, false)
+    }
+
+    fn fit(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        opts: FitOptions,
+        copy: bool,
+    ) -> Result<FitResult, String> {
         let db = app.state::<Db>();
         let clip = lookup(&db, id)?;
         let src = PathBuf::from(&clip.path);
@@ -516,7 +538,7 @@ impl Clips {
         let limit = opts.limit_mb.map(|mb| mb as u64 * 1_000_000);
         let trimmed = opts.start.is_some_and(|s| s > 0.05) || opts.end.is_some();
         // Kırpılmıyor ve zaten sığıyorsa kendisi.
-        if !trimmed {
+        if !trimmed && copy {
             if let Some(l) = limit {
                 if clip.size as u64 <= l {
                     win::copy_file(&src)?;
@@ -601,7 +623,7 @@ impl Clips {
             let plan = media::encode(&ff, &src, &out, &job, &move |p| {
                 let _ = app2.emit("clip-fit", serde_json::json!({ "id": id2, "progress": p }));
             })?;
-            if limit.is_some() {
+            if limit.is_some() && copy {
                 win::copy_file(&out)?;
             }
             let size = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
@@ -951,6 +973,9 @@ pub fn choices(
     }
     out
 }
+
+/// Sosyal'de paylaşılan klibin en büyük boyutu (MB); sunucu 60 MB'a kadar kabul eder.
+pub const SHARE_MB: u32 = 50;
 
 fn default_limit() -> Option<u32> {
     Some(10)

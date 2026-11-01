@@ -21,6 +21,7 @@ export const puanYaz = (p: number | null | undefined) =>
 /** "bir diziyi puanladı", "bir oyunu bitirdi", "oynamaya başladı" … */
 export function eylem(o: Olay): string {
   if (o.tur === "oyun") return "oynamaya başladı";
+  if (o.tur === "klip") return o.veri.oyun ? `${o.veri.oyun} klibi paylaştı` : "bir klip paylaştı";
   const v = o.veri;
   const nesne: Record<string, [string, string]> = {
     game: ["bir oyunu", "bir oyun"],
@@ -41,3 +42,12 @@ export function eylem(o: Olay): string {
 
 /** Dakikayı "124 sa" ya da "35 dk" yazar. */
 export const saat = (dk: number) => (dk >= 60 ? `${Math.round(dk / 60).toLocaleString("tr-TR")} sa` : `${dk} dk`);
+
+/** Klibin silinmesine kalan süre: "6 gün sonra silinir", "bugün silinir". */
+export function kalan(bitis: number): string {
+  const gun = Math.ceil((bitis - Date.now()) / 86400000);
+  return gun > 1 ? `${gun} gün sonra silinir` : gun === 1 ? "yarın silinir" : "bugün silinir";
+}
+
+/** Saniyeyi "1:05" yazar. */
+export const sure = (sn: number) => `${Math.floor(sn / 60)}:${String(Math.floor(sn % 60)).padStart(2, "0")}`;

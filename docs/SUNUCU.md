@@ -127,6 +127,8 @@ Discord uygulaması bunun için de kullanılır:
   `DELETE /api/yorum/{id}` (kendi yorumu ya da kendi paylaşımının altındaki)
 - `GET /api/konusmalar`, `GET /api/mesaj/{id}?once=<mesaj id>` (okundu yapar), `POST /api/mesaj/{id} {metin}`
 - `POST /api/resim` (≤400 KB JPEG/PNG/WebP/GIF, gövde = resim) → `{url:"/resim/<sha256>.jpg"}`; `GET /resim/{ad}`
+- `POST /api/klip?ad=&oyun=&sure=&kapak=` (0.5; gövde = MP4, ≤60 MB) → akışa `klip` olayı, `{id, url:"/klip/<sha256>.mp4", bitis}`; `GET /klip/{ad}` (Range ile ileri sarılır). Klipler **7 gün** sonra video ve paylaşım olarak silinir (saatte bir denetlenir); başkalarından aldığı beğeni/yorumlar `kalici_puan` tablosunda kalır, `GET /api/profil/{id}` → `begeni`, `yorum`. Kişi başı aynı anda en çok 10 klip, toplam 5 GB.
+- nginx: klip yükleme için `client_max_body_size 64m` gerekir; `kur.sh` yazar, eski kurulumlarda `sudo gmid-guncelle` bir kez çalışınca kendi ekler (yalnız GMID'in site dosyasına, `nginx -t` ile denetleyip).
 - WebSocket'te ek: `akis` (akış değişti), `mesaj`, `okundu`, `bildirim` (paylaşımıma beğeni/yorum)
 - Oyuna girince akışa "oynuyor" (aynı oyun 12 saatte bir)
 

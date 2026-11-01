@@ -87,6 +87,46 @@ pub async fn clips_fit_discord(
     .map_err(|e| e.to_string())?
 }
 
+/// Klibi Sosyal'de paylaş: küçültülür (H.264, en çok 50 MB; ilerleme "clip-fit" olayıyla), sonra GMID
+/// sunucusuna yüklenir. Akışta 7 gün görünür; aldığı beğeniler profilde kalır.
+#[tauri::command]
+pub async fn clips_share_social(
+    app: AppHandle,
+    id: String,
+    server: String,
+    token: String,
+    title: Option<String>,
+    game: Option<String>,
+) -> CmdResult<serde_json::Value> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let clip = clips::lookup(&app.state::<Db>(), &id)?;
+        if clip.kind != "clip" {
+            return Err("Yalnız video klipler paylaşılabilir".to_string());
+        }
+        let hazir = app.state::<Clips>().fit_for_share(&app, &id)?;
+        let ad = title
+            .filter(|t| !t.trim().is_empty())
+            .or(clip.title.clone())
+            .unwrap_or(clip.name.clone());
+        let sonuc = crate::social::klip_yukle(
+            &server,
+            &token,
+            std::path::Path::new(&hazir.path),
+            clip.thumb.as_deref().map(std::path::Path::new),
+            &ad,
+            game.as_deref(),
+            clip.duration,
+        );
+        // Yüklenen kopya artık gerekmiyor (klibin kendisi yerinde duruyor).
+        if !hazir.original {
+            let _ = std::fs::remove_file(&hazir.path);
+        }
+        sonuc
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Seçime göre beklenen çözünürlük, kare hızı ve netlik.
 #[tauri::command]
 pub fn clips_plan(

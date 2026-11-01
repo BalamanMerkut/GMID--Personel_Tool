@@ -18,6 +18,9 @@
     profil: Profil | null;
     iliski: Kisi["iliski"];
     arkadas: number;
+    /** Başkalarından alınan beğeni ve yorum (süresi dolup silinen kliplerinki dahil). */
+    begeni?: number;
+    yorum?: number;
   }
 
   let veri = $state<Yanit | null>(null);
@@ -230,6 +233,7 @@
           <div class="sayi"><span>Dizi</span><b class="tnum">{SAYI(p.puanlar.filter((x) => x.tur === "series").length)}</b></div>
           {#if ortalama != null}<div class="sayi"><span>Ortalama puan</span><b class="tnum altin">{puanYaz(ortalama)}</b></div>{/if}
           <div class="sayi"><span>Arkadaş</span><b class="tnum">{SAYI(veri.arkadas)}</b></div>
+          <div class="sayi" title="Paylaşımlarına gelen beğeniler (silinen kliplerinki de sayılır)"><span>Aldığı beğeni</span><b class="tnum kirmizi">{SAYI(veri.begeni ?? 0)}</b></div>
         </section>
         {#if benim && sosyal.arkadaslar.length}
           <section class="kutu">
@@ -263,6 +267,7 @@
   .durum.oyunda i { background: #8b7cf6; box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.25); }
   .dugmeler { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
   .sm { padding: 6px 12px; font-size: 13px; }
+  .kirmizi { color: #ff7a7e; }
   .seviye { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(227, 194, 112, 0.35); }
   .seviye span { font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
   .seviye b { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-family: var(--f-display); border: 2px solid var(--gold); color: var(--gold-glow); }

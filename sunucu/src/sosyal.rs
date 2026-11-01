@@ -12,6 +12,8 @@ const TAZE_MS: i64 = 7 * 24 * 3600 * 1000;
 /// Aynı oyunu yeniden açmak bu süre geçmeden akışa yeni olay olarak düşmez.
 const OYUN_ARA_MS: i64 = 12 * 3600 * 1000;
 pub const METIN_SINIRI: usize = 1000;
+/// Paylaşılan klip bu kadar sonra (video da, paylaşım da) silinir; aldığı beğeniler profilde kalır.
+pub const KLIP_OMRU_MS: i64 = 7 * 24 * 3600 * 1000;
 
 pub fn kur(c: &Connection) -> rusqlite::Result<()> {
     c.execute_batch(
@@ -47,7 +49,11 @@ pub fn kur(c: &Connection) -> rusqlite::Result<()> {
            -- istek | arkadas
            durum TEXT NOT NULL, zaman INTEGER NOT NULL,
            PRIMARY KEY (kimden, kime));
-         CREATE INDEX IF NOT EXISTS arkadas_kime ON arkadaslar (kime);",
+         CREATE INDEX IF NOT EXISTS arkadas_kime ON arkadaslar (kime);
+         -- Silinen paylaşımların (süresi dolan klipler dahil) aldığı beğeni ve yorumlar: profilde kalır.
+         CREATE TABLE IF NOT EXISTS kalici_puan (
+           kullanici TEXT PRIMARY KEY REFERENCES kullanicilar(id) ON DELETE CASCADE,
+           begeni INTEGER NOT NULL DEFAULT 0, yorum INTEGER NOT NULL DEFAULT 0);",
     )
 }
 
@@ -134,7 +140,7 @@ pub struct Yorum {
 pub struct Etkinlik {
     pub id: i64,
     pub kisi: Kullanici,
-    /// puan | oyun
+    /// puan | oyun | klip
     pub tur: String,
     pub veri: Value,
     pub zaman: i64,
@@ -483,6 +489,7 @@ impl Db {
                    EXISTS (SELECT 1 FROM begeniler b WHERE b.etkinlik = e.id AND b.kullanici = ?1)
                  FROM etkinlikler e JOIN kullanicilar k ON k.id = e.kullanici
                  WHERE (?2 IS NULL OR e.zaman < ?2) AND (?3 IS NULL OR e.kullanici = ?3)
+                   AND (e.tur != 'klip' OR e.zaman > ?6)
                    AND (?5 = 0 OR e.kullanici = ?1 OR EXISTS (SELECT 1 FROM arkadaslar a WHERE a.durum = 'arkadas'
                         AND ((a.kimden = ?1 AND a.kime = e.kullanici) OR (a.kime = ?1 AND a.kimden = e.kullanici))))
                  ORDER BY e.zaman DESC, e.id DESC LIMIT ?4",
@@ -490,7 +497,14 @@ impl Db {
             .map_err(e)?;
         let mut l: Vec<Etkinlik> = st
             .query_map(
-                params![ben, once, kisi, sayi.clamp(1, 100), arkadaslar as i64],
+                params![
+                    ben,
+                    once,
+                    kisi,
+                    sayi.clamp(1, 100),
+                    arkadaslar as i64,
+                    simdi() - KLIP_OMRU_MS
+                ],
                 |r| {
                     Ok(Etkinlik {
                         id: r.get(0)?,
@@ -583,15 +597,110 @@ impl Db {
         Ok(n > 0)
     }
 
-    pub fn etkinlik_sil(&self, ben: &str, id: i64) -> R<bool> {
-        let n = self
+    /// Kendi paylaşımını siler (aldığı beğeni ve yorumlar profilde kalır). Silindiyse olayın türü ve verisi.
+    pub fn etkinlik_sil(&self, ben: &str, id: i64) -> R<Option<(String, Value)>> {
+        let olay: Option<(String, String)> = self
             .0
-            .execute(
-                "DELETE FROM etkinlikler WHERE id = ?1 AND kullanici = ?2",
+            .query_row(
+                "SELECT tur, veri FROM etkinlikler WHERE id = ?1 AND kullanici = ?2",
                 params![id, ben],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(e)?;
+        let Some((tur, veri)) = olay else {
+            return Ok(None);
+        };
+        self.kaldir(id)?;
+        Ok(Some((
+            tur,
+            serde_json::from_str(&veri).unwrap_or(Value::Null),
+        )))
+    }
+
+    /// Olayı siler; başkalarından aldığı beğeni ve yorumlar önce sahibinin kalıcı puanına eklenir.
+    fn kaldir(&self, id: i64) -> R<()> {
+        self.0
+            .execute(
+                "INSERT INTO kalici_puan (kullanici, begeni, yorum)
+                 SELECT e.kullanici,
+                   (SELECT COUNT(*) FROM begeniler b WHERE b.etkinlik = e.id AND b.kullanici != e.kullanici),
+                   (SELECT COUNT(*) FROM yorumlar y WHERE y.etkinlik = e.id AND y.kullanici != e.kullanici)
+                 FROM etkinlikler e WHERE e.id = ?1
+                 ON CONFLICT(kullanici) DO UPDATE SET begeni = begeni + excluded.begeni,
+                   yorum = yorum + excluded.yorum",
+                [id],
             )
             .map_err(e)?;
-        Ok(n > 0)
+        self.0
+            .execute("DELETE FROM etkinlikler WHERE id = ?1", [id])
+            .map_err(e)?;
+        Ok(())
+    }
+
+    /// Kişinin başkalarından aldığı toplam beğeni ve yorum (silinen paylaşımlarınki dahil).
+    pub fn toplam_puan(&self, id: &str) -> (i64, i64) {
+        self.0
+            .query_row(
+                "SELECT
+                   COALESCE((SELECT begeni FROM kalici_puan WHERE kullanici = ?1), 0)
+                   + (SELECT COUNT(*) FROM begeniler b JOIN etkinlikler e ON e.id = b.etkinlik
+                      WHERE e.kullanici = ?1 AND b.kullanici != ?1),
+                   COALESCE((SELECT yorum FROM kalici_puan WHERE kullanici = ?1), 0)
+                   + (SELECT COUNT(*) FROM yorumlar y JOIN etkinlikler e ON e.id = y.etkinlik
+                      WHERE e.kullanici = ?1 AND y.kullanici != ?1)",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap_or((0, 0))
+    }
+
+    /// Klip paylaşımı (aynı klip yeniden paylaşılırsa başa alınır, süresi yeniden başlar).
+    pub fn klip_paylas(&self, id: &str, ozet: &str, veri: &Value) -> R<i64> {
+        self.etkinlik_yaz(id, "klip", &format!("klip:{ozet}"), veri, simdi())
+    }
+
+    /// Kişinin şu an yayında olan klip sayısı.
+    pub fn klip_sayisi(&self, id: &str) -> i64 {
+        self.0
+            .query_row(
+                "SELECT COUNT(*) FROM etkinlikler WHERE kullanici = ?1 AND tur = 'klip' AND zaman > ?2",
+                params![id, simdi() - KLIP_OMRU_MS],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    /// Bu video dosyasını hâlâ bir paylaşım kullanıyor mu (aynı klibi iki kişi paylaşmış olabilir)?
+    pub fn klip_kullaniliyor(&self, ozet: &str) -> bool {
+        self.0
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM etkinlikler WHERE tur = 'klip' AND anahtar = ?1)",
+                [format!("klip:{ozet}")],
+                |r| r.get(0),
+            )
+            .unwrap_or(true)
+    }
+
+    /// Süresi dolan klip paylaşımlarını siler (puanları kalır). Dönen: silinen videoların özetleri.
+    pub fn eski_klipleri_sil(&self, simdi: i64) -> R<Vec<String>> {
+        let mut st = self
+            .0
+            .prepare("SELECT id, anahtar FROM etkinlikler WHERE tur = 'klip' AND zaman <= ?1")
+            .map_err(e)?;
+        let l: Vec<(i64, String)> = st
+            .query_map([simdi - KLIP_OMRU_MS], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(e)?
+            .filter_map(Result::ok)
+            .collect();
+        let mut ozetler = Vec::new();
+        for (id, anahtar) in l {
+            self.kaldir(id)?;
+            if let Some(o) = anahtar.strip_prefix("klip:") {
+                ozetler.push(o.to_string());
+            }
+        }
+        Ok(ozetler)
     }
 
     pub fn mesaj_yaz(&self, kimden: &str, kime: &str, metin: &str) -> R<Mesaj> {

@@ -8,6 +8,7 @@ mod ayar;
 mod db;
 mod discord;
 mod durum;
+mod klip;
 mod sayfa;
 mod sosyal;
 mod sosyal_api;
@@ -40,9 +41,20 @@ impl Sunucu {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join("resim")
     }
+
+    /// Paylaşılan klipler (7 gün durur).
+    pub fn klip_klasoru(&self) -> std::path::PathBuf {
+        self.ayar
+            .veritabani
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("klip")
+    }
 }
 
 pub fn uygulama(s: Arc<Sunucu>) -> Router {
+    // Videolar parça parça (Range) gönderilir: oynatıcıda ileri sarılabilir.
+    let klipler = tower_http::services::ServeDir::new(s.klip_klasoru());
     Router::new()
         .route("/", get(sayfa::ana))
         .route("/indir", get(sayfa::indir))
@@ -72,6 +84,11 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         )
         .route("/api/resim", post(sosyal_api::resim_yukle))
         .route("/resim/{ad}", get(sosyal_api::resim))
+        .route(
+            "/api/klip",
+            post(klip::yukle).layer(axum::extract::DefaultBodyLimit::max(klip::KLIP_SINIRI)),
+        )
+        .nest_service("/klip", klipler)
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         // GMID Tool'un penceresi (tauri.localhost) sunucuya doğrudan istek atar. Giriş çerez değil
         // Authorization başlığıyla olduğu için her kaynağa izin vermek güvenlidir.
@@ -131,6 +148,20 @@ async fn main() {
             }
         }
     });
+    // Süresi dolan klipler (7 gün) saatte bir silinir; aldıkları beğeniler profilde kalır.
+    let s3 = s.clone();
+    tokio::spawn(async move {
+        let mut t = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            t.tick().await;
+            let s4 = s3.clone();
+            if let Ok(n) = tokio::task::spawn_blocking(move || klip::temizle(&s4)).await {
+                if n > 0 {
+                    eprintln!("{n} eski klip silindi");
+                }
+            }
+        }
+    });
     let dinleyici = match tokio::net::TcpListener::bind(adres).await {
         Ok(l) => l,
         Err(e) => {
@@ -161,7 +192,14 @@ mod tests {
         Arc::new(Sunucu {
             ayar: ayar::Ayar {
                 adres: "127.0.0.1:0".parse().unwrap(),
-                veritabani: ":memory:".into(),
+                // Resim ve klip klasörleri bunun yanında: her deneme kendi geçici klasöründe.
+                veritabani: std::env::temp_dir()
+                    .join(format!(
+                        "gmid-deneme-{}-{:?}",
+                        std::process::id(),
+                        std::thread::current().id()
+                    ))
+                    .join("gmid.db"),
                 discord: None,
             },
             db: Mutex::new(db::Db::bellekte()),
@@ -246,6 +284,74 @@ mod tests {
             .to_str()
             .unwrap()
             .ends_with("GMID-Tool-Kurulum.exe"));
+    }
+
+    #[tokio::test]
+    async fn klip_paylas_sil_puan_kalir() {
+        let s = sunucu();
+        let ali = db::Kullanici {
+            id: "1".into(),
+            ad: "Ali".into(),
+            avatar: None,
+        };
+        let veli = db::Kullanici {
+            id: "2".into(),
+            ad: "Veli".into(),
+            avatar: None,
+        };
+        let a = s.db().giris(&ali).unwrap();
+        let v = s.db().giris(&veli).unwrap();
+        let yetki = |k: &str| format!("Bearer {k}");
+        // Video olmayan reddedilir.
+        let (kod, _) = iste(
+            &s,
+            Request::post("/api/klip")
+                .header("authorization", yetki(&a))
+                .body(Body::from("<html>"))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::BAD_REQUEST);
+        // 3 MB'lık "video" (genel 2 MB sınırına takılmaz).
+        let mut govde = b"\0\0\0\x20ftypisom".to_vec();
+        govde.resize(3 * 1024 * 1024, 7);
+        let (kod, cevap) = iste(
+            &s,
+            Request::post("/api/klip?ad=Ace&oyun=Valorant&sure=12.5")
+                .header("authorization", yetki(&a))
+                .body(Body::from(govde))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK, "{cevap}");
+        let id = cevap["id"].as_i64().unwrap();
+        let akis = s.db().akis("2", None, None, 10).unwrap();
+        assert_eq!(akis[0].tur, "klip");
+        assert_eq!(akis[0].veri["oyun"], "Valorant");
+        // Veli beğenir, Ali kendi klibini beğenir (kendi beğenisi puana sayılmaz).
+        s.db().begen("2", id).unwrap();
+        s.db().begen("1", id).unwrap();
+        assert_eq!(s.db().toplam_puan("1"), (1, 0));
+        // 7 gün geçti: paylaşım akıştan düşer, temizlikte silinir; beğeni kalır.
+        s.db()
+            .0
+            .execute(
+                "UPDATE etkinlikler SET zaman = zaman - ?1",
+                [sosyal::KLIP_OMRU_MS + 1],
+            )
+            .unwrap();
+        assert!(s.db().akis("2", None, None, 10).unwrap().is_empty());
+        assert_eq!(klip::temizle(&s), 1);
+        assert_eq!(s.db().toplam_puan("1"), (1, 0));
+        let (_, p) = iste(
+            &s,
+            Request::get("/api/profil/1")
+                .header("authorization", yetki(&v))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(p["begeni"], 1);
     }
 
     #[tokio::test]
