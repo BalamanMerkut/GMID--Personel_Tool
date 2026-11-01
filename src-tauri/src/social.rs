@@ -109,7 +109,7 @@ pub fn klip_yukle(
     } = *b;
     let sunucu = adres(sunucu)?;
     let yetki = format!("Bearer {anahtar}");
-    let ajan = crate::net::agent(Duration::from_secs(15), Duration::from_secs(120));
+    let ajan = crate::net::agent_upload();
     let kapak_url = kapak
         .and_then(|k| std::fs::read(k).ok())
         .filter(|b| !b.is_empty() && b.len() <= 400 * 1024)

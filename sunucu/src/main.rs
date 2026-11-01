@@ -22,6 +22,8 @@ pub struct Sunucu {
     pub ayar: ayar::Ayar,
     db: Mutex<db::Db>,
     pub durum: durum::Durum,
+    /// Klip yüklemeleri sırayla: kişi başı ve toplam sınır aynı anda gelen yüklemelerle aşılmasın.
+    pub klip_kilidi: tokio::sync::Mutex<()>,
 }
 
 impl Sunucu {
@@ -135,6 +137,7 @@ async fn main() {
         ayar,
         db: Mutex::new(db),
         durum: durum::Durum::default(),
+        klip_kilidi: tokio::sync::Mutex::new(()),
     });
     // Süresi dolan oturumlar günde bir temizlenir.
     let s2 = s.clone();
@@ -204,6 +207,7 @@ mod tests {
             },
             db: Mutex::new(db::Db::bellekte()),
             durum: durum::Durum::default(),
+            klip_kilidi: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -302,6 +306,15 @@ mod tests {
         let a = s.db().giris(&ali).unwrap();
         let v = s.db().giris(&veli).unwrap();
         let yetki = |k: &str| format!("Bearer {k}");
+        // Girişsiz yükleme gövde okunmadan reddedilir.
+        let (kod, _) = iste(
+            &s,
+            Request::post("/api/klip")
+                .body(Body::from(vec![0u8; 3 * 1024 * 1024]))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::UNAUTHORIZED);
         // Video olmayan reddedilir.
         let (kod, _) = iste(
             &s,

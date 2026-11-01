@@ -19,10 +19,15 @@ trap 'rm -rf "$gecici"' EXIT
 yaz() { [ "$KIP" = "--otomatik" ] || echo "$@"; }
 
 # ---------- kendini ve zamanlayıcıyı tazele ----------
-if curl -fsSL "$HAM/guncelle.sh" -o "$gecici/guncelle.sh" && bash -n "$gecici/guncelle.sh"; then
+if [ -z "${GMID_YENI:-}" ] && curl -fsSL "$HAM/guncelle.sh" -o "$gecici/guncelle.sh" && bash -n "$gecici/guncelle.sh"; then
   install -m 755 "$gecici/guncelle.sh" /usr/local/bin/gmid-guncelle.yeni
   # Yeni dosya (yeni inode): şu an çalışan bu betik bozulmaz.
   mv -f /usr/local/bin/gmid-guncelle.yeni /usr/local/bin/gmid-guncelle
+  # Betik değiştiyse işin geri kalanını yenisi yapsın (yeni adımlar, ör. nginx ayarı, aynı çalışmada uygulansın).
+  if ! cmp -s "$gecici/guncelle.sh" "$0" 2>/dev/null; then
+    rm -rf "$gecici"
+    GMID_YENI=1 exec /usr/local/bin/gmid-guncelle "$@"
+  fi
 fi
 if [ ! -f /etc/systemd/system/gmid-guncelle.timer ]; then
   cat > /etc/systemd/system/gmid-guncelle.service <<'UNIT'

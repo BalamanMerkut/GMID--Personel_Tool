@@ -5,9 +5,9 @@
 use crate::api::{hata, kim, Sonuc};
 use crate::sosyal::KLIP_OMRU_MS;
 use crate::Sunucu;
-use axum::body::Bytes;
-use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::body::to_bytes;
+use axum::extract::{Query, Request, State};
+use axum::http::StatusCode;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::json;
@@ -60,20 +60,24 @@ fn klasor_boyutu(k: &Path) -> u64 {
 /// POST /api/klip?ad=…&oyun=…&sure=…&kapak=… (gövde: MP4)
 pub async fn yukle(
     State(s): State<Arc<Sunucu>>,
-    h: HeaderMap,
     Query(q): Query<KlipSorgu>,
-    govde: Bytes,
+    istek: Request,
 ) -> Sonuc {
-    let ben = kim(&s, &h)?;
-    if govde.len() > KLIP_SINIRI {
-        return Err(hata(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "Klip çok büyük (en çok 60 MB)",
-        ));
-    }
+    // Önce giriş: girişsiz istek 60 MB'lık gövde belleğe okunmadan geri çevrilir.
+    let ben = kim(&s, istek.headers())?;
+    let govde = to_bytes(istek.into_body(), KLIP_SINIRI)
+        .await
+        .map_err(|_| {
+            hata(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "Klip çok büyük (en çok 60 MB)",
+            )
+        })?;
     if !video_mu(&govde) {
         return Err(hata(StatusCode::BAD_REQUEST, "Video değil (MP4 olmalı)"));
     }
+    // Sınır denetiminden paylaşım kaydına kadar tek yükleme: aynı anda gelenler sınırı aşamasın.
+    let _sira = s.klip_kilidi.lock().await;
     if s.db().klip_sayisi(&ben.id) >= KISI_BASI {
         return Err(hata(
             StatusCode::TOO_MANY_REQUESTS,

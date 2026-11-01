@@ -638,6 +638,10 @@ impl Clips {
             let id2 = id.to_string();
             let plan = media::encode(&ff, &src, &out, &job, &move |p| {
                 let _ = app2.emit("clip-fit", serde_json::json!({ "id": id2, "progress": p }));
+            })
+            // Yarım kalan kopya klasörde kalmasın.
+            .inspect_err(|_| {
+                let _ = std::fs::remove_file(&out);
             })?;
             if limit.is_some() && copy {
                 win::copy_file(&out)?;

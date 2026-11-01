@@ -45,8 +45,10 @@ export const saat = (dk: number) => (dk >= 60 ? `${Math.round(dk / 60).toLocaleS
 
 /** Klibin silinmesine kalan süre: "6 gün sonra silinir", "bugün silinir". */
 export function kalan(bitis: number): string {
-  const gun = Math.ceil((bitis - Date.now()) / 86400000);
-  return gun > 1 ? `${gun} gün sonra silinir` : gun === 1 ? "yarın silinir" : "bugün silinir";
+  const ms = bitis - Date.now();
+  if (ms <= 86400000) return "bugün silinir";
+  if (ms <= 2 * 86400000) return "yarın silinir";
+  return `${Math.ceil(ms / 86400000)} gün sonra silinir`;
 }
 
 /** Saniyeyi "1:05" yazar. */

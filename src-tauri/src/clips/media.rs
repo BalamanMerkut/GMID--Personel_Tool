@@ -407,7 +407,13 @@ pub fn encode(
             quality: "great",
         });
     };
-    let passlog = std::env::temp_dir().join(format!("gmid-pass-{}", std::process::id()));
+    // Her iş kendi dosyası: aynı anda iki kodlama (Discord + Sosyal) birbirinin istatistiğini ezmesin.
+    static SIRA: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let passlog = std::env::temp_dir().join(format!(
+        "gmid-pass-{}-{}",
+        std::process::id(),
+        SIRA.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     // SVT-AV1'in bit hızı denetimi biraz taşabiliyor: baştan küçük bir pay (yeniden kodlamayı önler).
     let mut factor = if job.codec == Codec::Av1 { 0.93 } else { 1.0 };
     let mut last = None;
