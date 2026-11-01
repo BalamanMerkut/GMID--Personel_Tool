@@ -68,6 +68,9 @@
         {#if community.discord}
           <button class="btn discord" onclick={joinDiscord}><Icon name="discord" size={18} />Discord sunucusuna katıl</button>
         {/if}
+        {#if sosyal.anahtar && sosyal.ben}
+          <button class="btn ghost profilim" onclick={() => profilGoster(null)}><Avatar kisi={sosyal.ben} boy={22} nokta={false} />Profilim</button>
+        {/if}
         {#if !sosyal.anahtar}
           <button class="btn" disabled={sosyal.giriliyor} onclick={giris}>
             <Icon name="users" size={17} />{sosyal.giriliyor ? "Tarayıcıda onay bekleniyor…" : "Discord ile giriş yap"}
@@ -143,6 +146,7 @@
   .hero-dugmeler { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
   .btn.discord { background: #5865f2; border-color: #5865f2; color: #fff; }
   .btn.discord:hover { background: #4752c4; }
+  .profilim { display: inline-flex; align-items: center; gap: 8px; padding-left: 8px; }
   .sayilar { position: relative; display: flex; flex-direction: column; gap: 8px; flex: none; }
   .sayilar div { display: flex; align-items: baseline; gap: 8px; padding: 8px 14px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); min-width: 130px; }
   .sayilar b { font-size: 22px; font-family: var(--f-display); }

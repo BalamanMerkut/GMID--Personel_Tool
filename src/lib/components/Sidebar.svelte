@@ -10,7 +10,8 @@
   import type { UpdateStatus } from "../types";
   import { community, joinDiscord, startCommunity } from "../community.svelte";
   import { dealsBadge, startDealsBadge } from "../dealsBadge.svelte";
-  import { sosyal, sosyalBaslat } from "../social.svelte";
+  import { profilGoster, sosyal, sosyalBaslat } from "../social.svelte";
+  import Avatar from "./social/Avatar.svelte";
 
   let { current, version, onnavigate }: { current: string; version: string; onnavigate: (id: string) => void } = $props();
   const downloading = $derived(activeSummary().count);
@@ -34,7 +35,21 @@
 <aside class="side" aria-label="Malikâne odaları">
   <div class="brand">
     <img src={logo} alt="GMID" />
-    <div class="name"><b>GMID TOOL</b><span lang="en">Game Mansion In Discord</span></div>
+    <div class="name">
+      <div class="baslik">
+        <b>GMID TOOL</b>
+        {#if community.discord}
+          <!-- GMID Discord sunucusuna katıl: başlığın yanında, malikâne renklerinde. -->
+          <button class="dc" onclick={joinDiscord} aria-label="GMID Discord sunucusuna katıl" title="GMID Discord sunucusuna katıl ({community.discord.replace('https://', '')})">
+            <Icon name="discord" size={15} />
+          </button>
+        {/if}
+      </div>
+      <span lang="en">Game Mansion In Discord</span>
+    </div>
+    {#if community.discord}
+      <button class="dc dar" onclick={joinDiscord} aria-label="GMID Discord sunucusuna katıl" title="GMID Discord sunucusuna katıl"><Icon name="discord" size={15} /></button>
+    {/if}
   </div>
   <nav>
     {#each NAV as room, i (i)}
@@ -60,17 +75,37 @@
       {/each}
     {/each}
   </nav>
-  {#if community.discord}
-    <button class="dc" onclick={joinDiscord} title="GMID Discord sunucusuna katıl ({community.discord.replace('https://', '')})">
-      <i class="logo"><Icon name="discord" size={17} /></i><span>GMID'e katıl</span>
-    </button>
-  {/if}
-  {#if update?.available}
-    <button class="upd" onclick={() => onnavigate("settings/hakkinda")} title={update.latest?.title ?? ""}>
-      <Icon name="download" size={15} /><span>Güncelleme var</span>
-    </button>
-  {/if}
-  <div class="foot"><span>Merkut Studios</span><span class="tnum">v{version}{update?.current ? ` · ${update.current}` : ""}</span></div>
+  <div class="alt">
+    {#if update?.available}
+      <button class="upd" onclick={() => onnavigate("settings/hakkinda")} title={update.latest?.title ?? ""}>
+        <Icon name="download" size={15} /><span>Güncelleme var</span>
+      </button>
+    {/if}
+    <div class="foot"><span>Merkut Studios</span><span class="tnum">v{version}{update?.current ? ` · ${update.current}` : ""}</span></div>
+    <!-- Kendi kartın, sol altta (Discord ve Steam'deki gibi): profil resmin, adın, durumun; tıklayınca profilin. -->
+    {#if sosyal.anahtar && sosyal.ben}
+      {@const benOyun = sosyal.cevrimici[sosyal.ben.id]?.oyun}
+      <button
+        class="ben"
+        aria-current={current === "profile" && (!sosyal.profilId || sosyal.profilId === sosyal.ben.id) ? "page" : undefined}
+        title="Profilim"
+        onclick={() => profilGoster(null)}
+      >
+        <Avatar kisi={sosyal.ben} boy={36} />
+        <span class="ben-yazi">
+          <b>{sosyal.ben.ad}</b>
+          <span class:oyun={!!benOyun} class:acik={sosyal.bagli && !benOyun}>{benOyun ? `${benOyun} oynuyor` : sosyal.bagli ? "Çevrim içi" : "Bağlanıyor…"}</span>
+        </span>
+        <span class="ben-ok"><Icon name="next" size={14} /></span>
+      </button>
+    {:else}
+      <button class="ben davet" title="Topluluğa katıl" onclick={() => onnavigate("social")}>
+        <span class="ben-ikon"><Icon name="user" size={18} /></span>
+        <span class="ben-yazi"><b>Topluluğa katıl</b><span>Discord ile giriş yap</span></span>
+        <span class="ben-ok"><Icon name="next" size={14} /></span>
+      </button>
+    {/if}
+  </div>
 </aside>
 
 <style>
@@ -81,10 +116,13 @@
     background: rgba(23, 26, 30, 0.86);
     border-right: 1px solid var(--line);
   }
-  .brand { display: flex; align-items: center; gap: 12px; padding: 18px 18px 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 18px 14px 12px 16px; }
   .brand img { width: 44px; height: 44px; border-radius: 50%; box-shadow: 0 0 18px rgba(227, 194, 112, 0.25); }
   .brand b { font-family: var(--f-display); font-weight: 800; font-size: 17px; letter-spacing: 0.04em; color: var(--gold); display: block; }
-  .brand span { display: block; font-size: 10.5px; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
+  .name { flex: 1; min-width: 0; }
+  .dc.dar { display: none; }
+  .baslik { display: flex; align-items: center; gap: 8px; }
+  .brand span { display: block; font-size: 10px; color: var(--dim); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
   nav { overflow: auto; padding: 6px 10px 16px; display: flex; flex-direction: column; gap: 2px; }
   .room {
     font-family: var(--f-display); font-size: 11px; font-weight: 700;
@@ -115,25 +153,43 @@
   .eq i:nth-child(3) { animation-delay: 0.4s; }
   @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
   /* button { width: 100% } + yan boşluk taşırıyordu: genişlik kenarlardan hesaplanır. */
-  .dc, .upd { width: auto; margin: 0 10px 6px; }
-  .dc { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 12px; border: 1px solid rgba(88, 101, 242, 0.45); background: rgba(88, 101, 242, 0.12); color: #dfe2ff; font-weight: 700; font-size: 13px; }
-  .dc .logo { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #5865f2; color: #fff; flex: none; font-style: normal; }
-  .dc:hover { background: rgba(88, 101, 242, 0.24); color: #fff; }
+  .upd, .ben { width: auto; margin: 0 10px 6px; }
+  .ben { display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 7px; border-radius: 14px; border: 1px solid var(--line-2); background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)); color: var(--text); }
+  .ben:hover { border-color: rgba(227, 194, 112, 0.45); background: rgba(227, 194, 112, 0.08); }
+  .ben[aria-current="page"] { border-color: rgba(227, 194, 112, 0.6); background: linear-gradient(90deg, rgba(227, 194, 112, 0.16), rgba(227, 194, 112, 0.04)); }
+  .ben-yazi { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  .ben-yazi b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ben-yazi span { font-size: 11.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ben-yazi .acik { color: var(--good); }
+  .ben-yazi .oyun { color: #a99cff; }
+  .ben-ok { color: var(--dim); display: grid; }
+  .ben-ikon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(227, 194, 112, 0.12); color: var(--gold-glow); flex: none; }
+  .ben.davet { border-style: dashed; }
+  /* Discord'a katıl: başlığın yanında, malikâne renklerinde (altın halka, koyu zemin). */
+  .dc {
+    flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 50%;
+    border: 1px solid rgba(227, 194, 112, 0.45);
+    background: radial-gradient(circle at 50% 35%, rgba(227, 194, 112, 0.18), rgba(23, 26, 30, 0.9) 70%);
+    color: var(--gold);
+    transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+  .dc:hover { color: var(--gold-glow); border-color: var(--gold); background: radial-gradient(circle at 50% 35%, rgba(227, 194, 112, 0.3), rgba(23, 26, 30, 0.9) 70%); box-shadow: 0 0 14px rgba(227, 194, 112, 0.35); transform: translateY(-1px); }
   .upd { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.1); color: var(--gold-glow); font-weight: 600; font-size: 13px; }
   .upd:hover { background: rgba(227, 194, 112, 0.18); }
-  .foot {
-    margin-top: auto; padding: 12px 18px 14px; border-top: 1px solid var(--line);
-    font-size: 11px; color: var(--dim); display: flex; justify-content: space-between; gap: 8px;
-  }
+  /* Alt bölüm: güncelleme, imza ve en altta kendi kartın. */
+  .alt { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); background: rgba(0, 0, 0, 0.16); }
+  .alt .ben { margin-bottom: 10px; }
+  .foot { padding: 2px 18px 8px; font-size: 11px; color: var(--dim); display: flex; justify-content: space-between; gap: 8px; }
 
   /* Dar pencerede sadece ikonlar */
   @media (max-width: 1100px) {
-    .brand { justify-content: center; padding: 16px 8px; }
-    .name, .room, .label, .foot, .upd span, .dc span { display: none; }
+    .brand { flex-direction: column; justify-content: center; gap: 10px; padding: 16px 8px; }
+    .name, .room, .label, .foot, .upd span, .ben-yazi, .ben-ok { display: none; }
     nav { padding: 6px 10px; gap: 4px; }
     .sep { display: block; height: 1px; background: var(--line); margin: 8px 6px; }
     button { justify-content: center; padding: 11px; position: relative; }
-    .dc { padding: 6px; justify-content: center; }
+    .dc.dar { display: grid; width: 32px; height: 32px; padding: 0; }
+    .ben { padding: 6px; justify-content: center; }
     .badge { position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   }
 </style>

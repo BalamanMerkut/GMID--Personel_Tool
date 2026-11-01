@@ -8,6 +8,7 @@ mod ayar;
 mod db;
 mod discord;
 mod durum;
+mod sayfa;
 mod sosyal;
 mod sosyal_api;
 mod ws;
@@ -43,6 +44,8 @@ impl Sunucu {
 
 pub fn uygulama(s: Arc<Sunucu>) -> Router {
     Router::new()
+        .route("/", get(sayfa::ana))
+        .route("/indir", get(sayfa::indir))
         .route("/saglik", get(api::saglik))
         .route("/api/giris", post(api::giris))
         .route("/api/ben", get(api::ben))
@@ -222,6 +225,27 @@ mod tests {
         assert_eq!(kod, StatusCode::NO_CONTENT);
         let (kod, _) = iste(&s, ben()).await;
         assert_eq!(kod, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn tanitim_ve_indirme() {
+        let s = sunucu();
+        let r = uygulama(s.clone())
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+        let govde = to_bytes(r.into_body(), 1 << 20).await.unwrap();
+        assert!(String::from_utf8_lossy(&govde).contains("/indir"));
+        let r = uygulama(s)
+            .oneshot(Request::get("/indir").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert!(r.headers()["location"]
+            .to_str()
+            .unwrap()
+            .ends_with("GMID-Tool-Kurulum.exe"));
     }
 
     #[tokio::test]

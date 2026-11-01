@@ -665,7 +665,16 @@ fn post_inference_as(
     // Emin olamayınca sıcaklığı artırarak yeniden dener (fallback): kapalıyken Whisper ilk, yanlış tahmini
     // olduğu gibi yazıyordu. (Takılmanın asıl nedeni "En doğru" modeldi; dikte artık hızlı modelle.)
     // Isınmada (sessizlik) kapalı: sessizlikte yeniden denemek yalnız süreyi uzatır.
-    field("temperature_inc", if fallback { "0.2" } else { "0.0" });
+    // Kısa diktede büyük adım (0 → 0,4 → 0,8: en çok 2 yeniden deneme), dikkatli okumada (ders) ince adım
+    // (en çok 5): diktede hız ile doğruluk dengesi.
+    field(
+        "temperature_inc",
+        match (fallback, careful) {
+            (false, _) => "0.0",
+            (true, false) => "0.4",
+            (true, true) => "0.2",
+        },
+    );
     if careful {
         field("beam_size", "5");
         field("best_of", "5");

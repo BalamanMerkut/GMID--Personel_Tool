@@ -118,15 +118,7 @@ export const NAV: NavRoom[] = [
     name: null,
     groups: [
       { id: "home", label: "Giriş Salonu", icon: "castle", tabs: [{ id: "home", label: "Giriş Salonu" }] },
-      {
-        id: "social",
-        label: "Topluluk",
-        icon: "users",
-        tabs: [
-          { id: "social", label: "Topluluk" },
-          { id: "profile", label: "Profil" },
-        ],
-      },
+      { id: "social", label: "Topluluk", icon: "users", tabs: [{ id: "social", label: "Topluluk" }] },
     ],
   },
   {
