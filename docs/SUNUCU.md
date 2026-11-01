@@ -11,6 +11,13 @@ durur, notların, oyunların, ayarların hep senin bilgisayarında kalır.
 
 ---
 
+## 0. Senin sunucun (2026-11-01)
+
+- IP: `31.57.187.132`, Ubuntu. Üzerinde başka bir proje ve `molayazilim.com.tr` çalışıyor: kurulum ona dokunmaz
+  (web sunucusunu algılar, yalnız GMID'in alt alan adı için ayrı bölüm ekler, önce denetler).
+- Alan adı: `gmid.molayazilim.com.tr` → alan adı panelinde **A kaydı**: ad `gmid`, değer `31.57.187.132`
+  (Cloudflare kullanıyorsan bulut simgesi gri "DNS only" olsun). DuckDNS gerekmez (§1'i atla).
+
 ## 1. Ücretsiz alan adı (DuckDNS, 2 dakika)
 
 Sunucuyla GMID arasındaki bağlantı şifreli (https) olsun diye bir ad gerekiyor. DuckDNS sunucunda çalışan bir
@@ -36,17 +43,25 @@ Kullanıcı adın root değilse (ör. `ubuntu`) `ssh ubuntu@SUNUCU_IP` yaz.
 
 ## 3. Tek komutla kurulum
 
-Sunucuda şunu yapıştır (`gmid.duckdns.org` yerine kendi adını yaz):
+Önce yalnız kontrol (hiçbir şey değiştirmez; ne bulduğunu yazar):
 
 ```
-curl -fsSL https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/HEAD/sunucu/kurulum/kur.sh | sudo bash -s -- gmid.duckdns.org
+curl -fsSL https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/HEAD/sunucu/kurulum/kur.sh | sudo bash -s -- --kontrol gmid.molayazilim.com.tr
+```
+
+"Kontrol tamam" yazınca kurulum (`gmid.molayazilim.com.tr` yerine kendi adını yaz):
+
+```
+curl -fsSL https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/HEAD/sunucu/kurulum/kur.sh | sudo bash -s -- gmid.molayazilim.com.tr
 ```
 
 Ne yapar:
 - GMID sunucu programını indirir, `gmid` adlı ayrı bir kullanıcıyla arka planda çalıştırır (çökerse kendiliğinden
   yeniden başlar, sunucu yeniden açılınca kendiliğinden açılır).
-- **Caddy** kurar: https sertifikasını (Let's Encrypt) kendisi alır ve yeniler.
-- Güvenlik duvarında yalnız SSH (22), 80 ve 443 açık kalır.
+- https: sunucuda **nginx** varsa ona yalnız GMID için ayrı bir bölüm ekler (`nginx -t` ile denetler, hata varsa geri
+  alır) ve certbot ile yalnız bu alt alan adına sertifika alır; **Caddy** varsa Caddyfile'ın sonuna bölüm ekler (yedekler,
+  denetler); hiçbiri yoksa Caddy kurar. Apache ya da tanımadığı bir program 80/443'teyse hiçbir şey yapmaz, söyler.
+- Güvenlik duvarı kapalıysa açmaz (başka projenin portlarını kesmesin); açıksa yalnız 80/443 izni ekler.
 - Her gece veritabanını yedekler (`/var/lib/gmid/yedek`, son 14 gün).
 
 Sonunda "Tamam. GMID sunucusu çalışıyor" yazar. Tarayıcıda `https://gmid.duckdns.org/saglik` açınca
