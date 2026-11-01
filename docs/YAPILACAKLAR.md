@@ -35,4 +35,14 @@ Son güncelleme: 31 Ekim 2026.
 
 - **Ertelendi:** Disk temizliği.
 - **Yapılmayacak:** Mola hatırlatıcısı, mikrofon testi.
-- **VDS yol haritasında:** Discord botu özellikleri.
+- **VDS yol haritasında:** Discord botu özellikleri (botlar tek botta birleştirilecek; mevcut botlar taşınmıyor).
+
+## 3. GMID sunucusu (VDS alındı, 2026-11-01)
+
+- **Kullanıcı:** DuckDNS adı al, `docs/SUNUCU.md` §3'teki tek komutla kur, `https://<ad>/saglik` açılıyor mu bak.
+- **Kullanıcı:** Discord uygulaması (birleşik bot ile aynı): Client ID/Secret, Redirect `http://127.0.0.1:53682/giris`,
+  `/etc/gmid/sunucu.env`.
+- **GMID Tool:** Kontrol Odası → "Discord ile giriş" (tarayıcıda Discord, 53682'de geçici dinleyici, kod sunucuya;
+  `identify guilds` kapsamı), yan menüde Arkadaşlar (çevrim içi + oynadığı oyun), oyun algılanınca durum gönderimi
+  (ayardan kapatılabilir), sunucu adresi ayarı.
+- Sonra: sohbet, ortak puan arşivi, oyun gecesi planlayıcı.

@@ -47,6 +47,41 @@ jobs:
         working-directory: src-tauri
         run: cargo test --locked
 
+  sunucu:
+    name: GMID sunucusu (Linux)
+    # Ubuntu 22.04'te derlenir: 22.04 ve 24.04 sunucularda çalışır.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sunucu
+      - name: Biçim
+        working-directory: sunucu
+        run: cargo fmt --check
+      - name: Clippy
+        working-directory: sunucu
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Testler
+        working-directory: sunucu
+        run: cargo test --locked
+      - name: Derle
+        working-directory: sunucu
+        run: |
+          cargo build --release --locked
+          mkdir -p ../yayin
+          cp target/release/gmid-sunucu ../yayin/gmid-sunucu-linux-x64
+          (cd ../yayin && sha256sum gmid-sunucu-linux-x64 > gmid-sunucu-linux-x64.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gmid-sunucu
+          path: yayin/
+          if-no-files-found: error
+          retention-days: 30
+
   windows:
     name: Windows kurulum dosyası
     runs-on: windows-latest
@@ -103,3 +138,23 @@ jobs:
           files: |
             yayin/GMID-Tool-Kurulum.exe
             yayin/GMID-Tool-Kurulum.exe.sha256
+
+  sunucu-yayin:
+    name: Sunucu programını sürüme ekle
+    # Windows işi sürümü oluşturduktan sonra aynı sürüme eklenir (kur.sh "en son sürüm"den indirir).
+    needs: [sunucu, windows]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gmid-sunucu
+          path: yayin
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          files: |
+            yayin/gmid-sunucu-linux-x64
+            yayin/gmid-sunucu-linux-x64.sha256
