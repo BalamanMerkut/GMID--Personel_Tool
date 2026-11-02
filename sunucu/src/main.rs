@@ -16,6 +16,7 @@ mod oyna;
 mod sayfa;
 mod sosyal;
 mod sosyal_api;
+mod topluluk;
 mod ws;
 mod yedek;
 
@@ -112,6 +113,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/gece/{id}", delete(gece::sil))
         .route("/api/gece/{id}/katil", post(gece::katil))
         .route("/api/akis/{id}/begen", post(sosyal_api::begen))
+        .route("/api/akis/{id}/oy", post(topluluk::oy))
         .route("/api/akis/{id}/yorum", post(sosyal_api::yorum))
         .route("/api/yorum/{id}", delete(sosyal_api::yorum_sil))
         .route("/api/akis/{id}/sikayet", post(sosyal_api::sikayet))
@@ -524,7 +526,11 @@ mod tests {
         )
         .await;
         assert_eq!(ben["yonetici"], true);
-        let g = s.db().gonderi_yaz("2", "uygunsuz", None).unwrap().unwrap();
+        let g = s
+            .db()
+            .gonderi_yaz("2", "uygunsuz", None, None)
+            .unwrap()
+            .unwrap();
         // Zeynep şikâyet eder (ikinci kez sayılmaz), Zeynep silemez, yönetici siler.
         for beklenen in [true, false] {
             let (kod, c) = iste(

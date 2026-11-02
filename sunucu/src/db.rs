@@ -63,6 +63,7 @@ impl Db {
         )?;
         crate::sosyal::kur(&c)?;
         crate::gece::kur(&c)?;
+        crate::topluluk::kur(&c)?;
         Ok(Db(c))
     }
 

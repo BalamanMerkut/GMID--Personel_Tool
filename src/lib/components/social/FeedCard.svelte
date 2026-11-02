@@ -2,7 +2,7 @@
   // Akıştaki bir paylaşım: kim, ne yaptı (puanladı / izledi / oynamaya başladı), konu kartı, beğeni ve yorumlar.
   import Icon from "../../Icon.svelte";
   import { notify } from "../../toast.svelte";
-  import { istek, konuGoster, profilGoster, sosyal, tamAdres, type Olay } from "../../social.svelte";
+  import { istek, konuGoster, oyVer, profilGoster, sosyal, tamAdres, type Olay } from "../../social.svelte";
   import Avatar from "./Avatar.svelte";
   import Cover from "./Cover.svelte";
   import GeceKart from "./GeceKart.svelte";
@@ -41,6 +41,34 @@
   }
 
   const hata = (e: unknown) => notify(String(e instanceof Error ? e.message : e), "info");
+
+  // ---- anket ----
+  const anket = $derived(o.veri.anket ?? null);
+  const oylar = $derived(anket ? (anket.durum?.oylar ?? anket.secenekler.map(() => 0)) : []);
+  const toplamOy = $derived(oylar.reduce((a, b) => a + b, 0));
+  const benimOy = $derived(anket?.durum?.benim ?? null);
+  const anketBitti = $derived(!!anket && anket.bitis < Date.now());
+  /** Oy verdiysem ya da bittiyse sonuçlar görünür. */
+  const sonucGoster = $derived(anketBitti || benimOy != null);
+  let oyluyor = $state(false);
+  function anketKalan(ms: number): string {
+    const dk = Math.round(ms / 60000);
+    if (dk <= 0) return "bitti";
+    if (dk < 60) return `${dk} dk kaldı`;
+    if (dk < 48 * 60) return `${Math.round(dk / 60)} sa kaldı`;
+    return `${Math.round(dk / 1440)} gün kaldı`;
+  }
+  async function oyla(i: number) {
+    if (!anket || anketBitti || oyluyor || benimOy === i) return;
+    oyluyor = true;
+    try {
+      o.veri.anket = { ...anket, durum: await oyVer(o.id, i) };
+    } catch (e) {
+      hata(e);
+    } finally {
+      oyluyor = false;
+    }
+  }
 
   async function begen() {
     o.begendim = !o.begendim;
@@ -126,6 +154,19 @@
       <GeceKart id={o.veri.gece} yedek={{ oyun: o.veri.oyun ?? o.veri.ad, zaman: o.veri.zaman, kontenjan: o.veri.kontenjan, not: o.veri.not, hemen: !!o.veri.hemen }} />
     {:else if o.tur === "gonderi"}
       {#if o.veri.metin}{@render yazi(o.veri.metin)}{/if}
+      {#if anket}
+        <div class="anket" class:sonuc={sonucGoster}>
+          {#each anket.secenekler as sec, i (i)}
+            {@const yuzde = toplamOy ? Math.round((oylar[i] / toplamOy) * 100) : 0}
+            <button class="sec" class:benim={benimOy === i} disabled={anketBitti || oyluyor} onclick={() => oyla(i)} title={anketBitti ? "Anket bitti" : benimOy === i ? "Oyun bu" : "Oy ver"}>
+              {#if sonucGoster}<span class="dolgu" style:width="{yuzde}%"></span>{/if}
+              <span class="sec-ad">{#if benimOy === i}<Icon name="check" size={13} />{/if}{sec}</span>
+              {#if sonucGoster}<span class="yuzde tnum">%{yuzde}</span>{/if}
+            </button>
+          {/each}
+          <span class="anket-bilgi tnum">{toplamOy} oy · {anketBitti ? "Anket bitti" : anketKalan(anket.bitis - Date.now())}{!anketBitti && benimOy != null ? " · fikrini değiştirebilirsin" : ""}</span>
+        </div>
+      {/if}
       {#if o.veri.resim}<img class="medya" src={tamAdres(o.veri.resim)} alt="" loading="lazy" />{/if}
     {:else if o.tur === "klip"}
       <!-- Paylaşılan klip: 7 gün durur, sonra video da paylaşım da silinir (beğeniler profilde kalır). -->
@@ -239,4 +280,15 @@
   .yaz input { flex: 1; min-width: 0; background: transparent; border: 0; border-bottom: 1px solid var(--line-2); padding: 8px 2px; color: var(--text); font: inherit; font-size: 14px; outline: none; }
   .yaz input:focus { border-color: var(--gold); }
   .yanitla { border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+  .anket { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .sec { position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(227, 194, 112, 0.04); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+  .sec:hover:not(:disabled) { background: rgba(227, 194, 112, 0.12); }
+  .sec:disabled { cursor: default; }
+  .sonuc .sec { border-color: var(--line-2); background: rgba(255, 255, 255, 0.02); }
+  .sec.benim { border-color: var(--gold); }
+  .dolgu { position: absolute; inset: 0 auto 0 0; background: rgba(227, 194, 112, 0.18); border-radius: inherit; transition: width 0.4s ease; }
+  .sec.benim .dolgu { background: rgba(227, 194, 112, 0.32); }
+  .sec-ad { position: relative; flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+  .yuzde { position: relative; font-weight: 800; color: var(--gold-glow); }
+  .anket-bilgi { font-size: 12.5px; color: var(--dim); }
 </style>

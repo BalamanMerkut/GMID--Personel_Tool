@@ -49,6 +49,7 @@ pub async fn profil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<S
         "profil": p, "guncelleme": t,
         "iliski": db.iliski(&ben.id, &id), "arkadas": db.arkadas_sayisi(&id),
         "begeni": puan.0, "yorum": puan.1,
+        "rozetler": db.rozetler(&id),
     })))
 }
 
@@ -111,7 +112,8 @@ pub async fn akis(State(s): State<Arc<Sunucu>>, h: HeaderMap, Query(q): Query<Ak
         begenen: q.begenen.as_deref(),
         sayi: q.sayi.unwrap_or(30),
     };
-    let l = s.db().akis_suzgec(&ben.id, &f).map_err(ic)?;
+    let mut l = s.db().akis_suzgec(&ben.id, &f).map_err(ic)?;
+    s.db().anketleri_doldur(&ben.id, &mut l).map_err(ic)?;
     Ok(Json(json!({ "olaylar": l })))
 }
 
@@ -181,6 +183,12 @@ fn anilanlara_haber(
 pub struct GonderiIstek {
     metin: String,
     resim: Option<String>,
+    /// Anket seçenekleri (2–4); metin soru olur.
+    #[serde(default)]
+    anket: Option<Vec<String>>,
+    /// Anket süresi (saat, 1–168; yoksa 24).
+    #[serde(default)]
+    anket_saat: Option<i64>,
 }
 
 /// Serbest gönderi: yazı (en çok 500 harf) ve isteğe bağlı resim (önce /api/resim ile yüklenir).
@@ -200,9 +208,21 @@ pub async fn gonderi(
             "Gönderi boş ya da çok uzun (en çok 500 harf)",
         ));
     }
+    let anket = match &g.anket {
+        Some(sec) => {
+            if m.is_empty() {
+                return Err(hata(StatusCode::BAD_REQUEST, "Anketin sorusunu yaz"));
+            }
+            Some(
+                crate::topluluk::anket_verisi(sec, g.anket_saat)
+                    .map_err(|x| hata(StatusCode::BAD_REQUEST, x))?,
+            )
+        }
+        None => None,
+    };
     let id = s
         .db()
-        .gonderi_yaz(&ben.id, m, resim.as_deref())
+        .gonderi_yaz(&ben.id, m, resim.as_deref(), anket.as_ref())
         .map_err(ic)?
         .ok_or_else(|| {
             hata(

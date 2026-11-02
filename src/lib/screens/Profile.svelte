@@ -2,6 +2,7 @@
   // Steam tarzı profil: kapak arka planı, büyük resim, seviye ve sayılar; vitrinler (favori oyunlar, en çok
   // oynananlar, film ve dizi vitrinleri, ortak oyunlar, son etkinlik).
   import Icon from "../Icon.svelte";
+  import type { IconName } from "../icons";
   import Avatar from "../components/social/Avatar.svelte";
   import Cover from "../components/social/Cover.svelte";
   import FeedCard from "../components/social/FeedCard.svelte";
@@ -21,7 +22,21 @@
     /** Başkalarından alınan beğeni ve yorum (süresi dolup silinen kliplerinki dahil). */
     begeni?: number;
     yorum?: number;
+    /** Rozetler (eski sunucuda yok). */
+    rozetler?: { id: string; ad: string; aciklama: string; zaman: number | null; kez: number }[];
   }
+
+  /** Rozet simgesi ve rengi. */
+  const ROZET: Record<string, [IconName, string]> = {
+    kurucu: ["castle", "#e3c270"],
+    sevilen: ["heart", "#ff8a9a"],
+    yildiz: ["star", "#ffd36e"],
+    gececi: ["bell", "#8cc6ff"],
+    sosyal: ["users", "#7fe0b0"],
+    yazar: ["edit", "#c7a8ff"],
+    "haftanin-klibi": ["clip", "#ff9f5a"],
+    sampiyon: ["trophy", "#ffd36e"],
+  };
 
   let veri = $state<Yanit | null>(null);
   let olaylar = $state<Olay[]>([]);
@@ -261,6 +276,19 @@
       </div>
 
       <aside class="yan">
+        {#if veri.rozetler?.length}
+          <section class="kutu">
+            <b class="kutu-baslik">Rozetler</b>
+            <div class="rozetler">
+              {#each veri.rozetler as r (r.id)}
+                {@const [ikon, renk] = ROZET[r.id] ?? ["star", "#e3c270"]}
+                <span class="rozet" style:--r={renk} title={r.aciklama}>
+                  <span class="rozet-ikon"><Icon name={ikon} size={15} /></span>{r.ad}{#if r.kez > 1}<b class="tnum">×{r.kez}</b>{/if}
+                </span>
+              {/each}
+            </div>
+          </section>
+        {/if}
         <section class="kutu">
           <b class="kutu-baslik">Malikâne kaydı</b>
           <div class="sayi"><span>Oyun</span><b class="tnum">{SAYI(p.oyunlar.length)}</b></div>
@@ -374,4 +402,8 @@
     .fav-oyunlar { grid-template-columns: repeat(3, 1fr); }
     .ust-ic { flex-wrap: wrap; }
   }
+  .rozetler { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rozet { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--r) 12%, transparent); border: 1px solid color-mix(in srgb, var(--r) 45%, transparent); cursor: default; }
+  .rozet-ikon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #15171b; background: var(--r); }
+  .rozet b { color: var(--r); }
 </style>

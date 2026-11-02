@@ -74,6 +74,8 @@ export interface Olay {
     hemen?: boolean;
     zaman?: number;
     kontenjan?: number | null;
+    /** Gönderi: anket (2–4 seçenek, bitiş anı; sunucu oy sayılarını ve benim oyumu ekler). */
+    anket?: { secenekler: string[]; bitis: number; durum?: { oylar: number[]; benim: number | null } };
     /** Gönderi: yazı ve isteğe bağlı resim ("/resim/…"). */
     metin?: string;
     resim?: string | null;
@@ -655,11 +657,16 @@ async function gonderiResmi(dosya: Blob): Promise<Blob> {
 }
 
 /** Twitter'daki gibi gönderi: yazı (en çok 500 harf) ve isteğe bağlı resim. */
-export async function gonderiPaylas(metin: string, resim: Blob | null) {
+export async function gonderiPaylas(metin: string, resim: Blob | null, anket: { secenekler: string[]; saat: number } | null = null) {
   let url: string | null = null;
   if (resim) url = (await istek<{ url: string }>("POST", "/api/resim", await gonderiResmi(resim))).url;
-  await istek("POST", "/api/gonderi", { metin, resim: url });
+  await istek("POST", "/api/gonderi", { metin, resim: url, ...(anket ? { anket: anket.secenekler, anket_saat: anket.saat } : {}) });
   sosyal.akisSurum++;
+}
+
+/** Ankette oy ver (fikir değiştirilebilir). Dönen: güncel oylar. */
+export async function oyVer(etkinlik: number, secim: number) {
+  return (await istek<{ durum: { oylar: number[]; benim: number | null } }>("POST", `/api/akis/${etkinlik}/oy`, { secim })).durum;
 }
 
 // ---------- oyun gecesi ----------

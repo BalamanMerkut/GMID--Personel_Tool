@@ -79,7 +79,13 @@
     taslak = `${taslak.slice(0, taslak.length - anmaSoz.length - 1)}@${k.ad} `;
     queueMicrotask(() => alan?.focus());
   }
-  const gonderilebilir = $derived(!gonderiliyor && kalanHarf >= 0 && (taslak.trim().length > 0 || !!resim));
+  // Anket: soru gönderinin yazısı, 2–4 seçenek, süre.
+  let anketAcik = $state(false);
+  let secenekler = $state<string[]>(["", ""]);
+  let anketSaat = $state(24);
+  const doluSecenek = $derived(secenekler.map((x) => x.trim()).filter(Boolean));
+  const anketHazir = $derived(!anketAcik || (taslak.trim().length > 0 && doluSecenek.length >= 2));
+  const gonderilebilir = $derived(!gonderiliyor && kalanHarf >= 0 && (taslak.trim().length > 0 || !!resim) && anketHazir);
 
   const hata = (e: unknown) => notify(String(e instanceof Error ? e.message : e), "info");
 
@@ -139,9 +145,11 @@
     if (!gonderilebilir) return;
     gonderiliyor = true;
     try {
-      await gonderiPaylas(taslak.trim(), resim);
+      await gonderiPaylas(taslak.trim(), resim, anketAcik ? { secenekler: doluSecenek, saat: anketSaat } : null);
       taslak = "";
       resimKaldir();
+      anketAcik = false;
+      secenekler = ["", ""];
       if (yalnizArkadas) void yukle();
     } catch (e) {
       hata(e);
@@ -284,7 +292,7 @@
           {#if sosyal.ben}<Avatar kisi={sosyal.ben} boy={34} nokta={false} />{/if}
           <span class="yaz-baslik"><b>{sosyal.ben?.ad ?? "Sen"}</b><span>malikâneye yazıyor</span></span>
         </div>
-        <textarea bind:this={alan} bind:value={taslak} onkeydown={tus} placeholder={ipucu} rows="2" aria-label="Gönderi" disabled={gonderiliyor}></textarea>
+        <textarea bind:this={alan} bind:value={taslak} onkeydown={tus} placeholder={ipucu} title="#etiket yazarsan gündeme girer, @ad yazarsan o kişiye haber gider" rows="2" aria-label="Gönderi" disabled={gonderiliyor}></textarea>
         {#if anmaOneri.length}
           <div class="anma-oneri" role="listbox" aria-label="Üye öner">
             {#each anmaOneri as k (k.id)}
@@ -298,6 +306,26 @@
             <button type="button" class="kaldir" title="Resmi kaldır" aria-label="Resmi kaldır" onclick={resimKaldir}><Icon name="x" size={15} /></button>
           </div>
         {/if}
+        {#if anketAcik}
+          <div class="anket-yaz">
+            <span class="anket-ipucu">Soruyu yukarıya yaz, seçenekleri buraya:</span>
+            {#each secenekler as _, i (i)}
+              <div class="secenek">
+                <input bind:value={secenekler[i]} maxlength="60" placeholder={`${i + 1}. seçenek${i < 2 ? "" : " (isteğe bağlı)"}`} aria-label={`${i + 1}. seçenek`} />
+                {#if secenekler.length > 2}
+                  <button type="button" class="kaldir-s" title="Seçeneği kaldır" aria-label="Seçeneği kaldır" onclick={() => (secenekler = secenekler.filter((_, j) => j !== i))}><Icon name="x" size={13} /></button>
+                {/if}
+              </div>
+            {/each}
+            <div class="anket-alt">
+              {#if secenekler.length < 4}<button type="button" class="btn ghost sm" onclick={() => (secenekler = [...secenekler, ""])}><Icon name="plus" size={14} />Seçenek ekle</button>{/if}
+              <span class="bosluk"></span>
+              <label class="anket-sure">Süre
+                <select bind:value={anketSaat}><option value={1}>1 saat</option><option value={6}>6 saat</option><option value={24}>1 gün</option><option value={72}>3 gün</option><option value={168}>1 hafta</option></select>
+              </label>
+            </div>
+          </div>
+        {/if}
         <div class="hazir">
           {#each HAZIR as h (h.ad)}
             <button type="button" class="cip" onclick={() => hazirKoy(h)} disabled={gonderiliyor}><Icon name={h.ikon} size={14} />{h.ad}</button>
@@ -305,10 +333,10 @@
         </div>
         <div class="yaz-alt">
           <button type="button" class="btn ghost sm" onclick={() => dosyaSec?.click()} disabled={gonderiliyor}><Icon name="image" size={15} />Resim</button>
+          <button type="button" class="btn ghost sm" class:acik-plan={anketAcik} onclick={() => (anketAcik = !anketAcik)} disabled={gonderiliyor}><Icon name="checklist" size={15} />Anket</button>
           <button type="button" class="btn ghost sm" class:acik-plan={planAcik && planHemen} onclick={() => ((planAcik = !(planAcik && planHemen)), (planHemen = true))}><Icon name="users" size={15} />Oyuncu ara</button>
           <button type="button" class="btn ghost sm" class:acik-plan={planAcik && !planHemen} onclick={() => ((planAcik = !(planAcik && !planHemen)), (planHemen = false))}><Icon name="bell" size={15} />Oyun gecesi</button>
           <input bind:this={dosyaSec} type="file" accept="image/*" hidden onchange={resimSecildi} />
-          <span class="ipucu-tus" title="#etiket yazarsan gündeme girer, @ad yazarsan o kişiye haber gider">#etiket · @ad</span>
           <span class="bosluk"></span>
           {#if taslak.length}
             <span class="sayac tnum" class:az={kalanHarf <= 40} class:asti={kalanHarf < 0}>{kalanHarf}</span>
@@ -479,6 +507,16 @@
   textarea:focus { border-color: var(--gold-dim); }
   textarea::placeholder { color: var(--dim); }
   .onizleme { position: relative; align-self: flex-start; }
+  .anket-yaz { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; border: 1px dashed rgba(227, 194, 112, 0.35); background: rgba(0, 0, 0, 0.18); }
+  .anket-ipucu { font-size: 12px; color: var(--dim); }
+  .secenek { display: flex; gap: 6px; align-items: center; }
+  .secenek input { flex: 1; min-width: 0; background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 10px; color: var(--text); font: inherit; font-size: 13.5px; outline: none; }
+  .secenek input:focus { border-color: var(--gold-dim); }
+  .kaldir-s { border: 0; background: none; color: var(--dim); width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; }
+  .kaldir-s:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+  .anket-alt { display: flex; align-items: center; gap: 8px; }
+  .anket-sure { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+  .anket-sure select { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 4px 8px; color: var(--text); font: inherit; font-size: 12.5px; color-scheme: dark; }
   .onizleme img { display: block; max-width: 100%; max-height: 260px; border-radius: 12px; border: 1px solid var(--line); }
   .kaldir { position: absolute; top: 8px; left: 8px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.7); color: #fff; display: grid; place-items: center; cursor: pointer; }
   .anma-oneri { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -489,7 +527,6 @@
   .cip:hover:not(:disabled) { border-color: var(--gold-dim); color: var(--gold-glow); }
   .cip :global(svg) { color: var(--gold); }
   .yaz-alt { display: flex; align-items: center; gap: 10px; }
-  .ipucu-tus { white-space: nowrap; font-size: 12px; color: var(--dim); }
   .bosluk { flex: 1; }
   .sayac { font-size: 13px; color: var(--dim); }
   .sayac.az { color: var(--gold-glow); }

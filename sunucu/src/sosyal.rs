@@ -913,7 +913,13 @@ impl Db {
     }
 
     /// Serbest gönderi (Twitter'daki gibi: yazı, isteğe bağlı resim). Son 10 dakikada en çok 10 gönderi.
-    pub fn gonderi_yaz(&self, id: &str, metin: &str, resim: Option<&str>) -> R<Option<i64>> {
+    pub fn gonderi_yaz(
+        &self,
+        id: &str,
+        metin: &str,
+        resim: Option<&str>,
+        anket: Option<&Value>,
+    ) -> R<Option<i64>> {
         let t = simdi();
         let son: i64 = self
             .0
@@ -932,7 +938,10 @@ impl Db {
             "gonderi:{t}:{}",
             b.iter().map(|x| format!("{x:02x}")).collect::<String>()
         );
-        let veri = json!({ "ad": "", "metin": metin, "resim": resim });
+        let mut veri = json!({ "ad": "", "metin": metin, "resim": resim });
+        if let Some(a) = anket {
+            veri["anket"] = a.clone();
+        }
         self.etkinlik_yaz(id, "gonderi", &anahtar, &veri, t)
             .map(Some)
     }
@@ -1098,7 +1107,7 @@ mod tests {
         kisi(&db, "2", "Ali Veli");
         kisi(&db, "3", "Zeynep");
         let g = db
-            .gonderi_yaz("1", "selam @zeynep ve @Ali Veli!", None)
+            .gonderi_yaz("1", "selam @zeynep ve @Ali Veli!", None, None)
             .unwrap()
             .unwrap();
         db.oyun_basladi("1", "CS2").unwrap();
@@ -1140,9 +1149,10 @@ mod tests {
         let db = Db::bellekte();
         kisi(&db, "1", "Ali");
         kisi(&db, "2", "Veli");
-        db.gonderi_yaz("1", "Bu akşam #CS2 kim var?", None).unwrap();
+        db.gonderi_yaz("1", "Bu akşam #CS2 kim var?", None, None)
+            .unwrap();
         let g2 = db
-            .gonderi_yaz("2", "#cs2 olur, #OyunGecesi", None)
+            .gonderi_yaz("2", "#cs2 olur, #OyunGecesi", None, None)
             .unwrap()
             .unwrap();
         db.oyun_basladi("2", "Hades II").unwrap();
