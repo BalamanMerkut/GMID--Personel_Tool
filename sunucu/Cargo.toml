@@ -1,6 +1,6 @@
 [package]
 name = "gmid-sunucu"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "GMID sunucusu: Discord ile giriş, kim çevrim içi / ne oynuyor (ileride sohbet, ortak arşiv, oyun gecesi)"
 publish = false

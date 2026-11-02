@@ -140,7 +140,7 @@ pub struct Yorum {
 pub struct Etkinlik {
     pub id: i64,
     pub kisi: Kullanici,
-    /// puan | oyun | klip
+    /// puan | oyun | klip | gonderi
     pub tur: String,
     pub veri: Value,
     pub zaman: i64,
@@ -653,6 +653,31 @@ impl Db {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap_or((0, 0))
+    }
+
+    /// Serbest gönderi (Twitter'daki gibi: yazı, isteğe bağlı resim). Son 10 dakikada en çok 10 gönderi.
+    pub fn gonderi_yaz(&self, id: &str, metin: &str, resim: Option<&str>) -> R<Option<i64>> {
+        let t = simdi();
+        let son: i64 = self
+            .0
+            .query_row(
+                "SELECT COUNT(*) FROM etkinlikler WHERE kullanici = ?1 AND tur = 'gonderi' AND zaman > ?2",
+                params![id, t - 10 * 60 * 1000],
+                |r| r.get(0),
+            )
+            .map_err(e)?;
+        if son >= 10 {
+            return Ok(None);
+        }
+        let mut b = [0u8; 6];
+        getrandom::fill(&mut b).map_err(|x| x.to_string())?;
+        let anahtar = format!(
+            "gonderi:{t}:{}",
+            b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+        );
+        let veri = json!({ "ad": "", "metin": metin, "resim": resim });
+        self.etkinlik_yaz(id, "gonderi", &anahtar, &veri, t)
+            .map(Some)
     }
 
     /// Klip paylaşımı (aynı klip yeniden paylaşılırsa başa alınır, süresi yeniden başlar).

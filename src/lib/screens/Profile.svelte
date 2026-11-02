@@ -307,7 +307,7 @@
   .afis-ad { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .ortak { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; }
-  .olaylar { display: flex; flex-direction: column; gap: 10px; }
+  .olaylar { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
   .bos-v { align-items: center; text-align: center; padding: 26px; }
 
   .yan { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; }

@@ -61,13 +61,16 @@ export interface Yorum {
 export interface Olay {
   id: number;
   kisi: Kisi;
-  tur: "puan" | "oyun" | "klip";
+  tur: "puan" | "oyun" | "klip" | "gonderi";
   veri: Partial<Puan> & {
     ad: string;
     kapak?: string | null;
     /** Klip: video adresi ("/klip/….mp4"), oyun, açıklama, süre (sn), silineceği an (ms). */
     url?: string;
     not?: string | null;
+    /** Gönderi: yazı ve isteğe bağlı resim ("/resim/…"). */
+    metin?: string;
+    resim?: string | null;
     oyun?: string | null;
     sure?: number | null;
     bitis?: number;
@@ -550,4 +553,27 @@ export async function klipPaylas(p: {
   });
   sosyal.akisSurum++;
   return r;
+}
+
+/** Seçilen resmi gönderi için küçültür (en çok 1280 px, ≤ ~390 KB JPEG). */
+async function gonderiResmi(dosya: Blob): Promise<Blob> {
+  const bmp = await createImageBitmap(dosya);
+  for (const [en, kalite] of [[1280, 0.85], [1280, 0.72], [1024, 0.7], [800, 0.65], [640, 0.6]] as const) {
+    const olcek = Math.min(1, en / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * olcek);
+    c.height = Math.round(bmp.height * olcek);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    const b = await new Promise<Blob | null>((ok) => c.toBlob(ok, "image/jpeg", kalite));
+    if (b && b.size <= 390 * 1024) return b;
+  }
+  throw new Error("Resim küçültülemedi; başka bir resim dene");
+}
+
+/** Twitter'daki gibi gönderi: yazı (en çok 500 harf) ve isteğe bağlı resim. */
+export async function gonderiPaylas(metin: string, resim: Blob | null) {
+  let url: string | null = null;
+  if (resim) url = (await istek<{ url: string }>("POST", "/api/resim", await gonderiResmi(resim))).url;
+  await istek("POST", "/api/gonderi", { metin, resim: url });
+  sosyal.akisSurum++;
 }

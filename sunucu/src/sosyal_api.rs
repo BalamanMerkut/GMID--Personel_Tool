@@ -135,6 +135,43 @@ pub async fn yorum(
     Ok(Json(json!({ "id": yid })))
 }
 
+#[derive(Deserialize)]
+pub struct GonderiIstek {
+    metin: String,
+    resim: Option<String>,
+}
+
+/// Serbest gönderi: yazı (en çok 500 harf) ve isteğe bağlı resim (önce /api/resim ile yüklenir).
+pub async fn gonderi(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Json(g): Json<GonderiIstek>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let m = g.metin.trim();
+    let resim = g
+        .resim
+        .filter(|r| r.starts_with("/resim/") && r.len() <= 200);
+    if (m.is_empty() && resim.is_none()) || m.chars().count() > 500 {
+        return Err(hata(
+            StatusCode::BAD_REQUEST,
+            "Gönderi boş ya da çok uzun (en çok 500 harf)",
+        ));
+    }
+    let id = s
+        .db()
+        .gonderi_yaz(&ben.id, m, resim.as_deref())
+        .map_err(ic)?
+        .ok_or_else(|| {
+            hata(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Biraz yavaş: 10 dakikada en çok 10 gönderi",
+            )
+        })?;
+    s.durum.yay(json!({ "tip": "akis" }));
+    Ok(Json(json!({ "id": id })))
+}
+
 pub async fn yorum_sil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<i64>) -> Sonuc {
     let ben = kim(&s, &h)?;
     if !s.db().yorum_sil(&ben.id, id).map_err(ic)? {

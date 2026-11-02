@@ -71,6 +71,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/profil/{id}", get(sosyal_api::profil))
         .route("/api/akis", get(sosyal_api::akis))
         .route("/api/akis/{id}", delete(sosyal_api::etkinlik_sil))
+        .route("/api/gonderi", post(sosyal_api::gonderi))
         .route("/api/akis/{id}/begen", post(sosyal_api::begen))
         .route("/api/akis/{id}/yorum", post(sosyal_api::yorum))
         .route("/api/yorum/{id}", delete(sosyal_api::yorum_sil))
@@ -366,6 +367,43 @@ mod tests {
         )
         .await;
         assert_eq!(p["begeni"], 1);
+    }
+
+    #[tokio::test]
+    async fn gonderi_paylas() {
+        let s = sunucu();
+        let ali = db::Kullanici {
+            id: "1".into(),
+            ad: "Ali".into(),
+            avatar: None,
+        };
+        let a = s.db().giris(&ali).unwrap();
+        let gonder = |govde: &'static str| {
+            Request::post("/api/gonderi")
+                .header("authorization", format!("Bearer {a}"))
+                .header("content-type", "application/json")
+                .body(Body::from(govde))
+                .unwrap()
+        };
+        let (kod, _) = iste(&s, gonder(r#"{"metin":"   "}"#)).await;
+        assert_eq!(kod, StatusCode::BAD_REQUEST);
+        let (kod, _) = iste(
+            &s,
+            gonder(r#"{"metin":"x","resim":"https://kotu.site/a.jpg"}"#),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK, "yabancı resim yok sayılır, yazı yeter");
+        for _ in 0..9 {
+            let (kod, _) = iste(&s, gonder(r#"{"metin":"Bu akşam CS2?"}"#)).await;
+            assert_eq!(kod, StatusCode::OK);
+        }
+        let (kod, _) = iste(&s, gonder(r#"{"metin":"bir tane daha"}"#)).await;
+        assert_eq!(kod, StatusCode::TOO_MANY_REQUESTS);
+        let akis = s.db().akis("1", None, None, 20).unwrap();
+        assert_eq!(akis.len(), 10);
+        assert_eq!(akis[0].tur, "gonderi");
+        assert_eq!(akis[0].veri["metin"], "Bu akşam CS2?");
+        assert!(akis[9].veri["resim"].is_null());
     }
 
     #[tokio::test]
