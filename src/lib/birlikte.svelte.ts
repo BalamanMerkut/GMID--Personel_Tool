@@ -562,7 +562,8 @@ async function eslestir() {
     if (yukluOge != null) durdur();
     return;
   }
-  if (simdiki.id !== yukluOge) {
+  const yeni = simdiki.id !== yukluOge;
+  if (yeni) {
     if (yukleniyor === simdiki.id) return;
     yukleniyor = simdiki.id;
     birlikte.hazirlaniyor = true;
@@ -635,8 +636,19 @@ async function eslestir() {
   const son = benimOdam();
   if (!son?.simdiki || son.simdiki.id !== yukluOge) return;
   const gecen = son.caliyor ? (Date.now() + fark - son.guncelleme) / 1000 : 0;
-  // Video daha o saniyeye inmediyse inen kısmın sonundan izlenir (inince yetişir).
-  const hedef = Math.min(son.konum + Math.max(0, gecen), akis && !akis.bitti() ? Math.max(0, akis.yuklenen() - 1.5) : Infinity);
+  let hedef = son.konum + Math.max(0, gecen);
+  // Odanın saati video hazırlanırken de işler. Hedef daha inmediyse oraya atlanmaz (inen kısmın ucunda
+  // sürekli takılıyordu): video inen kısımdan oynamaya devam eder. Video yeni açıldıysa ve yöneten bensem
+  // oda da buradan başlasın (herkes baştan izler).
+  const inen = akis && !akis.bitti() ? akis.yuklenen() : Infinity;
+  if (yeni && yonetir(son) && son.konum < 1 && hedef > 2) {
+    // Kimse sarmamış, saat yalnız hazırlanırken işlemiş: video baştan başlasın.
+    hedef = Math.min(m.currentTime, 1);
+    void oynatBildir(hedef, son.caliyor);
+  } else if (hedef > inen - 1.5) {
+    hedef = m.currentTime;
+    if (yeni && yonetir(son)) void oynatBildir(hedef, son.caliyor);
+  }
   if (Math.abs(m.currentTime - hedef) > 1.2) m.currentTime = hedef;
   // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).
   if (son.caliyor && player.playing) controls.toggle();
