@@ -10,7 +10,6 @@
   import GeceKart from "../components/social/GeceKart.svelte";
   import GecePlanla from "../components/social/GecePlanla.svelte";
   import TurnuvaKart from "../components/social/TurnuvaKart.svelte";
-  import IzleSalonu from "../components/social/IzleSalonu.svelte";
   import { birlikte, katil, odaAc, odaListesi, type Gizlilik, type Yetki } from "../birlikte.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { turnuvaAc } from "../social.svelte";
@@ -198,7 +197,6 @@
   }
 
   function suzgec(v: boolean) {
-    birlikte.izle = false;
     if (yalnizArkadas === v) return;
     yalnizArkadas = v;
     void setJson("social.feedFriends", v);
@@ -295,11 +293,10 @@
 
 {#snippet sekmeBar()}
   <div class="sekmeler" role="tablist">
-    <button class="logo-ust" title="En üste dön" aria-label="En üste dön" onclick={() => (birlikte.izle ? (birlikte.izle = false) : enUste())}><img src={logo} alt="" /></button>
-    <button role="tab" aria-selected={!birlikte.izle && !yalnizArkadas} onclick={() => suzgec(false)}><span>Herkes</span></button>
-    <button role="tab" aria-selected={!birlikte.izle && yalnizArkadas} onclick={() => suzgec(true)}><span>Arkadaşlarım</span></button>
-    <button role="tab" aria-selected={birlikte.izle} onclick={() => (birlikte.izle = true)}><span><Icon name="film" size={15} />Birlikte izle</span></button>
-    {#if !birlikte.izle}<button class="yenile" title="Yenile" aria-label="Yenile" disabled={yukleniyor} onclick={() => yukle()}><Icon name="refresh" size={16} /></button>{/if}
+    <button class="logo-ust" title="En üste dön" aria-label="En üste dön" onclick={enUste}><img src={logo} alt="" /></button>
+    <button role="tab" aria-selected={!yalnizArkadas} onclick={() => suzgec(false)}><span>Herkes</span></button>
+    <button role="tab" aria-selected={yalnizArkadas} onclick={() => suzgec(true)}><span>Arkadaşlarım</span></button>
+    <button class="yenile" title="Yenile" aria-label="Yenile" disabled={yukleniyor} onclick={() => yukle()}><Icon name="refresh" size={16} /></button>
   </div>
 {/snippet}
 
@@ -310,11 +307,6 @@
     <span class="sub">Görmek ve paylaşmak için Topluluk'tan Discord ile giriş yap.</span>
     <button class="btn" onclick={() => nav.go("social")}><Icon name="users" size={16} />Topluluk'a git</button>
   </section>
-{:else if birlikte.izle}
-  <div class="izle-duzen">
-    {@render sekmeBar()}
-    <IzleSalonu />
-  </div>
 {:else}
   <div class="duzen">
     <main class="zaman-tuneli" bind:this={tunel}>
@@ -541,7 +533,6 @@
 
 <style>
   .duzen { display: grid; grid-template-columns: minmax(0, 620px) 300px; gap: 28px; justify-content: center; align-items: start; }
-  .izle-duzen { max-width: 1400px; margin: 0 auto; border: 1px solid var(--line); border-radius: 0; background: rgba(0, 0, 0, 0.12); min-height: 100%; }
   .sekmeler [role="tab"] span { grid-auto-flow: column; gap: 7px; }
   .zaman-tuneli { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 100%; background: rgba(0, 0, 0, 0.12); }
   /* Aşağı inince sekmeler üst çubuğa yapışır: ana alanın üst boşluğu (24px; dar ekranda 20px) kadar yukarı

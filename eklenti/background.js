@@ -357,8 +357,6 @@ async function handle(msg, sender) {
       return api("/v1/jobs");
     case "open":
       return api("/v1/open", {});
-    case "room":
-      return api("/v1/room", { url: msg.url, context: msg.context || undefined });
     default:
       throw new Error("Bilinmeyen istek");
   }

@@ -107,7 +107,7 @@
 
 <svelte:window onkeydown={(e) => tam && e.key === "Escape" && tamEkran(false)} />
 
-{#if oda && birlikte.panel && !birlikte.salonAcik}
+{#if oda && birlikte.panel}
   <section class="panel-oda" class:genis class:tam aria-label="Dinleme odası">
     <header>
       <span class="baslik">

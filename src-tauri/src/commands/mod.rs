@@ -445,6 +445,51 @@ pub async fn social_stream(app: AppHandle, url: String) -> CmdResult<String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Birlikte dinleme geçici klasörü.
+/// Geçici klasörde en çok bu kadar video/şarkı kalır (üçüncüsü açılınca en eskisi silinir).
+const SAKLA: usize = 2;
+/// Bundan eski olanlar her durumda silinir.
+const OMUR: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Geçici klasörü toplar: şimdi açılan (`simdiki`, dosya adının noktaya kadarki kısmı) korunur ve en yeni sayılır;
+/// en yeni [`SAKLA`] taneden fazlası ve 1 günden eskiler silinir. Çalınmakta olan dosya silinemezse sonraki sefere kalır.
+pub fn onbellek_topla(dir: &std::path::Path, simdiki: &str) {
+    let Ok(d) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let simdi = std::time::SystemTime::now();
+    // Aynı videonun dosyaları (ör. `ad.mp4`, `ad.parca.mp4`, `ad.m4a.part`) birlikte sayılır.
+    let mut gruplar: std::collections::HashMap<
+        String,
+        (std::time::SystemTime, Vec<std::path::PathBuf>),
+    > = std::collections::HashMap::new();
+    for e in d.filter_map(Result::ok) {
+        let ad = e
+            .file_name()
+            .to_string_lossy()
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let zaman = e.metadata().and_then(|m| m.modified()).unwrap_or(simdi);
+        let g = gruplar
+            .entry(ad)
+            .or_insert((std::time::UNIX_EPOCH, Vec::new()));
+        g.0 = g.0.max(zaman);
+        g.1.push(e.path());
+    }
+    let mut l: Vec<_> = gruplar.into_iter().collect();
+    l.sort_by_key(|(ad, (zaman, _))| (ad != simdiki, std::cmp::Reverse(*zaman)));
+    for (i, (ad, (zaman, dosyalar))) in l.into_iter().enumerate() {
+        let eski = simdi.duration_since(zaman).is_ok_and(|g| g > OMUR);
+        if ad != simdiki && (i >= SAKLA || eski) {
+            for f in dosyalar {
+                let _ = std::fs::remove_file(f);
+            }
+        }
+    }
+}
+
 /// Birlikte dinleme: şarkının sesi (baytlar). YouTube'un doğrudan ses adresini uygulama içinde çalmak bazı
 /// bilgisayarlarda "kaynak desteklenmiyor" hatası veriyordu; ses yt-dlp ile geçici klasöre alınır (birkaç saniye,
 /// en çok 80 MB) ve oradan çalınır. Son 2 şarkı/video saklanır (aynı şarkıya yeniden katılmak anında olur), üçüncüsü
@@ -522,7 +567,7 @@ async fn birlikte_indir(
             if let Ok(f) = std::fs::File::options().write(true).open(&p) {
                 let _ = f.set_modified(std::time::SystemTime::now());
             }
-            crate::akis::onbellek_topla(&dir, &ad);
+            onbellek_topla(&dir, &ad);
             return Ok(p);
         }
         let sablon = dir.join(format!("{ad}.%(ext)s"));
@@ -594,7 +639,7 @@ async fn birlikte_indir(
             .filter(|p| p.is_file())
             .ok_or_else(|| crate::downloader::ytdlp::friendly_error(&hata))?;
         // En çok 2 video kalsın, 1 günden eskiler silinsin.
-        crate::akis::onbellek_topla(&dir, &ad);
+        onbellek_topla(&dir, &ad);
         Ok(p)
     })
     .await
@@ -783,6 +828,34 @@ pub fn report_create(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn toplama() {
+        let dir = std::env::temp_dir().join(format!("gmid-akis-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let yaz = |ad: &str, once: u64| {
+            let f = std::fs::File::create(dir.join(ad)).unwrap();
+            f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(once))
+                .unwrap();
+        };
+        yaz("a.mp4", 300);
+        yaz("b.mp4", 200);
+        yaz("b.m4a.part", 200);
+        yaz("c.parca.mp4", 0);
+        yaz("eski.mp4", 2 * 24 * 3600);
+        // c açıldı: c ve en yeni bir tane (b) kalır; a ve 1 günden eski silinir.
+        onbellek_topla(&dir, "c");
+        let mut kalan: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        kalan.sort();
+        assert_eq!(kalan, ["b.m4a.part", "b.mp4", "c.parca.mp4"]);
+        // Eski bir videoya dönülse de o korunur.
+        onbellek_topla(&dir, "a");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn ilerleme() {

@@ -219,13 +219,6 @@
       b.onclick = () => go(b, send({ type: "download", url: p.url, option: o.id, context: p.context }), () => "Sıraya eklendi ✓");
       body.append(b);
     }
-    {
-      // Birlikte izle: GMID'de içinde olduğun odaya gönder.
-      const b = el("button", "o r");
-      b.append(el("span", "", "GMID odasında birlikte izle"), el("small", "", "oda"));
-      b.onclick = () => go(b, send({ type: "room", url: p.url, context: p.context }), () => "Odaya gönderildi ✓");
-      body.append(b);
-    }
     if (p.pageLink) {
       const l = el("button", "link", "Sayfadaki tüm videolar");
       l.onclick = () => load(false, null);

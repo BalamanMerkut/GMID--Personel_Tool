@@ -128,6 +128,23 @@ function optionsView(p, jobs) {
       el("span", {}, el("b", {}, o.label), o.recommended ? el("span", { class: "tag" }, "ÖNERİLEN") : null,
         o.detail ? el("small", {}, " · " + o.detail) : null),
       el("small", {}, size(o.size))))));
+  parts.push(jobs);
+    return parts;
+  }
+  parts.push(el("div", { class: "opts" }, ...p.options.map((o) =>
+    el("button", { class: "opt" + (o.recommended ? " rec" : ""), onclick: async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      try {
+        await send({ type: "download", url: p.url, option: o.id, context: p.context });
+        b.replaceChildren(el("b", {}, "Sıraya eklendi ✓"));
+      } catch (err) {
+        b.replaceChildren(el("span", { class: "err" }, explain(err)));
+      }
+    } },
+      el("span", {}, el("b", {}, o.label), o.recommended ? el("span", { class: "tag" }, "ÖNERİLEN") : null,
+        o.detail ? el("small", {}, " · " + o.detail) : null),
+      el("small", {}, size(o.size))))));
   // Birlikte izle: bu videoyu GMID'de içinde olduğun odaya gönder (oda yoksa izleme odası açılır).
   parts.push(el("button", { class: "opt rec", onclick: async (e) => {
     const b = e.currentTarget;

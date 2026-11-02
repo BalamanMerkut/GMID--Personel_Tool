@@ -7,7 +7,6 @@
 import { api, inTauri } from "./api";
 import { controls, nav, player } from "./player.svelte";
 import { istek, sosyal, wsEk, type Kisi } from "./social.svelte";
-import { akisBagla, AkisYok, type Akis } from "./akis";
 import { notify } from "./toast.svelte";
 import type { Download } from "./types";
 
@@ -67,10 +66,6 @@ export const birlikte = $state({
   odaId: null as string | null,
   /** Oda paneli açık. */
   panel: false,
-  /** Sosyal'de "Birlikte izle" sekmesi seçili. */
-  izle: false,
-  /** İzleme salonu ekranda (medya öğesi orada; yüzen panel ve çubuk gizlenir). */
-  salonAcik: false,
   /** Şarkı hazırlanıyor (yt-dlp). */
   hazirlaniyor: false,
   /** Hazırlanan dosyanın indirilen yüzdesi (bilinmiyorsa 0). */
@@ -82,8 +77,6 @@ export const birlikte = $state({
   /** Yerelde çalan konum ve süre (çubuk için). */
   konum: 0,
   sure: 0,
-  /** Video inerken izleniyorsa izlenebilir son saniye (tamamı hazırsa sonsuz); ileri sarma bunu geçemez. */
-  yuklenen: Infinity,
 });
 
 /** Sunucu saati − yerel saat (ms). */
@@ -92,14 +85,6 @@ let medya: HTMLVideoElement | null = null;
 /** Yüklü olan sıra öğesi. */
 let yukluOge: number | null = null;
 let blob: string | null = null;
-/** İnerken izlenen videonun akışı. */
-let akis: Akis | null = null;
-
-function akisiBirak() {
-  akis?.iptal();
-  akis = null;
-  birlikte.yuklenen = Infinity;
-}
 
 const ben = () => sosyal.ben?.id ?? "";
 const hataYaz = (e: unknown) => String(e instanceof Error ? e.message : e);
@@ -119,18 +104,9 @@ export function odaListesi(tur?: OdaTuru): Oda[] {
     .sort((a, b) => b.uyeler.length - a.uyeler.length);
 }
 
-/** Sosyal → Birlikte izle sekmesini açar (izleme odası orada büyük oynar). */
-export function izleAc() {
-  birlikte.izle = true;
-  birlikte.panel = false;
-  nav.go("feed");
-}
-
-/** Odanın penceresini aç: izleme odası büyük salonda, müzik odası yüzen panelde. */
+/** Oda panelini aç. */
 export function odayiGoster() {
-  const o = benimOdam();
-  if (o && odaTuru(o) === "video") izleAc();
-  else birlikte.panel = true;
+  birlikte.panel = true;
 }
 
 function saat(simdi: unknown) {
@@ -186,33 +162,6 @@ if (inTauri) {
   void import("@tauri-apps/api/event").then(({ listen }) =>
     listen<{ url: string; yuzde: number }>("oda-hazirlik", (e) => {
       if (e.payload.url === hazirlananUrl) birlikte.yuzde = Math.min(100, Math.max(0, e.payload.yuzde));
-    }),
-  );
-}
-
-// Eklentiden "GMID odasında birlikte izle": içinde olduğun odaya eklenir; oda yoksa izleme odası açılır.
-if (inTauri) {
-  void import("@tauri-apps/api/event").then(({ listen }) =>
-    listen<{ url: string; baslik: string | null; sayfa: string | null }>("oda-ekle", async (e) => {
-      if (!sosyal.anahtar) return notify("Önce Topluluk'tan Discord ile giriş yap", "info");
-      if (!birlikte.odaId) await odaAc({ tur: "video" });
-      const id = birlikte.odaId;
-      if (!id) return;
-      const o = benimOdam();
-      try {
-        await sirayaYaz(id, {
-          baslik: e.payload.baslik?.trim() || "Tarayıcıdan video",
-          url: e.payload.url,
-          kapak: null,
-          sure: null,
-          video: !o || odaTuru(o) === "video",
-          sayfa: e.payload.sayfa,
-        });
-        notify("Video odaya eklendi", "film");
-        odayiGoster();
-      } catch (err) {
-        notify(hataYaz(err), "info");
-      }
     }),
   );
 }
@@ -472,8 +421,7 @@ export function oynatDuraklat() {
 export function sar(sn: number) {
   const o = benimOdam();
   if (!o?.simdiki || !isFinite(sn)) return;
-  // Video daha oraya inmediyse inen kısmın sonuna.
-  void oynatBildir(Math.max(0, Math.min(sn, birlikte.yuklenen - 1.5)), o.caliyor);
+  void oynatBildir(Math.max(0, sn), o.caliyor);
 }
 
 export async function atla() {
@@ -515,13 +463,9 @@ export function medyaElemani(): HTMLVideoElement {
   m.preload = "auto";
   m.playsInline = true;
   m.volume = birlikte.ses;
-  m.addEventListener("timeupdate", () => {
-    birlikte.konum = m.currentTime;
-    birlikte.yuklenen = akis && !akis.bitti() ? akis.yuklenen() : Infinity;
-  });
+  m.addEventListener("timeupdate", () => (birlikte.konum = m.currentTime));
   m.addEventListener("loadedmetadata", () => {
-    // İnerken (akışta) süre yalnız inen kısım kadardır; asıl süre dosyaya geçince gelir.
-    if (isFinite(m.duration) && !m.src.startsWith("blob:")) birlikte.sure = m.duration;
+    if (isFinite(m.duration)) birlikte.sure = m.duration;
   });
   // Şarkı bitti: sıradakine geçilsin (sunucu iki kez geçirmez).
   m.addEventListener("ended", () => {
@@ -534,7 +478,6 @@ export function medyaElemani(): HTMLVideoElement {
 }
 
 function durdur() {
-  akisiBirak();
   if (medya) {
     medya.pause();
     medya.removeAttribute("src");
@@ -572,58 +515,22 @@ async function eslestir() {
       birlikte.yuzde = 0;
       hazirlananUrl = simdiki.sarki.url;
       const sarki = simdiki.sarki;
-      const gecerli = () => benimOdam()?.simdiki?.id === simdiki.id;
-      akisiBirak();
-      let acildi = false;
-      // Video: inerken izlenir (inen kısma kadar sarılabilir). Olmazsa önce tamamı indirilir.
-      if (sarki.video) {
-        try {
-          const a = await aracla(() =>
-            akisBagla(
-              m,
-              {
-                baslat: () => invoke("oda_akis_baslat", { url: sarki.url, sayfa: sarki.sayfa ?? null }),
-                durum: (id) => invoke("oda_akis_durum", { id }),
-                oku: (id, konum) => invoke<ArrayBuffer>("oda_akis_oku", { id, konum }),
-                dosyaAdresi: api.fileSrc,
-                birak: (id) => void invoke("oda_akis_birak", { id }).catch(() => {}),
-              },
-              (e) => {
-                if (akis === a) notify(`Video inerken kesildi: ${e}`, "info");
-              },
-            ),
-          );
-          if (!gecerli()) {
-            a.iptal();
-            return;
-          }
-          akis = a;
-          birlikte.yuklenen = a.yuklenen();
-          acildi = true;
-        } catch (e) {
-          if (!(e instanceof AkisYok)) console.warn("akış açılamadı, tamamı indirilecek:", e);
-          if (!gecerli()) return;
-        }
-      }
-      if (!acildi) {
-        // Dosya geçici klasöre iner, oynatıcı doğrudan dosyadan açar (büyük video belleğe okunmaz).
-        const yol = await aracla(() =>
-          invoke<string>("social_stream_file", { url: sarki.url, video: sarki.video, sayfa: sarki.sayfa ?? null }),
-        );
-        // Hazırlanırken şarkı değiştiyse ya da odadan çıkıldıysa bırak.
-        if (!gecerli()) return;
-        m.src = api.fileSrc(yol);
-      }
+      // Dosya geçici klasöre iner, oynatıcı doğrudan dosyadan açar (büyük dosya belleğe okunmaz).
+      const yol = await aracla(() =>
+        invoke<string>("social_stream_file", { url: sarki.url, video: sarki.video, sayfa: sarki.sayfa ?? null }),
+      );
+      // Hazırlanırken şarkı değiştiyse ya da odadan çıkıldıysa bırak.
+      if (benimOdam()?.simdiki?.id !== simdiki.id) return;
+      m.src = api.fileSrc(yol);
       if (blob) setTimeout((u: string) => URL.revokeObjectURL(u), 2000, blob);
       blob = null;
       yukluOge = simdiki.id;
-      if (!acildi)
-        await new Promise<void>((ok) => {
-          const bitti = () => ok();
-          m.addEventListener("loadedmetadata", bitti, { once: true });
-          m.addEventListener("error", bitti, { once: true });
-          setTimeout(bitti, 8000);
-        });
+      await new Promise<void>((ok) => {
+        const bitti = () => ok();
+        m.addEventListener("loadedmetadata", bitti, { once: true });
+        m.addEventListener("error", bitti, { once: true });
+        setTimeout(bitti, 8000);
+      });
     } catch (e) {
       notify(`Açılamadı: ${hataYaz(e)}`, "info");
       return;
@@ -640,14 +547,10 @@ async function eslestir() {
   // Odanın saati video hazırlanırken de işler. Hedef daha inmediyse oraya atlanmaz (inen kısmın ucunda
   // sürekli takılıyordu): video inen kısımdan oynamaya devam eder. Video yeni açıldıysa ve yöneten bensem
   // oda da buradan başlasın (herkes baştan izler).
-  const inen = akis && !akis.bitti() ? akis.yuklenen() : Infinity;
   if (yeni && yonetir(son) && son.konum < 1 && hedef > 2) {
-    // Kimse sarmamış, saat yalnız hazırlanırken işlemiş: video baştan başlasın.
-    hedef = Math.min(m.currentTime, 1);
+    // Kimse sarmamış, saat yalnız hazırlanırken işlemiş: şarkı baştan başlasın.
+    hedef = 0;
     void oynatBildir(hedef, son.caliyor);
-  } else if (hedef > inen - 1.5) {
-    hedef = m.currentTime;
-    if (yeni && yonetir(son)) void oynatBildir(hedef, son.caliyor);
   }
   if (Math.abs(m.currentTime - hedef) > 1.2) m.currentTime = hedef;
   // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).

@@ -13,7 +13,7 @@
   });
 </script>
 
-{#if oda && !birlikte.panel && !birlikte.salonAcik}
+{#if oda && !birlikte.panel}
   <div class="cubuk" role="status">
     {#if yonetir(oda) && oda.simdiki}
       <button class="oynat" title={oda.caliyor ? "Duraklat" : "Oynat"} onclick={oynatDuraklat}><Icon name={oda.caliyor ? "pause" : "play"} size={15} /></button>
