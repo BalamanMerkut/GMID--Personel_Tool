@@ -15,7 +15,7 @@ CS=$HLDS/cstrike
 KULLANICI=cs16
 PORT="${GMID_CS_PORT:-27015}"
 SLOT="${GMID_CS_SLOT:-24}"
-AD="${GMID_CS_AD:-GMID | JailBreak - 35HP - IceWorld}"
+AD="${GMID_CS_AD:-GMID | JailBreak - 35HP - IceWorld | discord.gg/upu9VQwFrV}"
 DEPO_HAM="https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/${GMID_DAL:-HEAD}/oyun-sunucusu/cs16"
 HIZMET=gmid-cs16
 

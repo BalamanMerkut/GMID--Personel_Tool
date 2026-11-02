@@ -9,7 +9,7 @@
  *   diğerleri         → Pro Public (fy_iceworld vb.): bunny hop KAPALI, sv_airaccelerate 10, kısa donma,
  *                       otomatik takım dengesi.
  *
- * Komut: say /mod → şu anki mod.
+ * Komut: say /mod → şu anki mod. Her 4 dakikada bir sohbete Discord ve GMID Tool duyurusu düşer.
  */
 
 #include <amxmodx>
@@ -53,6 +53,20 @@ public plugin_init()
 	RegisterHam(Ham_Spawn, "player", "fw_Spawn", 1)
 	register_clcmd("say /mod", "cmd_mod")
 	register_clcmd("say_team /mod", "cmd_mod")
+	register_clcmd("say /discord", "cmd_discord")
+	register_clcmd("say_team /discord", "cmd_discord")
+	set_task(240.0, "duyuru", _, _, _, "b")
+}
+
+public duyuru()
+{
+	client_print(0, print_chat, "[GMID] Discord: discord.gg/upu9VQwFrV  |  GMID Tool: gmid.molayazilim.com.tr")
+}
+
+public cmd_discord(id)
+{
+	client_print(id, print_chat, "[GMID] Discord: discord.gg/upu9VQwFrV  |  GMID Tool: gmid.molayazilim.com.tr")
+	return PLUGIN_CONTINUE
 }
 
 public plugin_cfg()

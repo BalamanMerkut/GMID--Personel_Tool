@@ -8,8 +8,9 @@
       "game": "cs16",
       "host": "31.57.187.132",
       "port": 27015,
-      "description": "Harita türüne göre mod: jail_ haritalarında JailBreak, 35hp_ haritalarında bunny hop açık 35 HP, fy_iceworld'de Pro Public. Komutlar: /mod, JailBreak'te /simon, /ac, /fd, /lr.",
-      "connect": "Oyunda konsol: connect gmid.molayazilim.com.tr:27015"
+      "description": "GMID'in CS 1.6 sunucusu; mod haritaya göre değişir. JailBreak (jail_): mahkûmlar bıçakla, gardiyanlar M4 ve Deagle ile; /simon komutan, /ac hücre, /fd serbest gün, /lr son istek düellosu. 35 HP (35hp_): herkes 35 canla, bunny hop açık. Pro Public (fy_iceworld): bunny hop kapalı, klasik public. Takım kurmak, etkinlik ve turnuva için Discord: discord.gg/upu9VQwFrV",
+      "connect": "Oyunda konsol: connect gmid.molayazilim.com.tr:27015 · Discord: discord.gg/upu9VQwFrV",
+      "logo": "logolar/cs16.png"
     },
     {
       "id": "gmid-minecraft",
@@ -17,8 +18,9 @@
       "game": "minecraft",
       "host": "gmid.molayazilim.com.tr",
       "port": 25565,
-      "description": "GMID'in Minecraft sunucusu (Java sürümü).",
-      "connect": "Minecraft → Çok Oyunculu → Sunucu Ekle → adres: gmid.molayazilim.com.tr"
+      "description": "GMID'in Minecraft sunucusu (Java). Arkadaşlarla hayatta kalma; inşa et, keşfet, birlikte oyna. Kurallar, duyurular ve yardım için Discord: discord.gg/upu9VQwFrV",
+      "connect": "Minecraft → Çok Oyunculu → Sunucu Ekle → adres: gmid.molayazilim.com.tr · Discord: discord.gg/upu9VQwFrV",
+      "logo": "logolar/minecraft.png"
     }
   ],
   "ornek": [
