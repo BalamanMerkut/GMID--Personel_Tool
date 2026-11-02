@@ -62,6 +62,17 @@ pub enum Yetki {
     Herkes,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Tekrar {
+    #[default]
+    Yok,
+    /// Biten şarkı baştan çalar.
+    Sarki,
+    /// Biten (ya da atlanan) şarkı sıranın sonuna döner.
+    Liste,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct Oda {
     pub id: String,
@@ -80,6 +91,16 @@ pub struct Oda {
     pub konum: f64,
     pub caliyor: bool,
     pub guncelleme: i64,
+    pub tekrar: Tekrar,
+    /// Karıştır: sıradaki şarkı rastgele seçilir.
+    pub karisik: bool,
+}
+
+/// [0, n) arası rastgele sayı.
+fn rastgele(n: usize) -> usize {
+    let mut b = [0u8; 4];
+    let _ = getrandom::fill(&mut b);
+    u32::from_le_bytes(b) as usize % n.max(1)
 }
 
 impl Oda {
@@ -129,13 +150,37 @@ impl Oda {
         true
     }
 
-    /// Sıradaki şarkıya geç (sıra boşsa durur).
-    pub fn sonraki(&mut self, simdi: i64) {
-        self.simdiki = if self.sira.is_empty() {
-            None
+    /// Sıradaki şarkıya geç (sıra boşsa durur). `bitti`: şarkı kendiliğinden bitti (şarkı tekrarında baştan
+    /// çalar); değilse atlandı. Liste tekrarında çalan şarkı sıranın sonuna döner; karışıkta sıradaki rastgele.
+    pub fn sonraki(&mut self, simdi: i64, bitti: bool) {
+        if bitti && self.tekrar == Tekrar::Sarki && self.simdiki.is_some() {
+            self.konum = 0.0;
+            self.caliyor = true;
+            self.guncelleme = simdi;
+            return;
+        }
+        let i = if self.karisik {
+            rastgele(self.sira.len())
         } else {
-            Some(self.sira.remove(0))
+            0
         };
+        self.gec(i, simdi);
+    }
+
+    /// Sıranın `i`. öğesine geç (sıra boşsa durur).
+    fn gec(&mut self, i: usize, simdi: i64) {
+        let eski = self.simdiki.take();
+        self.simdiki = (i < self.sira.len()).then(|| self.sira.remove(i));
+        if self.tekrar == Tekrar::Liste {
+            if let Some(e) = eski {
+                // Sıra tek şarkıysa (ya da boşsa) aynı şarkı yeniden çalar.
+                if self.simdiki.is_none() {
+                    self.simdiki = Some(e);
+                } else {
+                    self.sira.push(e);
+                }
+            }
+        }
         self.konum = 0.0;
         self.caliyor = self.simdiki.is_some();
         self.guncelleme = simdi;
@@ -347,6 +392,8 @@ pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(a): Json<Ayar>)
         konum: 0.0,
         caliyor: false,
         guncelleme: simdi(),
+        tekrar: Tekrar::Yok,
+        karisik: false,
     };
     s.odalar.kilit().insert(id, oda.clone());
     yay(&s, &oda);
@@ -361,6 +408,9 @@ pub struct Degisiklik {
     yetki: Option<Yetki>,
     /// DJ yap / DJ'liği al: {kisi, ver}.
     dj: Option<DjIstek>,
+    /// Tekrar ve karıştır (sahip ve DJ'ler).
+    tekrar: Option<Tekrar>,
+    karisik: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -380,8 +430,24 @@ pub async fn ayarla(
     let ((), oda) = s
         .odalar
         .degistir(&id, |o| {
-            if o.sahip.id != ben.id {
+            let sahip_isi = d.ad.is_some()
+                || d.gizlilik.is_some()
+                || d.sinir.is_some()
+                || d.yetki.is_some()
+                || d.dj.is_some();
+            if sahip_isi && o.sahip.id != ben.id {
                 return Err(Hata::Yetki("Ayarları yalnız oda sahibi değiştirir"));
+            }
+            if (d.tekrar.is_some() || d.karisik.is_some()) && !o.yonetir(&ben.id) {
+                return Err(Hata::Yetki(
+                    "Tekrar ve karıştırmayı sahip ve DJ'ler değiştirir",
+                ));
+            }
+            if let Some(t) = d.tekrar {
+                o.tekrar = t;
+            }
+            if let Some(k) = d.karisik {
+                o.karisik = k;
             }
             if let Some(a) = d.ad {
                 o.ad = ad_temizle(Some(a), &o.ad.clone());
@@ -558,6 +624,12 @@ pub async fn oynat(
 pub struct Sonraki {
     /// Bitti diyen dinleyici, hangi şarkının bittiğini söyler (iki kez atlanmasın).
     oge: Option<u64>,
+    /// Sıradaki bu öğeye hemen geç (sahip/DJ; listede tıklanan şarkı).
+    #[serde(default)]
+    sec: Option<u64>,
+    /// Şarkı kendiliğinden bitti (atlama değil): şarkı tekrarında baştan çalar.
+    #[serde(default)]
+    bitti: bool,
 }
 
 /// POST /api/oda/{id}/sonraki: atla (sahip/DJ) ya da "bu şarkı bitti" (herhangi bir üye, şarkı gerçekten
@@ -573,6 +645,15 @@ pub async fn sonraki(
     let ((), oda) = s
         .odalar
         .degistir(&id, |o| {
+            if let Some(sec) = i.sec {
+                if !o.yonetir(&ben.id) {
+                    return Err(Hata::Yetki("Şarkı seçmeyi sahip ve DJ'ler yapar"));
+                }
+                if let Some(n) = o.sira.iter().position(|x| x.id == sec) {
+                    o.gec(n, t);
+                }
+                return Ok(());
+            }
             let simdiki = o.simdiki.as_ref().map(|x| x.id);
             if i.oge.is_some() && i.oge != simdiki {
                 // Başkası zaten geçirmiş.
@@ -586,7 +667,7 @@ pub async fn sonraki(
             if !o.yonetir(&ben.id) && !bitti {
                 return Err(Hata::Yetki("Atlamayı sahip ve DJ'ler yapar"));
             }
-            o.sonraki(t);
+            o.sonraki(t, i.bitti);
             Ok(())
         })
         .map_err(cevir)?;
@@ -662,6 +743,8 @@ mod tests {
             konum: 0.0,
             caliyor: false,
             guncelleme: 0,
+            tekrar: Tekrar::Yok,
+            karisik: false,
         }
     }
 
@@ -691,11 +774,39 @@ mod tests {
         assert_eq!(x.sira.len(), 1);
         // 10 sn sonra konum 9 sn (1000 ms'de başladı).
         assert!((x.konum_simdi(10_000) - 9.0).abs() < 0.01);
-        x.sonraki(20_000);
+        x.sonraki(20_000, true);
         assert_eq!(x.simdiki.as_ref().unwrap().sarki.baslik, "B");
         assert!(x.sira.is_empty());
-        x.sonraki(30_000);
+        x.sonraki(30_000, true);
         assert!(x.simdiki.is_none() && !x.caliyor);
+    }
+
+    #[test]
+    fn tekrar_ve_karisik() {
+        let o = Odalar::default();
+        let mut x = oda();
+        for ad in ["A", "B", "C"] {
+            x.ekle(o.yeni_oge(sarki(ad, 100.0), &k("1")), 0);
+        }
+        let ad = |x: &Oda| x.simdiki.as_ref().unwrap().sarki.baslik.clone();
+        // Şarkı tekrarı: biten baştan; atlanan geçer.
+        x.tekrar = Tekrar::Sarki;
+        x.sonraki(1, true);
+        assert_eq!(ad(&x), "A");
+        x.sonraki(2, false);
+        assert_eq!(ad(&x), "B");
+        // Liste tekrarı: biten sona döner, sıra bitmez.
+        x.tekrar = Tekrar::Liste;
+        x.sonraki(3, true);
+        x.sonraki(4, true);
+        assert_eq!(ad(&x), "B");
+        assert_eq!(x.sira.len(), 1);
+        // Karışık: sıradakilerden biri; hiçbiri kaybolmaz.
+        x.karisik = true;
+        for t in 5..20 {
+            x.sonraki(t, true);
+            assert_eq!(x.sira.len() + 1, 2);
+        }
     }
 
     #[test]

@@ -644,6 +644,26 @@ mod tests {
         .await;
         assert_eq!(kod, StatusCode::OK);
         assert!(v["oda"]["simdiki"].is_null());
+        // Sıradan seçilen şarkı hemen çalar (DJ).
+        for b2 in ["Bir", "İki", "Üç"] {
+            let govde = format!(r#"{{"baslik":"{b2}","url":"https://youtu.be/{b2}","sure":100}}"#);
+            iste(&s, istek("POST", format!("/api/oda/{id}/sira"), &b, &govde)).await;
+        }
+        let (_, v) = iste(&s, istek("GET", "/api/odalar".into(), &a, "")).await;
+        let uc = v["odalar"][0]["sira"][1]["id"].as_u64().unwrap();
+        let (kod, v) = iste(
+            &s,
+            istek(
+                "POST",
+                format!("/api/oda/{id}/sonraki"),
+                &b,
+                &format!(r#"{{"sec":{uc}}}"#),
+            ),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK);
+        assert_eq!(v["oda"]["simdiki"]["sarki"]["baslik"], "Üç");
+        assert_eq!(v["oda"]["sira"][0]["sarki"]["baslik"], "İki");
         // A ayrılınca oda B'ye geçer.
         let (kod, _) = iste(&s, istek("DELETE", format!("/api/oda/{id}/katil"), &a, "")).await;
         assert_eq!(kod, StatusCode::OK);

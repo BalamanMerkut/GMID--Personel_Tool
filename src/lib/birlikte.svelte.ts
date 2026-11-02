@@ -28,6 +28,8 @@ export interface Oge {
 export type Gizlilik = "herkes" | "arkadaslar";
 export type Yetki = "sahip" | "dj" | "herkes";
 
+export type Tekrar = "yok" | "sarki" | "liste";
+
 export interface Oda {
   id: string;
   ad: string;
@@ -44,6 +46,9 @@ export interface Oda {
   caliyor: boolean;
   /** Sunucu saatiyle (ms). */
   guncelleme: number;
+  /** Eski sunucuda yok. */
+  tekrar?: Tekrar;
+  karisik?: boolean;
 }
 
 const BASLANGIC_SESI = 0.1;
@@ -160,7 +165,7 @@ export async function odaAc(a: OdaAyar = {}) {
   }
 }
 
-export async function ayarla(d: OdaAyar & { dj?: { kisi: string; ver: boolean } }) {
+export async function ayarla(d: OdaAyar & { dj?: { kisi: string; ver: boolean }; tekrar?: Tekrar; karisik?: boolean }) {
   const id = birlikte.odaId;
   if (!id) return;
   await istek<{ oda: Oda }>("PATCH", `/api/oda/${id}`, d)
@@ -212,6 +217,18 @@ export async function odaKapat() {
 export const at = (kisi: string) =>
   birlikte.odaId && istek("POST", `/api/oda/${birlikte.odaId}/at/${kisi}`).catch((e) => notify(hataYaz(e), "info"));
 export const djYap = (kisi: string, ver: boolean) => ayarla({ dj: { kisi, ver } });
+
+/** Tekrar: yok → şarkı → liste → yok (sahip/DJ). */
+export function tekrarDegistir() {
+  const o = benimOdam();
+  if (!o) return;
+  const sonraki: Record<Tekrar, Tekrar> = { yok: "sarki", sarki: "liste", liste: "yok" };
+  void ayarla({ tekrar: sonraki[o.tekrar ?? "yok"] });
+}
+export function karistirDegistir() {
+  const o = benimOdam();
+  if (o) void ayarla({ karisik: !o.karisik });
+}
 
 // ---------------- sıra ----------------
 
@@ -363,9 +380,30 @@ export async function atla() {
   await istek("POST", `/api/oda/${id}/sonraki`, { oge: benimOdam()?.simdiki?.id ?? null }).catch((e) => notify(hataYaz(e), "info"));
 }
 
+/** Sıradaki bir şarkıyı hemen çal (sahip/DJ; listede tıklanınca). */
+export async function simdiCal(oge: number) {
+  const id = birlikte.odaId;
+  if (!id) return;
+  await istek("POST", `/api/oda/${id}/sonraki`, { sec: oge }).catch((e) => notify(hataYaz(e), "info"));
+}
+
 export function sesAyarla(v: number) {
   birlikte.ses = Math.max(0, Math.min(1, v));
   if (medya) medya.volume = birlikte.ses;
+}
+
+/** Panel kapalıyken medya öğesinin durduğu gizli kutu. Öğe sayfadan çıkarılırsa tarayıcı onu duraklatır;
+ *  bu yüzden panel kapanınca silinmez, buraya taşınır (aynı anda taşındığı için çalmaya devam eder). */
+export function medyaYedekKutusu(): HTMLElement {
+  let k = document.getElementById("oda-medya-yedek");
+  if (!k) {
+    k = document.createElement("div");
+    k.id = "oda-medya-yedek";
+    k.setAttribute("aria-hidden", "true");
+    k.style.cssText = "position:fixed;width:1px;height:1px;left:-10px;top:-10px;overflow:hidden;opacity:0;pointer-events:none";
+    document.body.appendChild(k);
+  }
+  return k;
 }
 
 /** Oda panelinin göstereceği öğe (videoda görüntü, şarkıda yalnız ses; panel kapalıyken de çalar). */
@@ -382,9 +420,10 @@ export function medyaElemani(): HTMLVideoElement {
   // Şarkı bitti: sıradakine geçilsin (sunucu iki kez geçirmez).
   m.addEventListener("ended", () => {
     const id = birlikte.odaId;
-    if (id && yukluOge != null) void istek("POST", `/api/oda/${id}/sonraki`, { oge: yukluOge }).catch(() => {});
+    if (id && yukluOge != null) void istek("POST", `/api/oda/${id}/sonraki`, { oge: yukluOge, bitti: true }).catch(() => {});
   });
   medya = m;
+  medyaYedekKutusu().appendChild(m);
   return m;
 }
 

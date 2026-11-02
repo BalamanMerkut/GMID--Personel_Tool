@@ -216,11 +216,11 @@
     {/if}
 
     <footer>
-      <button class="eylem yorum-d" class:acik onclick={() => (acik = !acik)} title="Yanıtla">
-        <span class="hale"><Icon name="chat" size={17} /></span><span class="tnum">{o.yorumlar.length || ""}</span>
-      </button>
       <button class="eylem begen-d" class:begendi={o.begendim} onclick={begen} aria-pressed={o.begendim} title="Beğen">
         <span class="hale"><Icon name="heart" size={17} /></span><span class="tnum">{o.begeni || ""}</span>
+      </button>
+      <button class="eylem yorum-d" class:acik onclick={() => (acik = !acik)} title="Yanıtla">
+        <span class="hale"><Icon name="chat" size={17} /></span><span class="tnum">{o.yorumlar.length || ""}</span>
       </button>
     </footer>
 

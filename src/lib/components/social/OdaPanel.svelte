@@ -12,12 +12,16 @@
     djYap,
     ekle,
     ekleyebilir,
+    karistirDegistir,
     medyaElemani,
+    medyaYedekKutusu,
+    tekrarDegistir,
     odaKapat,
     oynatDuraklat,
     sar,
     sesAyarla,
     siradanCikar,
+    simdiCal,
     yonetir,
     type Gizlilik,
     type Yetki,
@@ -35,6 +39,26 @@
   let giris = $state("");
   let video = $state(false);
   let ayarAcik = $state(false);
+  /** Geniş panel (videoyu büyük izlemek için). */
+  let genis = $state(false);
+  /** Tam ekran: panel bütün pencereyi kaplar, pencere de tam ekrana geçer. */
+  let tam = $state(false);
+  async function pencereTam(on: boolean) {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().setFullscreen(on);
+    } catch {
+      /* tarayıcıda ya da izin yoksa yalnız pencere içinde büyür */
+    }
+  }
+  function tamEkran(on = !tam) {
+    tam = on;
+    void pencereTam(on);
+  }
+  // Oda kapanınca / panel küçülünce tam ekrandan çık.
+  $effect(() => {
+    if (tam && (!birlikte.panel || !birlikte.odaId)) tamEkran(false);
+  });
   let kapatOnay = $state(false);
 
   // Ayar taslağı (açılınca odadakiyle dolar).
@@ -67,7 +91,11 @@
     kutu.appendChild(m);
     return {
       destroy() {
-        if (m.parentElement === kutu) kutu.removeChild(m);
+        // Silinmez, gizli kutuya taşınır: panel küçülünce müzik durmasın.
+        const caliyordu = !m.paused;
+        if (!m.isConnected || m.parentElement === kutu) medyaYedekKutusu().appendChild(m);
+        // Yine de duraklatıldıysa sürdür.
+        if (caliyordu) setTimeout(() => m.paused && void m.play().catch(() => {}), 60);
       },
     };
   }
@@ -77,8 +105,10 @@
   const gorunur = $derived(!!oda?.simdiki?.sarki.video);
 </script>
 
+<svelte:window onkeydown={(e) => tam && e.key === "Escape" && tamEkran(false)} />
+
 {#if oda && birlikte.panel}
-  <section class="panel-oda" aria-label="Dinleme odası">
+  <section class="panel-oda" class:genis class:tam aria-label="Dinleme odası">
     <header>
       <span class="baslik">
         <Icon name="headphones" size={16} />
@@ -87,6 +117,7 @@
         <span class="sub small tnum">{oda.uyeler.length}{oda.sinir ? `/${oda.sinir}` : ""} kişi</span>
       </span>
       {#if sahibim}<button class="ic" title="Oda ayarları" aria-label="Oda ayarları" onclick={ayarlariAc}><Icon name="gear" size={15} /></button>{/if}
+      <button class="ic" title={genis ? "Paneli daralt" : "Paneli genişlet (büyük izle)"} aria-label="Genişlet" onclick={() => (genis = !genis)}><Icon name={genis ? "shrink" : "expand"} size={15} /></button>
       <button class="ic" title="Küçült (çalmaya devam eder)" aria-label="Küçült" onclick={() => (birlikte.panel = false)}><Icon name="shrinkdown" size={16} /></button>
     </header>
 
@@ -107,8 +138,11 @@
     {/if}
 
     <!-- Şu an çalan -->
-    <div class="sahne" class:video={gorunur}>
+    <div class="sahne" class:video={gorunur} role="presentation" ondblclick={() => gorunur && tamEkran()}>
       <div class="medya" use:yerlestir></div>
+      {#if gorunur}
+        <button class="tam-dugme" title={tam ? "Tam ekrandan çık (Esc)" : "Tam ekran (çift tık)"} aria-label="Tam ekran" onclick={() => tamEkran()}><Icon name={tam ? "shrink" : "expand"} size={16} /></button>
+      {/if}
       {#if !gorunur}
         <div class="kapak">
           {#if oda.simdiki?.sarki.kapak}<img src={oda.simdiki.sarki.kapak} alt="" />{:else}<Icon name="headphones" size={44} />{/if}
@@ -133,6 +167,12 @@
         <button class="oynat" title={oda.caliyor ? "Duraklat" : "Oynat"} disabled={!oda.simdiki} onclick={oynatDuraklat}><Icon name={oda.caliyor ? "pause" : "play"} size={18} /></button>
         <button class="ic" title="Sıradakine geç" aria-label="Sıradakine geç" disabled={!oda.simdiki} onclick={atla}><Icon name="next" size={18} /></button>
       {/if}
+      {#if yonetici || oda.karisik || (oda.tekrar && oda.tekrar !== "yok")}
+        <button class="ic" class:acik={oda.karisik} disabled={!yonetici} title={oda.karisik ? "Karışık çalıyor (kapat)" : "Karıştırarak çal"} aria-label="Karıştır" onclick={karistirDegistir}><Icon name="shuffle" size={17} /></button>
+        <button class="ic tekrar" class:acik={!!oda.tekrar && oda.tekrar !== "yok"} disabled={!yonetici} title={oda.tekrar === "sarki" ? "Şarkıyı tekrarla (sonraki: listeyi tekrarla)" : oda.tekrar === "liste" ? "Listeyi tekrarla (sonraki: kapalı)" : "Tekrar kapalı (sonraki: şarkıyı tekrarla)"} aria-label="Tekrar" onclick={tekrarDegistir}>
+          <Icon name="repeat" size={17} />{#if oda.tekrar === "sarki"}<span class="bir">1</span>{/if}
+        </button>
+      {/if}
       <span class="bosluk"></span>
       <Icon name="speaker" size={15} />
       <input class="ses" type="range" min="0" max="1" step="0.05" value={birlikte.ses} oninput={(e) => sesAyarla(+e.currentTarget.value)} aria-label="Ses" />
@@ -151,7 +191,14 @@
       {#each oda.sira as o, i (o.id)}
         <div class="satir">
           <span class="no tnum">{i + 1}</span>
-          <span class="satir-yazi"><b title={o.sarki.baslik}>{o.sarki.video ? "🎬 " : ""}{o.sarki.baslik}</b><span class="sub small">{o.ekleyen.ad}</span></span>
+          {#if yonetici}
+            <button class="satir-yazi cal" title="Şimdi çal" onclick={() => simdiCal(o.id)}>
+              <b title={o.sarki.baslik}>{o.sarki.video ? "🎬 " : ""}{o.sarki.baslik}</b><span class="sub small">{o.ekleyen.ad}</span>
+              <span class="cal-ikon"><Icon name="play" size={13} /></span>
+            </button>
+          {:else}
+            <span class="satir-yazi"><b title={o.sarki.baslik}>{o.sarki.video ? "🎬 " : ""}{o.sarki.baslik}</b><span class="sub small">{o.ekleyen.ad}</span></span>
+          {/if}
           {#if yonetici || o.ekleyen.id === benId}
             <button class="ic kucuk" title="Sıradan çıkar" aria-label="Sıradan çıkar" onclick={() => siradanCikar(o.id)}><Icon name="x" size={13} /></button>
           {/if}
@@ -212,6 +259,23 @@
   .ilerle { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dim); margin-top: 4px; }
   .ilerle input { flex: 1; accent-color: var(--gold); }
   .bos { margin: 0; }
+  .ic.acik { color: var(--gold); }
+  .ic.acik:disabled { opacity: 1; }
+  .ic.tekrar { position: relative; }
+  .bir { position: absolute; right: 3px; bottom: 2px; font-size: 9px; font-weight: 900; color: var(--gold); }
+  .panel-oda.genis { width: min(760px, calc(100vw - 120px)); }
+  .tam-dugme { position: absolute; right: 8px; bottom: 8px; z-index: 2; width: 34px; height: 34px; border-radius: 9px; border: 0; background: rgba(0, 0, 0, 0.55); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+  .sahne:hover .tam-dugme, .tam .tam-dugme { opacity: 1; }
+  .satir-yazi.cal { position: relative; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 3px 26px 3px 6px; margin: -3px 0 -3px -6px; border-radius: 8px; cursor: pointer; }
+  .satir-yazi.cal:hover { background: rgba(227, 194, 112, 0.08); }
+  .cal-ikon { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: var(--gold); opacity: 0; transition: opacity 0.12s; }
+  .satir-yazi.cal:hover .cal-ikon { opacity: 1; }
+  /* Tam ekran: yalnız görüntü ve oynatma çubuğu. */
+  .panel-oda.tam { inset: 0; right: 0; bottom: 0; width: auto; max-height: none; border-radius: 0; border: 0; padding: 0; gap: 0; z-index: 300; background: #000; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; }
+  .tam > header, .tam > .ayarlar, .tam > .ekle, .tam > .liste, .tam > footer, .tam > .bos { display: none; }
+  .tam .sahne, .tam .sahne.video { height: 100%; aspect-ratio: auto; border-radius: 0; }
+  .tam .simdi { padding: 10px 18px 0; background: #0b0c0e; }
+  .tam .kontrol { padding: 8px 18px 14px; background: #0b0c0e; }
   .kontrol { display: flex; align-items: center; gap: 8px; color: var(--dim); }
   .oynat { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--gold); color: #1b1608; display: grid; place-items: center; cursor: pointer; }
   .oynat:disabled { opacity: 0.4; }
