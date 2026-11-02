@@ -20,6 +20,34 @@
   let busy = $state(false);
   let now = $state(Date.now());
   let fps = $state<FpsStatus | null>(null);
+  let fpsTest = $state<import("../types").FpsTest | null>(null);
+  let fpsTesting = $state(false);
+
+  /** "FPS'i dene": 6 sn ölçer, nerede takıldığını gösterir (oyun açıkken dene). */
+  async function testFps() {
+    fpsTesting = true;
+    fpsTest = null;
+    try {
+      fpsTest = await api.fps.test();
+      fps = await api.fps.status();
+    } catch (e) {
+      notify(String(e), "info");
+    } finally {
+      fpsTesting = false;
+    }
+  }
+
+  /** Testin sonucunu tek cümleyle: sorun nerede. */
+  function teshisYazisi(t: import("../types").FpsTest): string {
+    if (!t.kurulu) return "Ölçüm aracı (PresentMon) kurulu değil: \"FPS ölçümünü aç\"a bas.";
+    if (!t.grupta && !t.gorev) return "Windows izni yok: \"FPS ölçümünü aç\"a bas ve yönetici iznini onayla.";
+    if (t.kare === 0)
+      return t.ayrinti
+        ? `Ölçüm başladı ama hiç kare gelmedi. Ayrıntı: ${t.ayrinti}`
+        : `Ölçüm başladı ama hiç kare gelmedi${t.message ? ` (${t.message})` : ""}. Bilgisayarı yeniden başlatıp tekrar dene.`;
+    const oyun = t.programlar[0];
+    return `Çalışıyor: ${t.kare} kare geldi. En çok kare gönderen: ${oyun[0]} (${Math.round(oyun[1])} FPS).`;
+  }
   let fpsBusy = $state(false);
   let borderless = $state<string[]>([]);
   /** Panel açılınca: auto (oyuna göre) | interactive (fare hemen panelde) | glance (fare oyunda kalır). */
@@ -223,14 +251,31 @@
             RivaTuner (RTSS) açıksa ona gerek kalmaz.{/if}
         </span>
       </div>
-      {#if fps && fps.state !== "ready" && fps.state !== "running"}
-        <button class="btn sm" disabled={fpsBusy} onclick={setupFps}><Icon name="bolt" size={14} />{fpsBusy ? "Kuruluyor…" : fps.relogin ? "Yeniden dene" : "FPS ölçümünü aç"}</button>
-      {/if}
+      <div class="fps-dugmeler">
+        {#if fps && fps.state !== "ready" && fps.state !== "running"}
+          <button class="btn sm" disabled={fpsBusy} onclick={setupFps}><Icon name="bolt" size={14} />{fpsBusy ? "Kuruluyor…" : fps.relogin ? "Yeniden dene" : "FPS ölçümünü aç"}</button>
+        {/if}
+        <button class="btn ghost sm" disabled={fpsTesting} onclick={testFps} title="Oyun açıkken bas: 6 saniye ölçer, sorun nerede gösterir">{fpsTesting ? "Ölçülüyor… (6 sn)" : "FPS'i dene"}</button>
+      </div>
     </div>
+    {#if fpsTest}
+      <div class="fps-sonuc" class:iyi={fpsTest.kare > 0}>
+        <b>{teshisYazisi(fpsTest)}</b>
+        {#if fpsTest.programlar.length}
+          <ul>{#each fpsTest.programlar as [ad, f] (ad)}<li><span>{ad}</span><span class="tnum">{Math.round(f)} FPS</span></li>{/each}</ul>
+        {/if}
+        <span class="sub small">Araç: {fpsTest.kurulu ? "kurulu" : "yok"} · İzin: {fpsTest.grupta ? "grup (doğrudan)" : fpsTest.gorev ? "görev (yönetici)" : "yok"} · Durum: {fpsTest.state}. Çözemezsen bu kutunun ekran görüntüsünü at.</span>
+      </div>
+    {/if}
   </section>
 </div>
 
 <style>
+  .fps-dugmeler { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .fps-sonuc { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(224, 106, 106, 0.4); background: rgba(224, 106, 106, 0.06); }
+  .fps-sonuc.iyi { border-color: rgba(80, 200, 120, 0.45); background: rgba(80, 200, 120, 0.06); }
+  .fps-sonuc ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+  .fps-sonuc li { display: flex; justify-content: space-between; gap: 10px; max-width: 360px; }
   .gm { display: flex; flex-direction: column; gap: 16px; max-width: 980px; margin: 0 auto; }
   .panel { display: flex; flex-direction: column; gap: 14px; }
   .hero { flex-direction: row; align-items: center; gap: 24px; padding: 24px; }

@@ -349,6 +349,17 @@ pub fn fps_status(app: AppHandle) -> crate::fps::Status {
         .status(&root, requested)
 }
 
+/// "FPS'i dene": 6 sn ölçer, nerede takıldığını anlatır (günlüğe de yazar).
+#[tauri::command]
+pub async fn fps_test(app: AppHandle) -> CmdResult<crate::fps::Teshis> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
+        app.state::<crate::perf::Perf>().presentmon.teshis(&root)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// FPS ölçümünü aç: PresentMon'u indir, bir kez yönetici izniyle izin ver.
 #[tauri::command]
 pub async fn fps_setup(app: AppHandle) -> CmdResult<crate::fps::Status> {

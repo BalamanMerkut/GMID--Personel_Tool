@@ -433,6 +433,7 @@ pub fn run() {
             commands::games::panel_perf,
             commands::games::fps_status,
             commands::games::fps_setup,
+            commands::games::fps_test,
             commands::games::games_store_search,
             commands::games::games_add_archive,
             commands::games::reviews_list,

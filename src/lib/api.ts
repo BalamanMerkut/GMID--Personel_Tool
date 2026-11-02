@@ -38,7 +38,7 @@ import type {
   CleanResult, InstalledProgram,
   ProgramList, LeftoverScan, UninstallState,
   KaraokeHit, KaraokeMix, KaraokeRecording, KaraokeStatus,
-  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
+  Alerts, AppVolume, AudioState, BackupManifest, DealsSnapshot, FpsStatus, FpsTest, ServerWatch, PerfSample, SearchHit, Wrapped, FitOptions, FitPlan, FitResult, FitChoice, UpdateStatus, InstallHit, InstallItem, InstallRun, KitRequest, KitResult, BridgeStatus, DictationStatus, DictRule, PowerPlan, Specs, NetReport, DriverStatus, NowPlaying, Clip, ClipRoot, FoundGame, GameModeStatus, GameSuggestion, Title, TitleHit, Game, PlaySession, RunningApp, Review, ReviewInput, StoreHit, Download, Langs, Segment, Sidecar, UserPlaylist, GameInfo, Live, Parsed, ToolsState, Transcript, WhisperStatus, HotkeyStatus, JoinResult, MicStatus, Note, NoteInput, NoteSummary, OsdMessage,
   Reminder, ReminderInput, Server, ServerInput, ServerStatus, SyncResult, TimersSnapshot, DnsBench, DnsStatus, SoundpadConfig, SoundpadStatus, LectureStatus } from "./types";
 
 /** Bir Rust komutunu çağırır; tarayıcıda taklit katmana gider. */
@@ -430,6 +430,8 @@ export const api = {
     status: () => call<FpsStatus>("fps_status"),
     /** PresentMon'u indirir, bir kez yönetici izniyle FPS ölçümüne izin verir. */
     setup: () => call<FpsStatus>("fps_setup"),
+    /** 6 sn ölçer; nerede takıldığını anlatır. */
+    test: () => call<FpsTest>("fps_test"),
   },
 
   gamemode: {

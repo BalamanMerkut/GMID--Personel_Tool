@@ -892,6 +892,18 @@ export interface PanelOpen {
   grab?: "middle" | "left" | "off";
 }
 
+export interface FpsTest {
+  kurulu: boolean;
+  grupta: boolean;
+  gorev: boolean;
+  state: FpsStatus["state"];
+  message: string | null;
+  kare: number;
+  /** [program adı, fps] */
+  programlar: [string, number][];
+  ayrinti: string | null;
+}
+
 export interface FpsStatus {
   state: "missing" | "permission" | "ready" | "running" | "error";
   /** İzin istendi ama Windows oturumu henüz yenilenmedi. */

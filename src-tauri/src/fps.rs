@@ -156,6 +156,25 @@ enum Run {
     Task(Arc<AtomicBool>),
 }
 
+/// "FPS'i dene" sonucu: ölçüm nerede takılıyor, görülen programlar ve kare hızları.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Teshis {
+    pub kurulu: bool,
+    /// Kullanıcı "Performance Log Users" grubunda (oturum yenilenmiş).
+    pub grupta: bool,
+    /// Yönetici izniyle kurulan zamanlanmış görev var.
+    pub gorev: bool,
+    pub state: State,
+    pub message: Option<String>,
+    /// Ölçüm boyunca gelen kare sayısı.
+    pub kare: usize,
+    /// Kare gönderen programlar: (ad, fps), en çok kare gönderen önce.
+    pub programlar: Vec<(String, f32)>,
+    /// PresentMon'un hata çıktısı ya da görevin sonuç kodu (varsa).
+    pub ayrinti: Option<String>,
+}
+
 #[derive(Default)]
 pub struct PresentMon {
     run: Mutex<Option<Run>>,
@@ -424,6 +443,74 @@ impl PresentMon {
             &ignored,
         )?;
         Some((fps, names.get(&chosen).cloned().unwrap_or_default()))
+    }
+
+    /// "FPS'i dene": ölçümü başlatır, 6 sn kare toplar, ne gördüğünü anlatır (izin / araç / kare yok).
+    pub fn teshis(&self, root: &Path) -> Teshis {
+        let mut t = Teshis {
+            kurulu: installed(root),
+            grupta: in_group(),
+            gorev: task_exists(),
+            ..Teshis::default()
+        };
+        if t.kurulu {
+            // Önceki hata durumu denemeyi engellemesin.
+            self.stop(root);
+            let son = Instant::now() + Duration::from_secs(6);
+            let mut toplam: HashMap<u32, (usize, f64)> = HashMap::new();
+            let mut gorulen = 0usize;
+            while Instant::now() < son {
+                let _ = self.sample(root, None);
+                std::thread::sleep(Duration::from_millis(500));
+                let f = self.frames.lock().unwrap_or_else(|e| e.into_inner());
+                // Yalnız yeni kareler (her yoklamada son 3 sn tutulur).
+                let yeni: Vec<&Frame> = f.iter().skip(gorulen.min(f.len())).collect();
+                for x in &yeni {
+                    let e = toplam.entry(x.pid).or_default();
+                    e.0 += 1;
+                    e.1 += x.ms;
+                }
+                gorulen = f.len();
+                t.kare += yeni.len();
+            }
+            let names = self.names.lock().unwrap_or_else(|e| e.into_inner());
+            let mut l: Vec<(String, f32, usize)> = toplam
+                .iter()
+                .filter(|(_, (n, _))| *n > 0)
+                .map(|(pid, (n, sum))| {
+                    let ad = names
+                        .get(pid)
+                        .cloned()
+                        .unwrap_or_else(|| format!("pid {pid}"));
+                    (ad, (1000.0 / (sum / *n as f64)) as f32, *n)
+                })
+                .collect();
+            l.sort_by_key(|b| std::cmp::Reverse(b.2));
+            t.programlar = l.into_iter().take(6).map(|(a, f, _)| (a, f)).collect();
+            self.stop(root);
+        }
+        let st = self
+            .status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        t.state = st.state;
+        t.message = st.message;
+        if t.kare == 0 && t.gorev && !t.grupta {
+            t.ayrinti = Some(task_failure());
+        }
+        crate::log!(
+            "FPS testi: kurulu={} grupta={} görev={} kare={} programlar={:?} durum={:?} mesaj={:?} ayrıntı={:?}",
+            t.kurulu,
+            t.grupta,
+            t.gorev,
+            t.kare,
+            t.programlar,
+            t.state,
+            t.message,
+            t.ayrinti
+        );
+        t
     }
 
     /// Ölçüm ne zamandır çalışıyor (çalışmıyorsa `None`).
