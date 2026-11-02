@@ -241,8 +241,7 @@ export async function odaKapat() {
   await istek("DELETE", `/api/oda/${id}`).catch((e) => notify(hataYaz(e), "info"));
 }
 
-export const at = (kisi: string) =>
-  birlikte.odaId && istek("POST", `/api/oda/${birlikte.odaId}/at/${kisi}`).catch((e) => notify(hataYaz(e), "info"));
+export const at = (kisi: string) => birlikte.odaId && komut("POST", `/api/oda/${birlikte.odaId}/at/${kisi}`);
 export const djYap = (kisi: string, ver: boolean) => ayarla({ dj: { kisi, ver } });
 
 /** Tekrar: yok → şarkı → liste → yok (sahip/DJ). */
@@ -381,21 +380,41 @@ async function sirayaYaz(id: string, s: Sarki) {
   void eslestir();
 }
 
-export const siradanCikar = (oge: number) =>
-  birlikte.odaId && istek("DELETE", `/api/oda/${birlikte.odaId}/sira/${oge}`).catch((e) => notify(hataYaz(e), "info"));
+export const siradanCikar = (oge: number) => birlikte.odaId && komut("DELETE", `/api/oda/${birlikte.odaId}/sira/${oge}`);
 
 // ---------------- oynatma ----------------
+
+/** Oda komutlarının yanıtı (güncel oda): canlı bağlantının yankısını beklemeden hemen uygulanır. */
+function odaYaniti(r: unknown) {
+  const v = r as { oda?: Oda; simdi?: number } | null;
+  if (!v?.oda) return;
+  saat(v.simdi);
+  odaYaz(v.oda);
+  if (birlikte.odaId === v.oda.id) void eslestir();
+}
+
+/** Oda komutu: yanıtı uygular, hatayı gösterir. */
+async function komut(yontem: string, yol: string, govde?: unknown) {
+  await istek(yontem, yol, govde)
+    .then(odaYaniti)
+    .catch((e) => notify(hataYaz(e), "info"));
+}
 
 async function oynatBildir(konum: number, caliyor: boolean) {
   const id = birlikte.odaId;
   if (!id) return;
-  await istek("POST", `/api/oda/${id}/oynat`, { konum, caliyor }).catch((e) => notify(hataYaz(e), "info"));
+  await komut("POST", `/api/oda/${id}/oynat`, { konum, caliyor });
 }
 
 export function oynatDuraklat() {
   const o = benimOdam();
   if (!o?.simdiki || !medya) return;
-  void oynatBildir(medya.currentTime, !o.caliyor);
+  const cal = !o.caliyor;
+  // Beklemeden: düğmeye basınca hemen dursun / başlasın (sunucu yanıtı sonra herkesi eşitler).
+  if (cal) void medya.play().catch(() => {});
+  else medya.pause();
+  odaYaz({ ...o, caliyor: cal, konum: medya.currentTime, guncelleme: Date.now() + fark });
+  void oynatBildir(medya.currentTime, cal);
 }
 
 export function sar(sn: number) {
@@ -407,14 +426,14 @@ export function sar(sn: number) {
 export async function atla() {
   const id = birlikte.odaId;
   if (!id) return;
-  await istek("POST", `/api/oda/${id}/sonraki`, { oge: benimOdam()?.simdiki?.id ?? null }).catch((e) => notify(hataYaz(e), "info"));
+  await komut("POST", `/api/oda/${id}/sonraki`, { oge: benimOdam()?.simdiki?.id ?? null });
 }
 
 /** Sıradaki bir şarkıyı hemen çal (sahip/DJ; listede tıklanınca). */
 export async function simdiCal(oge: number) {
   const id = birlikte.odaId;
   if (!id) return;
-  await istek("POST", `/api/oda/${id}/sonraki`, { sec: oge }).catch((e) => notify(hataYaz(e), "info"));
+  await komut("POST", `/api/oda/${id}/sonraki`, { sec: oge });
 }
 
 export function sesAyarla(v: number) {

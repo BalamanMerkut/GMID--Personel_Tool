@@ -84,6 +84,18 @@
     void pencereTam(on);
   }
 
+  // Tek tık: oynat/duraklat (sahip/DJ); çift tık: tam ekran (tek tık beklenir ki ikisi karışmasın).
+  let tikZaman: ReturnType<typeof setTimeout> | undefined;
+  function tikla(e: MouseEvent) {
+    if (!yonetici || (e.target as HTMLElement).closest("button")) return;
+    clearTimeout(tikZaman);
+    tikZaman = setTimeout(oynatDuraklat, 230);
+  }
+  function ciftTikla() {
+    clearTimeout(tikZaman);
+    tamEkran();
+  }
+
   // ---- ekle ----
   let giris = $state("");
   function gonder(e: SubmitEvent) {
@@ -127,12 +139,21 @@
   let kapatOnay = $state(false);
 </script>
 
-<svelte:window onkeydown={(e) => tam && e.key === "Escape" && tamEkran(false)} />
+<svelte:window
+  onkeydown={(e) => {
+    if (tam && e.key === "Escape") tamEkran(false);
+    // Boşluk: oynat/duraklat (yazı yazarken değil).
+    if (e.key === " " && oda && yonetici && !(e.target as HTMLElement).closest("input, textarea, select, button")) {
+      e.preventDefault();
+      oynatDuraklat();
+    }
+  }}
+/>
 
 <div class="salon" class:tam>
   {#if oda}
     <div class="sahne-kolon">
-      <div class="sahne" role="presentation" ondblclick={() => tamEkran()}>
+      <div class="sahne" class:tiklanir={yonetici && !!oda.simdiki} role="presentation" onclick={tikla} ondblclick={ciftTikla}>
         <div class="medya" use:yerlestir></div>
         {#if !oda.simdiki}
           <div class="bos-sahne">
@@ -318,6 +339,7 @@
   .sahne-kolon { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .sahne { position: relative; aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; background: #000; border: 1px solid var(--line); }
   .medya { position: absolute; inset: 0; }
+  .sahne.tiklanir { cursor: pointer; }
   .medya :global(video) { width: 100%; height: 100%; object-fit: contain; display: block; }
   .bos-sahne { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); background: radial-gradient(circle at 50% 40%, rgba(227, 194, 112, 0.1), #000 70%); }
   .bos-sahne :global(svg) { color: var(--gold-dim); }
