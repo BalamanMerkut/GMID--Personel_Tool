@@ -4,7 +4,7 @@
   "servers": [
     {
       "id": "gmid-cs16",
-      "name": "GMID · CS 1.6 Pro Public",
+      "name": "Counter-Strike 1.6 · TR/EU-GMID Community Server",
       "game": "cs16",
       "host": "31.57.187.132",
       "port": 27015,
@@ -14,7 +14,7 @@
     },
     {
       "id": "gmid-minecraft",
-      "name": "GMID · Minecraft Survival",
+      "name": "Minecraft Survival · TR/EU-GMID Community Server",
       "game": "minecraft",
       "host": "gmid.molayazilim.com.tr",
       "port": 25565,
@@ -24,7 +24,7 @@
     },
     {
       "id": "gmid-valheim",
-      "name": "GMID · Valheim",
+      "name": "Valheim · TR/EU-GMID Community Server",
       "game": "valheim",
       "host": "gmid.molayazilim.com.tr",
       "port": 2456,
@@ -34,7 +34,7 @@
     },
     {
       "id": "gmid-insurgency",
-      "name": "TR/EU-GMID Community Server · Insurgency",
+      "name": "Insurgency · TR/EU-GMID Community Server",
       "game": "source",
       "host": "31.57.187.132",
       "port": 27016,
@@ -44,7 +44,7 @@
     },
     {
       "id": "gmid-unturned",
-      "name": "TR/EU-GMID Community Server · Unturned",
+      "name": "Unturned · TR/EU-GMID Community Server",
       "game": "source",
       "host": "31.57.187.132",
       "port": 27030,
