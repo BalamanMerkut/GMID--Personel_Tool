@@ -292,7 +292,13 @@
           {#if sosyal.ben}<Avatar kisi={sosyal.ben} boy={34} nokta={false} />{/if}
           <span class="yaz-baslik"><b>{sosyal.ben?.ad ?? "Sen"}</b><span>malikâneye yazıyor</span></span>
         </div>
-        <textarea bind:this={alan} bind:value={taslak} onkeydown={tus} placeholder={ipucu} title="#etiket yazarsan gündeme girer, @ad yazarsan o kişiye haber gider" rows="2" aria-label="Gönderi" disabled={gonderiliyor}></textarea>
+        <div class="alan-yer">
+          <textarea bind:this={alan} bind:value={taslak} onkeydown={tus} placeholder={ipucu} title="#etiket yazarsan gündeme girer, @ad yazarsan o kişiye haber gider" rows="2" aria-label="Gönderi" disabled={gonderiliyor}></textarea>
+          <!-- Kalan harf yalnız sınıra yaklaşınca, kutunun köşesinde (düğmeler kaymaz). -->
+          {#if kalanHarf <= 100}
+            <span class="sayac tnum" class:az={kalanHarf <= 40} class:asti={kalanHarf < 0}>{kalanHarf}</span>
+          {/if}
+        </div>
         {#if anmaOneri.length}
           <div class="anma-oneri" role="listbox" aria-label="Üye öner">
             {#each anmaOneri as k (k.id)}
@@ -338,9 +344,6 @@
           <button type="button" class="btn ghost sm" class:acik-plan={planAcik && !planHemen} onclick={() => ((planAcik = !(planAcik && !planHemen)), (planHemen = false))}><Icon name="bell" size={15} />Oyun gecesi</button>
           <input bind:this={dosyaSec} type="file" accept="image/*" hidden onchange={resimSecildi} />
           <span class="bosluk"></span>
-          {#if taslak.length}
-            <span class="sayac tnum" class:az={kalanHarf <= 40} class:asti={kalanHarf < 0}>{kalanHarf}</span>
-          {/if}
           <button class="btn paylas" disabled={!gonderilebilir} title="Ctrl+Enter"><Icon name="send" size={15} />{gonderiliyor ? "Paylaşılıyor…" : "Paylaş"}</button>
         </div>
       </form>
@@ -528,7 +531,8 @@
   .cip :global(svg) { color: var(--gold); }
   .yaz-alt { display: flex; align-items: center; gap: 10px; }
   .bosluk { flex: 1; }
-  .sayac { font-size: 13px; color: var(--dim); }
+  .alan-yer { position: relative; }
+  .sayac { position: absolute; right: 10px; bottom: 8px; font-size: 12px; color: var(--dim); pointer-events: none; padding: 1px 6px; border-radius: 999px; background: rgba(20, 22, 26, 0.85); }
   .sayac.az { color: var(--gold-glow); }
   .sayac.asti { color: #ff6b6b; font-weight: 700; }
   .paylas { display: inline-flex; align-items: center; gap: 7px; }

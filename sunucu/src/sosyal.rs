@@ -381,7 +381,7 @@ impl Db {
     pub fn kisiler(&self) -> R<Vec<(Kullanici, i64)>> {
         let mut st = self
             .0
-            .prepare("SELECT id, ad, avatar, son FROM kullanicilar ORDER BY lower(ad)")
+            .prepare("SELECT id, ad, avatar, son FROM kullanicilar WHERE id != 'gmid' ORDER BY lower(ad)")
             .map_err(e)?;
         let l = st
             .query_map([], |r| Ok((kullanici(r, 0)?, r.get(3)?)))

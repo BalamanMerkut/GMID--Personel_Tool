@@ -61,7 +61,7 @@ export interface Yorum {
 export interface Olay {
   id: number;
   kisi: Kisi;
-  tur: "puan" | "oyun" | "klip" | "gonderi" | "gece";
+  tur: "puan" | "oyun" | "klip" | "gonderi" | "gece" | "ozet";
   veri: Partial<Puan> & {
     ad: string;
     kapak?: string | null;
@@ -74,6 +74,14 @@ export interface Olay {
     hemen?: boolean;
     zaman?: number;
     kontenjan?: number | null;
+    /** Haftalık GMID özeti (sistem hesabı "gmid" yazar). */
+    aktif?: number;
+    gonderi?: number;
+    klip_sayisi?: number;
+    oyunlar?: { ad: string; kisi: number }[];
+    klip?: { etkinlik: number; kisi: Kisi; begeni: number; ad: string; metin: string } | null;
+    gonderi_en?: { etkinlik: number; kisi: Kisi; begeni: number; ad: string; metin: string } | null;
+    baslangic?: number;
     /** Gönderi: anket (2–4 seçenek, bitiş anı; sunucu oy sayılarını ve benim oyumu ekler). */
     anket?: { secenekler: string[]; bitis: number; durum?: { oylar: number[]; benim: number | null } };
     /** Gönderi: yazı ve isteğe bağlı resim ("/resim/…"). */
@@ -260,7 +268,7 @@ export async function istek<T>(yontem: string, yol: string, govde?: unknown): Pr
 }
 
 /** Sunucudan gelen bildirimin yazısı ve simgesi. */
-function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [string, "chat" | "heart" | "flag" | "bell" | "users"] {
+function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [string, "chat" | "heart" | "flag" | "bell" | "users" | "star"] {
   switch (tur) {
     case "yorum":
       return [`${ad} paylaşımına yanıt yazdı`, "chat"];
@@ -274,6 +282,8 @@ function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [s
       return [`${ad} seni oyun gecesine çağırıyor${v.metin ? `: ${v.metin}` : ""}`, "bell"];
     case "ariyor":
       return [`${ad} oyuncu arıyor${v.metin ? `: ${v.metin}` : ""} · Sosyal'de "Varım" de`, "users"];
+    case "haftanin-klibi":
+      return [`Klibin haftanın klibi seçildi${v.metin ? `: ${v.metin}` : ""} · profiline rozet eklendi`, "star"];
     case "varim":
       return [`${ad} "Varım" dedi${v.metin ? `: ${v.metin}` : ""}`, "users"];
     case "sunucu":

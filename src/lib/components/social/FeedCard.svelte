@@ -137,7 +137,7 @@
         {#if sosyal.yonetici && o.sikayet}
           <span class="sikayet-rozet" title="Bu paylaşımı şikâyet eden kişi sayısı"><Icon name="flag" size={13} />{o.sikayet}</span>
         {/if}
-        {#if !benim && sosyal.ben}
+        {#if !benim && sosyal.ben && o.kisi.id !== "gmid"}
           <button class="ic sil" class:onay={sikayetOnay} disabled={sikayetEttim} title={sikayetEttim ? "Şikâyet edildi" : sikayetOnay ? "Göndermek için yeniden tıkla" : "Uygunsuz içeriği şikâyet et"} aria-label="Şikâyet et" onclick={sikayet}>
             <Icon name="flag" size={15} />{#if sikayetOnay}<span>Şikâyet edilsin mi?</span>{/if}
           </button>
@@ -152,6 +152,29 @@
 
     {#if o.tur === "gece" && o.veri.gece}
       <GeceKart id={o.veri.gece} yedek={{ oyun: o.veri.oyun ?? o.veri.ad, zaman: o.veri.zaman, kontenjan: o.veri.kontenjan, not: o.veri.not, hemen: !!o.veri.hemen }} />
+    {:else if o.tur === "ozet"}
+      {@const v = o.veri}
+      <div class="ozet">
+        <div class="ozet-bas">
+          <span class="ozet-kicker">Haftalık özet</span>
+          {#if v.baslangic && v.bitis}<span class="sub small">{new Date(v.baslangic).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {new Date(v.bitis - 1).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</span>{/if}
+        </div>
+        <div class="ozet-sayilar">
+          <span><b class="tnum">{v.aktif ?? 0}</b>aktif üye</span>
+          <span><b class="tnum">{v.gonderi ?? 0}</b>gönderi</span>
+          <span><b class="tnum">{v.klip_sayisi ?? 0}</b>klip</span>
+          <span><b class="tnum">{typeof v.gece === "number" ? v.gece : 0}</b>oyun gecesi</span>
+        </div>
+        {#if v.oyunlar?.length}
+          <div class="ozet-satir"><Icon name="trophy" size={15} /><span>En çok oynanan: {#each v.oyunlar as g, i (g.ad)}{i ? ", " : ""}<button class="ozet-link" onclick={() => konuGoster(g.ad)}>{g.ad}</button> <span class="sub">({g.kisi} kişi)</span>{/each}</span></div>
+        {/if}
+        {#if v.klip}
+          <div class="ozet-satir vurgu"><Icon name="clip" size={15} /><span><b>Haftanın klibi:</b> <button class="ozet-link" onclick={() => profilGoster(v.klip!.kisi.id)}>{v.klip.kisi.ad}</button>{v.klip.ad ? ` · ${v.klip.ad}` : ""} <span class="sub">({v.klip.begeni} beğeni)</span></span></div>
+        {/if}
+        {#if v.gonderi_en}
+          <div class="ozet-satir"><Icon name="heart" size={15} /><span><b>En beğenilen gönderi:</b> <button class="ozet-link" onclick={() => profilGoster(v.gonderi_en!.kisi.id)}>{v.gonderi_en.kisi.ad}</button>{v.gonderi_en.metin ? ` — “${v.gonderi_en.metin.slice(0, 80)}${v.gonderi_en.metin.length > 80 ? "…" : ""}”` : ""}</span></div>
+        {/if}
+      </div>
     {:else if o.tur === "gonderi"}
       {#if o.veri.metin}{@render yazi(o.veri.metin)}{/if}
       {#if anket}
@@ -291,4 +314,18 @@
   .sec-ad { position: relative; flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
   .yuzde { position: relative; font-weight: 800; color: var(--gold-glow); }
   .anket-bilgi { font-size: 12.5px; color: var(--dim); }
+  .ozet { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding: 14px; border-radius: 16px; border: 1px solid rgba(227, 194, 112, 0.35); background: linear-gradient(135deg, rgba(227, 194, 112, 0.12), rgba(255, 255, 255, 0.02) 65%); }
+  .ozet-bas { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .ozet-kicker { font-family: var(--f-display); font-weight: 800; font-size: 16px; color: var(--gold-glow); }
+  .ozet-sayilar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .ozet-sayilar span { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); font-size: 12px; color: var(--muted); text-align: center; }
+  .ozet-sayilar b { font-family: var(--f-display); font-size: 22px; color: var(--text); line-height: 1.1; }
+  .ozet-satir { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--muted); }
+  .ozet-satir :global(svg) { flex: none; margin-top: 2px; color: var(--gold); }
+  .ozet-satir b { color: var(--text); }
+  .ozet-satir > span { display: inline; line-height: 1.5; }
+  .ozet-satir .sub { display: inline; }
+  .ozet-satir.vurgu { color: var(--text); }
+  .ozet .ozet-link { border: 0; background: none; padding: 0; font: inherit; color: var(--gold-glow); font-weight: 700; cursor: pointer; }
+  .ozet .ozet-link:hover { text-decoration: underline; }
 </style>

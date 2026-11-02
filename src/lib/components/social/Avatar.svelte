@@ -1,5 +1,6 @@
 <script lang="ts">
   // Kişinin Discord resmi (yoksa baş harfleri) ve çevrim içi noktası (yeşil: çevrim içi, mor: oyunda).
+  import gmidLogo from "../../../assets/gmid-logo.webp";
   import { sosyal, type Kisi } from "../../social.svelte";
   let { kisi, boy = 40, nokta = true }: { kisi: Kisi; boy?: number; nokta?: boolean } = $props();
   const bas = $derived(kisi.ad.split(/\s+/).map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase());
@@ -8,7 +9,7 @@
 </script>
 
 <span class="av" style:width="{boy}px" style:height="{boy}px">
-  {#if kisi.avatar && !kirik}<img src={kisi.avatar} alt="" loading="lazy" onerror={() => (kirik = true)} />{:else}<span class="bas" style:font-size="{boy * 0.36}px">{bas}</span>{/if}
+  {#if kisi.id === "gmid"}<img src={gmidLogo} alt="GMID" />{:else if kisi.avatar && !kirik}<img src={kisi.avatar} alt="" loading="lazy" onerror={() => (kirik = true)} />{:else}<span class="bas" style:font-size="{boy * 0.36}px">{bas}</span>{/if}
   {#if nokta && c}<i class:oyunda={!!c.oyun} title={c.oyun ? `${c.oyun} oynuyor` : "Çevrim içi"}></i>{/if}
 </span>
 

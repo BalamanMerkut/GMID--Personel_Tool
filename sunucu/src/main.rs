@@ -10,6 +10,7 @@ mod dinle;
 mod discord;
 mod durum;
 mod gece;
+mod hafta;
 mod klip;
 mod oda;
 mod oyna;
@@ -203,7 +204,12 @@ async fn main() {
         loop {
             t.tick().await;
             let s8 = s7.clone();
-            let _ = tokio::task::spawn_blocking(move || gece::hatirlat(&s8)).await;
+            let _ = tokio::task::spawn_blocking(move || {
+                gece::hatirlat(&s8);
+                // Haftanın klibi ve haftalık özet (pazartesi 12:00).
+                hafta::kontrol(&s8);
+            })
+            .await;
         }
     });
     // Gece yedeği: açılışta ve 6 saatte bir bakılır; o günün yedeği yoksa alınır, en yeni 7 gün kalır.
