@@ -135,7 +135,15 @@ export const sosyal = $state({
   sohbetAcik: false,
   /** Arkadaş oyuna girince sağ altta haber ver. */
   oyunHaberi: true,
+  /** Sosyal'de seçili konu: "#etiket" ya da gündemdeki oyun/film adı (boşsa tüm akış). */
+  konu: null as string | null,
 });
+
+/** Bir #etikete ya da gündemdeki konuya tıklanınca: Sosyal'de yalnız onunla ilgili paylaşımlar. */
+export function konuGoster(k: string | null) {
+  sosyal.konu = k;
+  nav.go("feed");
+}
 
 export const arkadasMi = (id: string) => sosyal.arkadaslar.some((k) => k.id === id);
 

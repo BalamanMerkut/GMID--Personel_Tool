@@ -129,6 +129,7 @@ Discord uygulaması bunun için de kullanılır:
 - `POST /api/resim` (≤400 KB JPEG/PNG/WebP/GIF, gövde = resim) → `{url:"/resim/<sha256>.jpg"}`; `GET /resim/{ad}`
 - `POST /api/klip?ad=&oyun=&sure=&kapak=` (0.5; gövde = MP4, ≤60 MB) → akışa `klip` olayı, `{id, url:"/klip/<sha256>.mp4", bitis}`; `GET /klip/{ad}` (Range ile ileri sarılır). Klipler **7 gün** sonra video ve paylaşım olarak silinir (saatte bir denetlenir); başkalarından aldığı beğeni/yorumlar `kalici_puan` tablosunda kalır, `GET /api/profil/{id}` → `begeni`, `yorum`. Kişi başı aynı anda en çok 10 klip, toplam 5 GB.
 - `POST /api/gonderi {metin, resim?}` (0.7): serbest gönderi, en çok 500 harf; `resim` önce `/api/resim` ile yüklenmiş "/resim/…" olmalı; 10 dakikada en çok 10 gönderi → akışta `gonderi` olayı (süresiz).
+- `GET /api/gundem?arkadaslar=1` (0.8): son 7 günde en çok geçen oyun/film/dizi ve #etiketler `{ad, etiket, paylasim, begeni}` (puan = paylaşım + beğeni); `GET /api/akis?konu=#cs2` ya da `konu=Hades II`: o konuya süzülmüş akış.
 - nginx: klip yükleme için `client_max_body_size 64m` gerekir; `kur.sh` yazar, eski kurulumlarda `sudo gmid-guncelle` bir kez çalışınca kendi ekler (yalnız GMID'in site dosyasına, `nginx -t` ile denetleyip).
 - WebSocket'te ek: `akis` (akış değişti), `mesaj`, `okundu`, `bildirim` (paylaşımıma beğeni/yorum)
 - Oyuna girince akışa "oynuyor" (aynı oyun 12 saatte bir)

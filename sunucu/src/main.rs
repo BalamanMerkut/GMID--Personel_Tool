@@ -72,6 +72,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/akis", get(sosyal_api::akis))
         .route("/api/akis/{id}", delete(sosyal_api::etkinlik_sil))
         .route("/api/gonderi", post(sosyal_api::gonderi))
+        .route("/api/gundem", get(sosyal_api::gundem))
         .route("/api/akis/{id}/begen", post(sosyal_api::begen))
         .route("/api/akis/{id}/yorum", post(sosyal_api::yorum))
         .route("/api/yorum/{id}", delete(sosyal_api::yorum_sil))

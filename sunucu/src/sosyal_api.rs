@@ -72,17 +72,40 @@ pub struct AkisSorgu {
     sayi: Option<i64>,
     /// 1: yalnız arkadaşlar
     arkadaslar: Option<u8>,
+    /// "#etiket" ya da oyun/film/dizi adı.
+    konu: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct GundemSorgu {
+    arkadaslar: Option<u8>,
+}
+
+/// Gündem: son 7 günde en çok geçen oyun/film/dizi ve #etiketler (beğeniler de sayılır).
+pub async fn gundem(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Query(q): Query<GundemSorgu>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let l = s
+        .db()
+        .gundem(&ben.id, q.arkadaslar == Some(1), 6)
+        .map_err(ic)?;
+    Ok(Json(json!({ "gundem": l })))
 }
 
 pub async fn akis(State(s): State<Arc<Sunucu>>, h: HeaderMap, Query(q): Query<AkisSorgu>) -> Sonuc {
     let ben = kim(&s, &h)?;
+    let konu: Option<String> = q.konu.map(|k| k.chars().take(120).collect());
     let l = s
         .db()
-        .akis_suz(
+        .akis_konu(
             &ben.id,
             q.once,
             q.kisi.as_deref(),
             q.arkadaslar == Some(1),
+            konu.as_deref(),
             q.sayi.unwrap_or(30),
         )
         .map_err(ic)?;

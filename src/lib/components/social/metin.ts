@@ -54,3 +54,21 @@ export function kalan(bitis: number): string {
 
 /** Saniyeyi "1:05" yazar. */
 export const sure = (sn: number) => `${Math.floor(sn / 60)}:${String(Math.floor(sn % 60)).padStart(2, "0")}`;
+
+/** Yazıyı düz parçalara ve #etiketlere böler (sunucudaki kuralla aynı: önünde harf yok, 2–30 harf/rakam/_). */
+export function parcala(metin: string): { t: string; etiket: boolean }[] {
+  const l: { t: string; etiket: boolean }[] = [];
+  const re = /#([\p{L}\p{N}_]{2,30})(?![\p{L}\p{N}_])/gu;
+  let son = 0;
+  for (const m of metin.matchAll(re)) {
+    const i = m.index ?? 0;
+    const onceki = i > 0 ? metin[i - 1] : "";
+    if (onceki && /[\p{L}\p{N}_]/u.test(onceki)) continue;
+    if (/^\d+$/.test(m[1])) continue;
+    if (i > son) l.push({ t: metin.slice(son, i), etiket: false });
+    l.push({ t: m[0], etiket: true });
+    son = i + m[0].length;
+  }
+  if (son < metin.length) l.push({ t: metin.slice(son), etiket: false });
+  return l;
+}

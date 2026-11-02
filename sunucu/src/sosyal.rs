@@ -149,6 +149,41 @@ pub struct Etkinlik {
     pub yorumlar: Vec<Yorum>,
 }
 
+/// Gündemdeki bir konu.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Gundem {
+    /// Oyun/film/dizi adı ya da "#etiket".
+    pub ad: String,
+    pub etiket: bool,
+    /// Son 7 günde kaç paylaşımda geçti.
+    pub paylasim: i64,
+    /// Bu paylaşımların aldığı beğeni.
+    pub begeni: i64,
+}
+
+/// Yazıdaki #etiketler ("#CS2", "#OyunGecesi"): harf/rakam/alt çizgi, 2–30 karakter.
+pub fn etiketler(metin: &str) -> Vec<String> {
+    let mut l = Vec::new();
+    let mut onceki: Option<char> = None;
+    for (i, c) in metin.char_indices() {
+        // "a#b" etiket sayılmaz; önce boşluk ya da noktalama olmalı.
+        let basta = onceki.is_none_or(|p| !(p.is_alphanumeric() || p == '_'));
+        onceki = Some(c);
+        if c != '#' || !basta {
+            continue;
+        }
+        let govde: String = metin[i + 1..]
+            .chars()
+            .take_while(|x| x.is_alphanumeric() || *x == '_')
+            .collect();
+        let n = govde.chars().count();
+        if (2..=30).contains(&n) && !govde.chars().all(|x| x.is_ascii_digit()) {
+            l.push(format!("#{govde}"));
+        }
+    }
+    l
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Mesaj {
     pub id: i64,
@@ -481,6 +516,27 @@ impl Db {
         arkadaslar: bool,
         sayi: i64,
     ) -> R<Vec<Etkinlik>> {
+        self.akis_konu(ben, once, kisi, arkadaslar, None, sayi)
+    }
+
+    /// `konu`: "#etiket" (gönderide geçen) ya da oyun/film/dizi adı (gündemden tıklanan).
+    pub fn akis_konu(
+        &self,
+        ben: &str,
+        once: Option<i64>,
+        kisi: Option<&str>,
+        arkadaslar: bool,
+        konu: Option<&str>,
+        sayi: i64,
+    ) -> R<Vec<Etkinlik>> {
+        // "#cs2" → gönderide "#cs2" geçenler (büyük/küçük harf fark etmez); ad → o oyunun/filmin olayları
+        // ve "#adı" (boşluksuz) etiketli gönderiler.
+        let konu = konu.map(str::trim).filter(|k| !k.is_empty());
+        let etiket = konu.map(|k| {
+            let k = k.trim_start_matches('#');
+            format!("#{}", k.split_whitespace().collect::<String>()).to_lowercase()
+        });
+        let ad = konu.filter(|k| !k.starts_with('#'));
         let mut st = self
             .0
             .prepare(
@@ -490,6 +546,9 @@ impl Db {
                  FROM etkinlikler e JOIN kullanicilar k ON k.id = e.kullanici
                  WHERE (?2 IS NULL OR e.zaman < ?2) AND (?3 IS NULL OR e.kullanici = ?3)
                    AND (e.tur != 'klip' OR e.zaman > ?6)
+                   AND (?7 IS NULL OR instr(lower(COALESCE(json_extract(e.veri, '$.metin'), '') || ' '
+                          || COALESCE(json_extract(e.veri, '$.not'), '')), ?7) > 0
+                        OR (?8 IS NOT NULL AND (json_extract(e.veri, '$.ad') = ?8 OR json_extract(e.veri, '$.oyun') = ?8)))
                    AND (?5 = 0 OR e.kullanici = ?1 OR EXISTS (SELECT 1 FROM arkadaslar a WHERE a.durum = 'arkadas'
                         AND ((a.kimden = ?1 AND a.kime = e.kullanici) OR (a.kime = ?1 AND a.kimden = e.kullanici))))
                  ORDER BY e.zaman DESC, e.id DESC LIMIT ?4",
@@ -503,7 +562,9 @@ impl Db {
                     kisi,
                     sayi.clamp(1, 100),
                     arkadaslar as i64,
-                    simdi() - KLIP_OMRU_MS
+                    simdi() - KLIP_OMRU_MS,
+                    etiket,
+                    ad
                 ],
                 |r| {
                     Ok(Etkinlik {
@@ -653,6 +714,78 @@ impl Db {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap_or((0, 0))
+    }
+
+    /// Gündem: son 7 günün olaylarında en çok geçen oyun/film/dizi adları ve #etiketler. Her paylaşım 1,
+    /// aldığı her beğeni 1 puan daha getirir. `arkadaslar`: yalnız arkadaşlarımın ve benim olaylarım.
+    pub fn gundem(&self, ben: &str, arkadaslar: bool, sayi: usize) -> R<Vec<Gundem>> {
+        let t = simdi();
+        let mut st = self
+            .0
+            .prepare(
+                "SELECT e.tur, e.veri, (SELECT COUNT(*) FROM begeniler b WHERE b.etkinlik = e.id)
+                 FROM etkinlikler e
+                 WHERE e.zaman > ?2 AND (e.tur != 'klip' OR e.zaman > ?3)
+                   AND (?4 = 0 OR e.kullanici = ?1 OR EXISTS (SELECT 1 FROM arkadaslar a WHERE a.durum = 'arkadas'
+                        AND ((a.kimden = ?1 AND a.kime = e.kullanici) OR (a.kime = ?1 AND a.kimden = e.kullanici))))",
+            )
+            .map_err(e)?;
+        let satirlar: Vec<(String, String, i64)> = st
+            .query_map(
+                params![
+                    ben,
+                    t - 7 * 24 * 3600 * 1000,
+                    t - KLIP_OMRU_MS,
+                    arkadaslar as i64
+                ],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(e)?
+            .filter_map(Result::ok)
+            .collect();
+        // anahtar (küçük harf) → (görünen ad, etiket mi, paylaşım, beğeni)
+        let mut say: HashMap<String, (String, bool, i64, i64)> = HashMap::new();
+        for (tur, veri, begeni) in satirlar {
+            let v: Value = serde_json::from_str(&veri).unwrap_or(Value::Null);
+            let mut konular: Vec<(String, bool)> = Vec::new();
+            match tur.as_str() {
+                "gonderi" => {}
+                "klip" => konular.extend(v["oyun"].as_str().map(|s| (s.to_string(), false))),
+                _ => konular.extend(v["ad"].as_str().map(|s| (s.to_string(), false))),
+            }
+            for alan in ["metin", "not"] {
+                for et in etiketler(v[alan].as_str().unwrap_or("")) {
+                    konular.push((et, true));
+                }
+            }
+            konular.retain(|(k, _)| !k.trim().is_empty());
+            konular.sort();
+            konular.dedup();
+            for (ad, etiket) in konular {
+                let g = say
+                    .entry(ad.to_lowercase())
+                    .or_insert_with(|| (ad.clone(), etiket, 0, 0));
+                g.2 += 1;
+                g.3 += begeni;
+            }
+        }
+        let mut l: Vec<Gundem> = say
+            .into_values()
+            .map(|(ad, etiket, paylasim, begeni)| Gundem {
+                ad,
+                etiket,
+                paylasim,
+                begeni,
+            })
+            .collect();
+        l.sort_by(|a, b| {
+            (b.paylasim + b.begeni)
+                .cmp(&(a.paylasim + a.begeni))
+                .then(b.paylasim.cmp(&a.paylasim))
+                .then(a.ad.cmp(&b.ad))
+        });
+        l.truncate(sayi);
+        Ok(l)
     }
 
     /// Serbest gönderi (Twitter'daki gibi: yazı, isteğe bağlı resim). Son 10 dakikada en çok 10 gönderi.
@@ -824,6 +957,51 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn etiket_ayikla() {
+        assert_eq!(
+            etiketler("Bu akşam #CS2 var! #OyunGecesi, #ağır_çekim a#b #1 #x"),
+            vec!["#CS2", "#OyunGecesi", "#ağır_çekim"]
+        );
+        assert!(etiketler("renk #fff değil ama ##").contains(&"#fff".to_string()));
+    }
+
+    #[test]
+    fn gundem_ve_konu() {
+        let db = Db::bellekte();
+        kisi(&db, "1", "Ali");
+        kisi(&db, "2", "Veli");
+        db.gonderi_yaz("1", "Bu akşam #CS2 kim var?", None).unwrap();
+        let g2 = db
+            .gonderi_yaz("2", "#cs2 olur, #OyunGecesi", None)
+            .unwrap()
+            .unwrap();
+        db.oyun_basladi("2", "Hades II").unwrap();
+        db.begen("1", g2).unwrap();
+        let g = db.gundem("1", false, 10).unwrap();
+        assert_eq!(g[0].ad, "#CS2");
+        assert_eq!((g[0].paylasim, g[0].begeni), (2, 1));
+        assert!(g.iter().any(|x| x.ad == "Hades II" && !x.etiket));
+        // "#cs2" süzgeci iki gönderiyi de bulur; ad süzgeci oyuna girişi.
+        assert_eq!(
+            db.akis_konu("1", None, None, false, Some("#cs2"), 30)
+                .unwrap()
+                .len(),
+            2
+        );
+        let h = db
+            .akis_konu("1", None, None, false, Some("Hades II"), 30)
+            .unwrap();
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].tur, "oyun");
+        assert_eq!(
+            db.akis_konu("1", None, None, false, Some("#yok"), 30)
+                .unwrap()
+                .len(),
+            0
+        );
+    }
 
     fn kisi(db: &Db, id: &str, ad: &str) -> Kullanici {
         let k = Kullanici {

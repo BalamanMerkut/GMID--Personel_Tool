@@ -2,10 +2,10 @@
   // Akıştaki bir paylaşım: kim, ne yaptı (puanladı / izledi / oynamaya başladı), konu kartı, beğeni ve yorumlar.
   import Icon from "../../Icon.svelte";
   import { notify } from "../../toast.svelte";
-  import { istek, profilGoster, sosyal, tamAdres, type Olay } from "../../social.svelte";
+  import { istek, konuGoster, profilGoster, sosyal, tamAdres, type Olay } from "../../social.svelte";
   import Avatar from "./Avatar.svelte";
   import Cover from "./Cover.svelte";
-  import { eylem, kalan, once, puanYaz, sure, TUR_AD } from "./metin";
+  import { eylem, kalan, once, parcala, puanYaz, sure, TUR_AD } from "./metin";
 
   let { o, ondegisti, onsil }: { o: Olay; ondegisti: () => void; onsil: (o: Olay) => void } = $props();
   let taslak = $state("");
@@ -66,6 +66,10 @@
   }
 </script>
 
+{#snippet yazi(m: string)}
+  <p class="metin">{#each parcala(m) as p, i (i)}{#if p.etiket}<button class="etiket" onclick={() => konuGoster(p.t)}>{p.t}</button>{:else}{p.t}{/if}{/each}</p>
+{/snippet}
+
 <!-- Twitter düzeni: solda profil resmi, sağda ad · zaman, içerik, altta yorum ve beğeni. -->
 <article class="tw">
   <button class="kim" onclick={() => profilGoster(o.kisi.id)} aria-label={o.kisi.ad}><Avatar kisi={o.kisi} boy={44} /></button>
@@ -83,11 +87,11 @@
     </header>
 
     {#if o.tur === "gonderi"}
-      {#if o.veri.metin}<p class="metin">{o.veri.metin}</p>{/if}
+      {#if o.veri.metin}{@render yazi(o.veri.metin)}{/if}
       {#if o.veri.resim}<img class="medya" src={tamAdres(o.veri.resim)} alt="" loading="lazy" />{/if}
     {:else if o.tur === "klip"}
       <!-- Paylaşılan klip: 7 gün durur, sonra video da paylaşım da silinir (beğeniler profilde kalır). -->
-      {#if o.veri.not}<p class="metin">{o.veri.not}</p>{/if}
+      {#if o.veri.not}{@render yazi(o.veri.not)}{/if}
       <div class="klip">
         <!-- svelte-ignore a11y_media_has_caption -->
         <video src={tamAdres(o.veri.url)} poster={tamAdres(o.veri.kapak) ?? undefined} controls preload="metadata" playsinline></video>
@@ -98,7 +102,7 @@
         <span class="kalan" title="Klipler 7 gün sonra silinir; aldığı beğeniler profilinde kalır"><Icon name="clock" size={13} />{kalan(o.veri.bitis ?? o.zaman + 7 * 86400000)}</span>
       </div>
     {:else}
-      {#if o.veri.yorum}<p class="metin">{o.veri.yorum}</p>{/if}
+      {#if o.veri.yorum}{@render yazi(o.veri.yorum)}{/if}
       <div class="konu">
         <Cover url={o.veri.kapak} ad={o.veri.ad} en="58px" kose={8} />
         <div class="konu-yazi">
@@ -157,6 +161,8 @@
   .nokta, .zaman { color: var(--dim); font-size: 13.5px; white-space: nowrap; }
   header .sil { margin-left: auto; align-self: center; }
   .metin { margin: 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .etiket { border: 0; background: none; padding: 0; font: inherit; color: var(--gold); cursor: pointer; }
+  .etiket:hover { text-decoration: underline; color: var(--gold-glow); }
   .medya { display: block; max-width: 100%; max-height: 520px; border-radius: 16px; border: 1px solid var(--line); object-fit: cover; }
   .klip { border-radius: 16px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; border: 1px solid var(--line); }
   .klip video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }
