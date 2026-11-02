@@ -32,14 +32,42 @@
   const id = $derived(sosyal.profilId ?? sosyal.ben?.id ?? null);
   const benim = $derived(id === sosyal.ben?.id);
 
+  /** Profildeki paylaşım sekmeleri (Twitter'daki gibi). */
+  type Sekme = "tumu" | "gonderi" | "klip" | "begeni";
+  const SEKMELER: [Sekme, string][] = [["tumu", "Tümü"], ["gonderi", "Gönderiler"], ["klip", "Klipler"], ["begeni", "Beğendikleri"]];
+  let sekme = $state<Sekme>("tumu");
+  let sekmeYukleniyor = $state(false);
+
+  function akisYolu(kim: string, s: Sekme): string {
+    const q = new URLSearchParams({ sayi: "20" });
+    if (s === "begeni") q.set("begenen", kim);
+    else q.set("kisi", kim);
+    if (s === "gonderi" || s === "klip") q.set("tur", s);
+    return `/api/akis?${q}`;
+  }
+
+  async function sekmeYukle(kim: string, s: Sekme) {
+    sekmeYukleniyor = true;
+    try {
+      olaylar = (await istek<{ olaylar: Olay[] }>("GET", akisYolu(kim, s))).olaylar;
+    } catch (e) {
+      hata(e);
+    } finally {
+      sekmeYukleniyor = false;
+    }
+  }
+
+  function sekmeSec(s: Sekme) {
+    sekme = s;
+    if (id) void sekmeYukle(id, s);
+  }
+
   async function yukle(kim: string) {
     veri = null;
     hataMetni = "";
+    sekme = "tumu";
     try {
-      const [p, a] = await Promise.all([
-        istek<Yanit>("GET", `/api/profil/${kim}`),
-        istek<{ olaylar: Olay[] }>("GET", `/api/akis?kisi=${kim}&sayi=4`),
-      ]);
+      const [p, a] = await Promise.all([istek<Yanit>("GET", `/api/profil/${kim}`), istek<{ olaylar: Olay[] }>("GET", akisYolu(kim, "tumu"))]);
       veri = p;
       olaylar = a.olaylar;
     } catch (e) {
@@ -209,14 +237,23 @@
           </section>
         {/if}
 
-        {#if olaylar.length}
-          <section class="vitrin">
-            {@render vitrin("Son etkinlik", "sparkle", "")}
-            <div class="olaylar">
-              {#each olaylar as o (o.id)}<FeedCard {o} ondegisti={() => id && yukle(id)} onsil={(x) => (olaylar = olaylar.filter((y) => y.id !== x.id))} />{/each}
-            </div>
-          </section>
-        {/if}
+        <section class="vitrin">
+          {@render vitrin("Paylaşımlar", "sparkle", "")}
+          <div class="sekmeler" role="tablist">
+            {#each SEKMELER as [k, ad] (k)}
+              <button role="tab" aria-selected={sekme === k} onclick={() => sekmeSec(k)}>{ad}</button>
+            {/each}
+          </div>
+          <div class="olaylar" class:soluk={sekmeYukleniyor}>
+            {#each olaylar as o (o.id)}
+              <FeedCard {o} ondegisti={() => id && sekmeYukle(id, sekme)} onsil={(x) => (olaylar = olaylar.filter((y) => y.id !== x.id))} />
+            {:else}
+              <p class="sub bos-sekme">
+                {sekme === "begeni" ? "Henüz bir şey beğenmemiş." : sekme === "klip" ? "Yayında klip yok (klipler 7 gün durur)." : sekme === "gonderi" ? "Henüz gönderi yok." : "Henüz paylaşım yok."}
+              </p>
+            {/each}
+          </div>
+        </section>
 
         {#if !p.oyunlar.length && !p.puanlar.length}
           <section class="vitrin bos-v"><span class="sub">{benim ? "Henüz bir şey paylaşmadın. Kontrol Odası → Topluluk'tan neyin görüneceğini seçebilirsin." : "Henüz bir şey paylaşmamış."}</span></section>
@@ -307,6 +344,12 @@
   .afis-ad { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .ortak { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; }
+  .sekmeler { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+  .sekmeler button { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 10px 6px; cursor: pointer; border-bottom: 3px solid transparent; }
+  .sekmeler button:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+  .sekmeler button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--gold); }
+  .soluk { opacity: 0.55; }
+  .bos-sekme { margin: 0; padding: 22px; text-align: center; }
   .olaylar { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
   .bos-v { align-items: center; text-align: center; padding: 26px; }
 

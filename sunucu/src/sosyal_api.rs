@@ -74,6 +74,10 @@ pub struct AkisSorgu {
     arkadaslar: Option<u8>,
     /// "#etiket" ya da oyun/film/dizi adı.
     konu: Option<String>,
+    /// Yalnız bu türden (profil sekmeleri).
+    tur: Option<String>,
+    /// Yalnız bu kişinin beğendikleri.
+    begenen: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -98,17 +102,16 @@ pub async fn gundem(
 pub async fn akis(State(s): State<Arc<Sunucu>>, h: HeaderMap, Query(q): Query<AkisSorgu>) -> Sonuc {
     let ben = kim(&s, &h)?;
     let konu: Option<String> = q.konu.map(|k| k.chars().take(120).collect());
-    let l = s
-        .db()
-        .akis_konu(
-            &ben.id,
-            q.once,
-            q.kisi.as_deref(),
-            q.arkadaslar == Some(1),
-            konu.as_deref(),
-            q.sayi.unwrap_or(30),
-        )
-        .map_err(ic)?;
+    let f = crate::sosyal::Suzgec {
+        once: q.once,
+        kisi: q.kisi.as_deref(),
+        arkadaslar: q.arkadaslar == Some(1),
+        konu: konu.as_deref(),
+        tur: q.tur.as_deref(),
+        begenen: q.begenen.as_deref(),
+        sayi: q.sayi.unwrap_or(30),
+    };
+    let l = s.db().akis_suzgec(&ben.id, &f).map_err(ic)?;
     Ok(Json(json!({ "olaylar": l })))
 }
 
@@ -154,8 +157,24 @@ pub async fn yorum(
             &json!({ "tip": "bildirim", "tur": "yorum", "kisi": ben, "etkinlik": id, "metin": m }),
         );
     }
+    anilanlara_haber(&s, &ben, &m, id, Some(&sahibi));
     s.durum.yay(json!({ "tip": "akis", "id": id }));
     Ok(Json(json!({ "id": yid })))
+}
+
+/// Yazıda @Ad ile anılanlara bildirim (yanıtta paylaşım sahibi zaten "yorum" bildirimi alır).
+fn anilanlara_haber(
+    s: &Sunucu,
+    ben: &crate::db::Kullanici,
+    metin: &str,
+    etkinlik: i64,
+    haric: Option<&str>,
+) {
+    let anilan = s.db().anilanlar(metin, &ben.id);
+    let v = json!({ "tip": "bildirim", "tur": "anma", "kisi": ben, "etkinlik": etkinlik, "metin": metin });
+    for k in anilan.iter().filter(|k| Some(k.id.as_str()) != haric) {
+        s.durum.kisiye(&k.id, &v);
+    }
 }
 
 #[derive(Deserialize)]
@@ -191,6 +210,7 @@ pub async fn gonderi(
                 "Biraz yavaş: 10 dakikada en çok 10 gönderi",
             )
         })?;
+    anilanlara_haber(&s, &ben, m, id, None);
     s.durum.yay(json!({ "tip": "akis" }));
     Ok(Json(json!({ "id": id })))
 }
@@ -263,6 +283,13 @@ pub async fn etkinlik_sil(
             "Yalnız kendi paylaşımını silebilirsin",
         ));
     };
+    // Oyun gecesi kartı silinince gecenin kendisi de iptal olur.
+    if tur == "gece" {
+        if let Some(gid) = veri["gece"].as_i64() {
+            s.db().gece_sil(gid).map_err(ic)?;
+            s.durum.yay(json!({ "tip": "gece", "id": gid }));
+        }
+    }
     if tur == "klip" {
         if let Some(ozet) = veri["url"]
             .as_str()

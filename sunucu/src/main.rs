@@ -8,6 +8,7 @@ mod ayar;
 mod db;
 mod discord;
 mod durum;
+mod gece;
 mod klip;
 mod sayfa;
 mod sosyal;
@@ -78,6 +79,10 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/akis/{id}", delete(sosyal_api::etkinlik_sil))
         .route("/api/gonderi", post(sosyal_api::gonderi))
         .route("/api/gundem", get(sosyal_api::gundem))
+        .route("/api/gece", post(gece::ac))
+        .route("/api/geceler", get(gece::liste))
+        .route("/api/gece/{id}", delete(gece::sil))
+        .route("/api/gece/{id}/katil", post(gece::katil))
         .route("/api/akis/{id}/begen", post(sosyal_api::begen))
         .route("/api/akis/{id}/yorum", post(sosyal_api::yorum))
         .route("/api/yorum/{id}", delete(sosyal_api::yorum_sil))
@@ -157,6 +162,16 @@ async fn main() {
             if n > 0 {
                 eprintln!("{n} eski oturum silindi");
             }
+        }
+    });
+    // Oyun gecesi hatırlatması: dakikada bir bakılır (başlamasına 15 dk kalanlar).
+    let s7 = s.clone();
+    tokio::spawn(async move {
+        let mut t = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            t.tick().await;
+            let s8 = s7.clone();
+            let _ = tokio::task::spawn_blocking(move || gece::hatirlat(&s8)).await;
         }
     });
     // Gece yedeği: açılışta ve 6 saatte bir bakılır; o günün yedeği yoksa alınır, en yeni 7 gün kalır.

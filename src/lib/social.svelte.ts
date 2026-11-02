@@ -61,13 +61,17 @@ export interface Yorum {
 export interface Olay {
   id: number;
   kisi: Kisi;
-  tur: "puan" | "oyun" | "klip" | "gonderi";
+  tur: "puan" | "oyun" | "klip" | "gonderi" | "gece";
   veri: Partial<Puan> & {
     ad: string;
     kapak?: string | null;
     /** Klip: video adresi ("/klip/….mp4"), oyun, açıklama, süre (sn), silineceği an (ms). */
     url?: string;
     not?: string | null;
+    /** Oyun gecesi: gecenin kimliği, başlangıç (ms), kişi sınırı. */
+    gece?: number;
+    zaman?: number;
+    kontenjan?: number | null;
     /** Gönderi: yazı ve isteğe bağlı resim ("/resim/…"). */
     metin?: string;
     resim?: string | null;
@@ -81,6 +85,20 @@ export interface Olay {
   yorumlar: Yorum[];
   /** Kaç kişi şikâyet etti (yalnız yöneticiye gösterilir). */
   sikayet?: number;
+}
+
+export type GeceDurum = "geliyor" | "belki" | "gelemem";
+
+export interface Gece {
+  id: number;
+  olusturan: Kisi;
+  oyun: string;
+  /** Başlangıç (ms). */
+  zaman: number;
+  kontenjan: number | null;
+  not: string | null;
+  etkinlik: number | null;
+  katilanlar: { kisi: Kisi; durum: GeceDurum }[];
 }
 
 export interface Mesaj {
@@ -137,6 +155,10 @@ export const sosyal = $state({
   sohbetAcik: false,
   /** Arkadaş oyuna girince sağ altta haber ver. */
   oyunHaberi: true,
+  /** Bütün üyeler (@anma önerisi ve tanıma için). */
+  uyeler: [] as Kisi[],
+  /** Yaklaşan oyun geceleri (kimlik → gece). */
+  geceler: {} as Record<number, Gece>,
   /** Yönetici: herkesin paylaşımını/yorumunu silebilir, şikâyetleri görür. */
   yonetici: false,
   /** Sosyal'de seçili konu: "#etiket" ya da gündemdeki oyun/film adı (boşsa tüm akış). */
@@ -311,6 +333,9 @@ function baglan() {
       }
       case "akis":
         sosyal.akisSurum++;
+        break;
+      case "gece":
+        void gecelerYukle();
         break;
       case "mesaj": {
         const m = v.mesaj as Mesaj;
@@ -541,6 +566,8 @@ function baslat() {
   if (!sosyal.anahtar) return;
   calisiyor = true;
   baglan();
+  void gecelerYukle();
+  void uyelerYukle();
   void istek<{ yonetici?: boolean }>("GET", "/api/ben")
     .then((b) => (sosyal.yonetici = !!b.yonetici))
     .catch(() => {});
@@ -612,4 +639,45 @@ export async function gonderiPaylas(metin: string, resim: Blob | null) {
   if (resim) url = (await istek<{ url: string }>("POST", "/api/resim", await gonderiResmi(resim))).url;
   await istek("POST", "/api/gonderi", { metin, resim: url });
   sosyal.akisSurum++;
+}
+
+// ---------- oyun gecesi ----------
+
+/** Yaklaşan oyun gecelerini sunucudan alır (eski sunucuda sessizce boş kalır). */
+export async function gecelerYukle() {
+  if (!sosyal.anahtar) return;
+  try {
+    const r = await istek<{ geceler: Gece[] }>("GET", "/api/geceler");
+    sosyal.geceler = Object.fromEntries(r.geceler.map((g) => [g.id, g]));
+  } catch {
+    /* sunucu henüz bilmiyor */
+  }
+}
+
+export async function geceAc(g: { oyun: string; zaman: number; kontenjan: number | null; not: string | null }) {
+  await istek("POST", "/api/gece", g);
+  await gecelerYukle();
+  sosyal.akisSurum++;
+}
+
+export async function geceKatil(id: number, durum: GeceDurum) {
+  const r = await istek<{ gece: Gece | null }>("POST", `/api/gece/${id}/katil`, { durum });
+  if (r.gece) sosyal.geceler = { ...sosyal.geceler, [id]: r.gece };
+}
+
+export async function geceIptal(id: number) {
+  await istek("DELETE", `/api/gece/${id}`);
+  const { [id]: _, ...kalan } = sosyal.geceler;
+  sosyal.geceler = kalan;
+  sosyal.akisSurum++;
+}
+
+/** Üye listesi (@anma için); Topluluk ve Sosyal de bunu kullanır. */
+export async function uyelerYukle() {
+  if (!sosyal.anahtar) return;
+  try {
+    sosyal.uyeler = (await istek<{ kisiler: Kisi[] }>("GET", "/api/kisiler")).kisiler;
+  } catch {
+    /* sessiz */
+  }
 }

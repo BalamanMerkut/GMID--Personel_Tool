@@ -62,6 +62,7 @@ impl Db {
                olusturma INTEGER NOT NULL, son INTEGER NOT NULL);",
         )?;
         crate::sosyal::kur(&c)?;
+        crate::gece::kur(&c)?;
         Ok(Db(c))
     }
 

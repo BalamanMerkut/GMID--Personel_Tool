@@ -155,6 +155,24 @@ pub struct Etkinlik {
     pub sikayet: i64,
 }
 
+/// Akış süzgeci.
+#[derive(Default, Clone, Copy)]
+pub struct Suzgec<'a> {
+    /// Bu zamandan eskiler (sayfalama).
+    pub once: Option<i64>,
+    /// Yalnız bu kişinin olayları.
+    pub kisi: Option<&'a str>,
+    /// Yalnız arkadaşlarımın ve benim olaylarım.
+    pub arkadaslar: bool,
+    /// "#etiket" ya da oyun/film/dizi adı.
+    pub konu: Option<&'a str>,
+    /// Yalnız bu türden olaylar (gonderi, klip, puan, oyun, gece).
+    pub tur: Option<&'a str>,
+    /// Yalnız bu kişinin beğendikleri.
+    pub begenen: Option<&'a str>,
+    pub sayi: i64,
+}
+
 /// Gündemdeki bir konu.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Gundem {
@@ -446,7 +464,14 @@ impl Db {
     }
 
     /// Aynı anahtarla olay varsa güncellenip başa alınır (beğeni ve yorumlar korunur).
-    fn etkinlik_yaz(&self, id: &str, tur: &str, anahtar: &str, veri: &Value, zaman: i64) -> R<i64> {
+    pub(crate) fn etkinlik_yaz(
+        &self,
+        id: &str,
+        tur: &str,
+        anahtar: &str,
+        veri: &Value,
+        zaman: i64,
+    ) -> R<i64> {
         self.0
             .query_row(
                 "INSERT INTO etkinlikler (kullanici, tur, anahtar, veri, zaman) VALUES (?1, ?2, ?3, ?4, ?5)
@@ -535,6 +560,30 @@ impl Db {
         konu: Option<&str>,
         sayi: i64,
     ) -> R<Vec<Etkinlik>> {
+        self.akis_suzgec(
+            ben,
+            &Suzgec {
+                once,
+                kisi,
+                arkadaslar,
+                konu,
+                sayi,
+                ..Suzgec::default()
+            },
+        )
+    }
+
+    /// Akış, bütün süzgeçlerle (profil sekmeleri: tür ve beğendikleri).
+    pub fn akis_suzgec(&self, ben: &str, f: &Suzgec) -> R<Vec<Etkinlik>> {
+        let Suzgec {
+            once,
+            kisi,
+            arkadaslar,
+            konu,
+            tur,
+            begenen,
+            sayi,
+        } = *f;
         // "#cs2" → gönderide "#cs2" geçenler (büyük/küçük harf fark etmez); ad → o oyunun/filmin olayları
         // ve "#adı" (boşluksuz) etiketli gönderiler.
         let konu = konu.map(str::trim).filter(|k| !k.is_empty());
@@ -556,6 +605,8 @@ impl Db {
                    AND (?7 IS NULL OR instr(lower(COALESCE(json_extract(e.veri, '$.metin'), '') || ' '
                           || COALESCE(json_extract(e.veri, '$.not'), '')), ?7) > 0
                         OR (?8 IS NOT NULL AND (json_extract(e.veri, '$.ad') = ?8 OR json_extract(e.veri, '$.oyun') = ?8)))
+                   AND (?9 IS NULL OR e.tur = ?9)
+                   AND (?10 IS NULL OR EXISTS (SELECT 1 FROM begeniler b WHERE b.etkinlik = e.id AND b.kullanici = ?10))
                    AND (?5 = 0 OR e.kullanici = ?1 OR EXISTS (SELECT 1 FROM arkadaslar a WHERE a.durum = 'arkadas'
                         AND ((a.kimden = ?1 AND a.kime = e.kullanici) OR (a.kime = ?1 AND a.kimden = e.kullanici))))
                  ORDER BY e.zaman DESC, e.id DESC LIMIT ?4",
@@ -571,7 +622,9 @@ impl Db {
                     arkadaslar as i64,
                     simdi() - KLIP_OMRU_MS,
                     etiket,
-                    ad
+                    ad,
+                    tur,
+                    begenen
                 ],
                 |r| {
                     Ok(Etkinlik {
@@ -832,6 +885,33 @@ impl Db {
         Ok(l)
     }
 
+    /// Yazıda @Ad ile anılan üyeler (kendisi hariç). Ad birden çok kelime olabilir ("@Ali Veli"); en uzun
+    /// eşleşen ad seçilir, adın hemen arkasında harf/rakam olmamalı.
+    pub fn anilanlar(&self, metin: &str, ben: &str) -> Vec<Kullanici> {
+        if !metin.contains('@') {
+            return Vec::new();
+        }
+        let kucuk = metin.to_lowercase();
+        let mut l: Vec<Kullanici> = self
+            .kisiler()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, _)| k)
+            .filter(|k| k.id != ben && !k.ad.trim().is_empty())
+            .filter(|k| {
+                let aranan = format!("@{}", k.ad.to_lowercase());
+                kucuk.match_indices(&aranan).any(|(i, m)| {
+                    kucuk[i + m.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+                })
+            })
+            .collect();
+        l.truncate(10);
+        l
+    }
+
     /// Serbest gönderi (Twitter'daki gibi: yazı, isteğe bağlı resim). Son 10 dakikada en çok 10 gönderi.
     pub fn gonderi_yaz(&self, id: &str, metin: &str, resim: Option<&str>) -> R<Option<i64>> {
         let t = simdi();
@@ -1009,6 +1089,50 @@ mod tests {
             vec!["#CS2", "#OyunGecesi", "#ağır_çekim"]
         );
         assert!(etiketler("renk #fff değil ama ##").contains(&"#fff".to_string()));
+    }
+
+    #[test]
+    fn profil_sekmeleri_ve_anma() {
+        let db = Db::bellekte();
+        kisi(&db, "1", "Ali");
+        kisi(&db, "2", "Ali Veli");
+        kisi(&db, "3", "Zeynep");
+        let g = db
+            .gonderi_yaz("1", "selam @zeynep ve @Ali Veli!", None)
+            .unwrap()
+            .unwrap();
+        db.oyun_basladi("1", "CS2").unwrap();
+        db.begen("3", g).unwrap();
+        let f = |tur: Option<&'static str>, begenen: Option<&'static str>| Suzgec {
+            kisi: if begenen.is_some() { None } else { Some("1") },
+            tur,
+            begenen,
+            sayi: 30,
+            ..Suzgec::default()
+        };
+        assert_eq!(db.akis_suzgec("3", &f(None, None)).unwrap().len(), 2);
+        assert_eq!(
+            db.akis_suzgec("3", &f(Some("gonderi"), None))
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.akis_suzgec("3", &f(Some("klip"), None)).unwrap().len(),
+            0
+        );
+        let begendi = db.akis_suzgec("1", &f(None, Some("3"))).unwrap();
+        assert_eq!(begendi.len(), 1);
+        assert_eq!(begendi[0].id, g);
+        // "@Ali Veli" Ali Veli'yi anar; "@Ali" kendisi (yazan) sayılmaz; "@zeynep" büyük/küçük harf fark etmez.
+        let mut anilan: Vec<String> = db
+            .anilanlar("selam @zeynep ve @Ali Veli!", "1")
+            .into_iter()
+            .map(|k| k.id)
+            .collect();
+        anilan.sort();
+        assert_eq!(anilan, vec!["2", "3"]);
+        assert!(db.anilanlar("@Zeynepçik", "1").is_empty());
     }
 
     #[test]

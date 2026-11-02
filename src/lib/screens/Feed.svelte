@@ -6,8 +6,10 @@
   import Icon from "../Icon.svelte";
   import Avatar from "../components/social/Avatar.svelte";
   import FeedCard from "../components/social/FeedCard.svelte";
+  import GeceKart from "../components/social/GeceKart.svelte";
+  import GecePlanla from "../components/social/GecePlanla.svelte";
   import { getJson, setJson } from "../settings.svelte";
-  import { arkadasEkle, gonderiPaylas, istek, konuGoster, profilGoster, sosyal, type Kisi, type Olay } from "../social.svelte";
+  import { arkadasEkle, gonderiPaylas, istek, konuGoster, profilGoster, sosyal, uyelerYukle, type Kisi, type Olay } from "../social.svelte";
   import { nav } from "../player.svelte";
   import { notify } from "../toast.svelte";
 
@@ -36,15 +38,30 @@
   let yukleniyor = $state(false);
   let son = $state(false);
   let yalnizArkadas = $state(getJson<boolean>("social.feedFriends", false));
-  let kisiler = $state<Kisi[]>([]);
 
   // Yazma kutusu
   let taslak = $state("");
   let resim = $state<File | null>(null);
   let onizleme = $state<string | null>(null);
   let gonderiliyor = $state(false);
+  let planAcik = $state(false);
+  const yaklasan = $derived(Object.values(sosyal.geceler).sort((a, b) => a.zaman - b.zaman).slice(0, 4));
   let dosyaSec = $state<HTMLInputElement | null>(null);
   const kalanHarf = $derived(SINIR - [...taslak].length);
+  /** Yazının sonunda "@ali" varsa: adı böyle başlayan üyeler (tıklayınca tamamlanır). */
+  const anmaSoz = $derived(/(?:^|\s)@([\p{L}\p{N}_]{0,20})$/u.exec(taslak)?.[1] ?? null);
+  const anmaOneri = $derived(
+    anmaSoz === null
+      ? []
+      : sosyal.uyeler
+          .filter((k) => k.id !== sosyal.ben?.id && k.ad.toLocaleLowerCase("tr").startsWith(anmaSoz.toLocaleLowerCase("tr")))
+          .slice(0, 5),
+  );
+  function anmaKoy(k: Kisi) {
+    if (anmaSoz === null) return;
+    taslak = `${taslak.slice(0, taslak.length - anmaSoz.length - 1)}@${k.ad} `;
+    queueMicrotask(() => alan?.focus());
+  }
   const gonderilebilir = $derived(!gonderiliyor && kalanHarf >= 0 && (taslak.trim().length > 0 || !!resim));
 
   const hata = (e: unknown) => notify(String(e instanceof Error ? e.message : e), "info");
@@ -158,7 +175,7 @@
       .map(([ad, n]) => ({ ad, etiket: false, paylasim: n, begeni: 0 }));
   });
   const oneriler = $derived(
-    kisiler
+    sosyal.uyeler
       .filter((k) => k.id !== sosyal.ben?.id)
       .filter((k) => ![...sosyal.arkadaslar, ...sosyal.gelen, ...sosyal.giden].some((x) => x.id === k.id))
       .slice(0, 3),
@@ -195,11 +212,7 @@
     sosyal.bildirim = 0;
     void yukle();
     void gundemYukle();
-    if (sosyal.anahtar) {
-      void istek<{ kisiler: Kisi[] }>("GET", "/api/kisiler")
-        .then((r) => (kisiler = r.kisiler))
-        .catch(() => {});
-    }
+    void uyelerYukle();
     return () => resimKaldir();
   });
 </script>
@@ -227,6 +240,13 @@
           <span class="yaz-baslik"><b>{sosyal.ben?.ad ?? "Sen"}</b><span>malikâneye yazıyor</span></span>
         </div>
         <textarea bind:this={alan} bind:value={taslak} onkeydown={tus} placeholder={ipucu} rows="2" aria-label="Gönderi" disabled={gonderiliyor}></textarea>
+        {#if anmaOneri.length}
+          <div class="anma-oneri" role="listbox" aria-label="Üye öner">
+            {#each anmaOneri as k (k.id)}
+              <button type="button" class="anma-k" onclick={() => anmaKoy(k)}><Avatar kisi={k} boy={22} nokta={false} />{k.ad}</button>
+            {/each}
+          </div>
+        {/if}
         {#if onizleme}
           <div class="onizleme">
             <img src={onizleme} alt="Eklenen resim" />
@@ -240,8 +260,9 @@
         </div>
         <div class="yaz-alt">
           <button type="button" class="btn ghost sm" onclick={() => dosyaSec?.click()} disabled={gonderiliyor}><Icon name="image" size={15} />Resim</button>
+          <button type="button" class="btn ghost sm" class:acik-plan={planAcik} onclick={() => (planAcik = !planAcik)}><Icon name="bell" size={15} />Oyun gecesi</button>
           <input bind:this={dosyaSec} type="file" accept="image/*" hidden onchange={resimSecildi} />
-          <span class="ipucu-tus">#etiket yazarsan gündeme girer</span>
+          <span class="ipucu-tus" title="#etiket yazarsan gündeme girer, @ad yazarsan o kişiye haber gider">#etiket · @ad</span>
           <span class="bosluk"></span>
           {#if taslak.length}
             <span class="sayac tnum" class:az={kalanHarf <= 40} class:asti={kalanHarf < 0}>{kalanHarf}</span>
@@ -249,6 +270,10 @@
           <button class="btn paylas" disabled={!gonderilebilir} title="Ctrl+Enter"><Icon name="send" size={15} />{gonderiliyor ? "Paylaşılıyor…" : "Paylaş"}</button>
         </div>
       </form>
+
+      {#if planAcik}
+        <div class="plan-yer"><GecePlanla onkapat={() => (planAcik = false)} /></div>
+      {/if}
 
       {#if sosyal.konu}
         <div class="konu-serit">
@@ -287,6 +312,15 @@
           <p class="sub small">Şu an kimse oyunda değil.</p>
         {/each}
       </section>
+
+      {#if yaklasan.length}
+        <section class="kutu">
+          <h3>Yaklaşan oyun geceleri</h3>
+          <div class="geceler">
+            {#each yaklasan as g (g.id)}<GeceKart id={g.id} kucuk />{/each}
+          </div>
+        </section>
+      {/if}
 
       {#if gundem.length}
         <section class="kutu">
@@ -342,6 +376,9 @@
   .onizleme { position: relative; align-self: flex-start; }
   .onizleme img { display: block; max-width: 100%; max-height: 260px; border-radius: 12px; border: 1px solid var(--line); }
   .kaldir { position: absolute; top: 8px; left: 8px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.7); color: #fff; display: grid; place-items: center; cursor: pointer; }
+  .anma-oneri { display: flex; flex-wrap: wrap; gap: 6px; }
+  .anma-k { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--coal-2); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+  .anma-k:hover { border-color: #6cb6ff; }
   .hazir { display: flex; flex-wrap: wrap; gap: 6px; }
   .cip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 8px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
   .cip:hover:not(:disabled) { border-color: var(--gold-dim); color: var(--gold-glow); }
@@ -353,7 +390,10 @@
   .sayac.az { color: var(--gold-glow); }
   .sayac.asti { color: #ff6b6b; font-weight: 700; }
   .paylas { display: inline-flex; align-items: center; gap: 7px; }
-  .sm { padding: 6px 11px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+  .sm { padding: 6px 11px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .plan-yer { margin: 0 14px 10px; }
+  .acik-plan { border-color: var(--gold-dim); color: var(--gold-glow); }
+  .geceler { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
   .konu-serit { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 14px 10px; padding: 8px 8px 8px 14px; border-radius: 12px; background: rgba(227, 194, 112, 0.1); border: 1px solid rgba(227, 194, 112, 0.3); font-size: 14px; }
   .konu-serit b { color: var(--gold-glow); }
   .bos { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 40px 24px; color: var(--muted); }

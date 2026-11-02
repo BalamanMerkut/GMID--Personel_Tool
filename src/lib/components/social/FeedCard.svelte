@@ -5,6 +5,7 @@
   import { istek, konuGoster, profilGoster, sosyal, tamAdres, type Olay } from "../../social.svelte";
   import Avatar from "./Avatar.svelte";
   import Cover from "./Cover.svelte";
+  import GeceKart from "./GeceKart.svelte";
   import { eylem, kalan, once, parcala, puanYaz, sure, TUR_AD } from "./metin";
 
   let { o, ondegisti, onsil }: { o: Olay; ondegisti: () => void; onsil: (o: Olay) => void } = $props();
@@ -92,7 +93,7 @@
 </script>
 
 {#snippet yazi(m: string)}
-  <p class="metin">{#each parcala(m) as p, i (i)}{#if p.etiket}<button class="etiket" onclick={() => konuGoster(p.t)}>{p.t}</button>{:else}{p.t}{/if}{/each}</p>
+  <p class="metin">{#each parcala(m, sosyal.uyeler) as p, i (i)}{#if p.etiket}<button class="etiket" onclick={() => konuGoster(p.t)}>{p.t}</button>{:else if p.anma}<button class="etiket anma" onclick={() => profilGoster(p.anma ?? null)}>{p.t}</button>{:else}{p.t}{/if}{/each}</p>
 {/snippet}
 
 <!-- Twitter düzeni: solda profil resmi, sağda ad · zaman, içerik, altta yorum ve beğeni. -->
@@ -121,7 +122,9 @@
       </span>
     </header>
 
-    {#if o.tur === "gonderi"}
+    {#if o.tur === "gece" && o.veri.gece}
+      <GeceKart id={o.veri.gece} yedek={{ oyun: o.veri.oyun ?? o.veri.ad, zaman: o.veri.zaman, kontenjan: o.veri.kontenjan, not: o.veri.not }} />
+    {:else if o.tur === "gonderi"}
       {#if o.veri.metin}{@render yazi(o.veri.metin)}{/if}
       {#if o.veri.resim}<img class="medya" src={tamAdres(o.veri.resim)} alt="" loading="lazy" />{/if}
     {:else if o.tur === "klip"}
@@ -164,7 +167,7 @@
             <button class="kim" onclick={() => profilGoster(y.kisi.id)}><Avatar kisi={y.kisi} boy={28} nokta={false} /></button>
             <div class="yb">
               <span><button class="ad kucuk-ad" onclick={() => profilGoster(y.kisi.id)}>{y.kisi.ad}</button> <span class="zaman">· {once(y.zaman)}</span></span>
-              <span class="yorum-metin">{y.metin}</span>
+              <span class="yorum-metin">{#each parcala(y.metin, sosyal.uyeler) as p, i (i)}{#if p.etiket}<button class="etiket" onclick={() => konuGoster(p.t)}>{p.t}</button>{:else if p.anma}<button class="etiket anma" onclick={() => profilGoster(p.anma ?? null)}>{p.t}</button>{:else}{p.t}{/if}{/each}</span>
             </div>
             {#if y.kisi.id === sosyal.ben?.id || o.kisi.id === sosyal.ben?.id || sosyal.yonetici}
               <button class="ic kucuk" title="Yanıtı sil" aria-label="Yanıtı sil" onclick={() => yorumSil(y.id)}><Icon name="x" size={13} /></button>
@@ -199,6 +202,7 @@
   .ic:disabled { opacity: 0.35; cursor: default; }
   .metin { margin: 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
   .etiket { border: 0; background: none; padding: 0; font: inherit; color: var(--gold); cursor: pointer; }
+  .etiket.anma { color: #6cb6ff; }
   .etiket:hover { text-decoration: underline; color: var(--gold-glow); }
   .medya { display: block; max-width: 100%; max-height: 520px; border-radius: 16px; border: 1px solid var(--line); object-fit: cover; }
   .klip { border-radius: 16px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; border: 1px solid var(--line); }
