@@ -330,6 +330,13 @@ function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [s
   }
 }
 
+/** GMID penceresi önde değilse (oyundaysan ya da başka programdaysan) mesaj/bildirim sağ alttaki kartla da
+ *  gösterilir; kart oyunun üstünde görünür, odak almaz. */
+function disaridaysaGoster(ikon: string, baslik: string, metin: string) {
+  if (document.hasFocus()) return;
+  void api.overlay.toast(ikon, baslik, metin).catch(() => {});
+}
+
 // ---------- canlı bağlantı ----------
 let ws: WebSocket | null = null;
 let yeniden: ReturnType<typeof setTimeout> | undefined;
@@ -416,6 +423,7 @@ function baglan() {
           if (!sosyal.sohbetler.some((x) => x.id === kisi.id)) sosyal.sohbetler = [...sosyal.sohbetler, kisi];
           sosyal.okunmamis = { ...sosyal.okunmamis, [m.kimden]: (sosyal.okunmamis[m.kimden] ?? 0) + 1 };
           notify(`${kisi.ad}: ${m.metin.slice(0, 60)}`, "chat");
+          disaridaysaGoster("chat", kisi.ad, m.metin);
         }
         for (const f of mesajDinleyiciler) f(m, kisi);
         break;
@@ -431,6 +439,7 @@ function baglan() {
         sosyal.bildirim++;
         const [yazi, ikon] = bildirimYazisi(String(v.tur), kisi.ad, v);
         notify(yazi, ikon);
+        disaridaysaGoster(ikon, "GMID", yazi);
         break;
       }
       case "dinle":
@@ -714,6 +723,23 @@ export async function gonderiPaylas(metin: string, resim: Blob | null, anket: { 
   if (resim) url = (await istek<{ url: string }>("POST", "/api/resim", await gonderiResmi(resim))).url;
   await istek("POST", "/api/gonderi", { metin, resim: url, ...(anket ? { anket: anket.secenekler, anket_saat: anket.saat } : {}) });
   sosyal.akisSurum++;
+}
+
+/** Resmi küçültüp sunucuya yükler; "/resim/…" adresini döner. */
+export async function kapakResmiYukle(dosya: Blob): Promise<string> {
+  return (await istek<{ url: string }>("POST", "/api/resim", await gonderiResmi(dosya))).url;
+}
+
+export interface Gorunum {
+  kapak: string | null;
+  renk: string | null;
+  biyografi: string;
+  vitrin: string[];
+}
+
+/** Profil görünümünü kaydeder (kapak, renk, tanıtım, vitrin). */
+export async function gorunumKaydet(g: Gorunum): Promise<Gorunum> {
+  return (await istek<{ gorunum: Gorunum }>("PUT", "/api/profil/gorunum", g)).gorunum;
 }
 
 /** Ankette oy ver (fikir değiştirilebilir). Dönen: güncel oylar. */

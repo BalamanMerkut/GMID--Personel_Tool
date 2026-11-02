@@ -84,6 +84,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/ws", get(ws::baglan))
         .route("/api/kisiler", get(sosyal_api::kisiler))
         .route("/api/profil", put(sosyal_api::profil_kaydet))
+        .route("/api/profil/gorunum", put(topluluk::gorunum_kaydet))
         .route("/api/profil/{id}", get(sosyal_api::profil))
         .route("/api/akis", get(sosyal_api::akis))
         .route("/api/akis/{id}", delete(sosyal_api::etkinlik_sil))

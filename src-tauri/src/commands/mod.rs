@@ -610,6 +610,20 @@ fn parse_resolve(line: &str) -> StreamInfo {
     }
 }
 
+/// Topluluk: oyundayken (GMID penceresi önde değilken) gelen mesaj ve bildirimler sağ alttaki kartla gösterilir;
+/// oyunun üstünde de görünür, odak almaz. Ekran bildirimleri ayardan kapatılmışsa gösterilmez.
+#[tauri::command]
+pub fn social_toast(app: AppHandle, icon: String, title: String, text: String) {
+    const IKONLAR: [&str; 7] = ["chat", "heart", "flag", "bell", "users", "star", "trophy"];
+    let icon = if IKONLAR.contains(&icon.as_str()) {
+        icon
+    } else {
+        "bell".into()
+    };
+    let kisa = |s: &str, n: usize| s.chars().take(n).collect::<String>();
+    crate::overlay::show_toast(&app, &icon, &kisa(&title, 60), kisa(&text, 160));
+}
+
 /// Topluluk: paylaşılacak kapak/afiş resminin baytları (arayüz küçültüp sunucuya yükler). Yalnız resim
 /// dosyaları, en çok 15 MB.
 #[tauri::command]

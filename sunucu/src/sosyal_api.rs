@@ -50,6 +50,7 @@ pub async fn profil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<S
         "iliski": db.iliski(&ben.id, &id), "arkadas": db.arkadas_sayisi(&id),
         "begeni": puan.0, "yorum": puan.1,
         "rozetler": db.rozetler(&id),
+        "gorunum": db.gorunum(&id),
     })))
 }
 

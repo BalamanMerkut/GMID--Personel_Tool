@@ -21,6 +21,9 @@ pub fn kur(c: &Connection) -> rusqlite::Result<()> {
            kullanici TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
            secim INTEGER NOT NULL, zaman INTEGER NOT NULL,
            PRIMARY KEY (etkinlik, kullanici));
+         CREATE TABLE IF NOT EXISTS profil_gorunum (
+           kullanici TEXT PRIMARY KEY REFERENCES kullanicilar(id) ON DELETE CASCADE,
+           veri TEXT NOT NULL);
          CREATE TABLE IF NOT EXISTS rozetler (
            kullanici TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
            rozet TEXT NOT NULL, notu TEXT, zaman INTEGER NOT NULL,
@@ -176,6 +179,84 @@ pub async fn oy(
         OySonuc::Bitti => Err(hata(StatusCode::GONE, "Anket bitti")),
         OySonuc::Gecersiz => Err(hata(StatusCode::BAD_REQUEST, "Geçersiz seçim")),
     }
+}
+
+// ---------------- profil görünümü ----------------
+
+/// Profil özelleştirme: kapak resmi (önce /api/resim ile yüklenir), vurgu rengi, kısa tanıtım, vitrin (en çok
+/// 3 oyun adı).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Gorunum {
+    #[serde(default)]
+    pub kapak: Option<String>,
+    #[serde(default)]
+    pub renk: Option<String>,
+    #[serde(default)]
+    pub biyografi: String,
+    #[serde(default)]
+    pub vitrin: Vec<String>,
+}
+
+impl Gorunum {
+    /// Geçersiz alanları atar, uzunlukları sınırlar.
+    pub fn temizle(mut self) -> Gorunum {
+        self.kapak = self
+            .kapak
+            .filter(|k| k.starts_with("/resim/") && k.len() <= 200 && !k.contains(".."));
+        self.renk = self.renk.filter(|r| {
+            r.len() == 7 && r.starts_with('#') && r[1..].chars().all(|c| c.is_ascii_hexdigit())
+        });
+        self.biyografi = self.biyografi.trim().chars().take(160).collect();
+        self.vitrin = self
+            .vitrin
+            .into_iter()
+            .map(|v| v.trim().chars().take(80).collect::<String>())
+            .filter(|v| !v.is_empty())
+            .take(3)
+            .collect();
+        self
+    }
+}
+
+impl Db {
+    pub fn gorunum(&self, id: &str) -> Gorunum {
+        self.0
+            .query_row(
+                "SELECT veri FROM profil_gorunum WHERE kullanici = ?1",
+                [id],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str(&v).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn gorunum_kaydet(&self, id: &str, g: &Gorunum) -> R<()> {
+        self.0
+            .execute(
+                "INSERT INTO profil_gorunum (kullanici, veri) VALUES (?1, ?2)
+                 ON CONFLICT(kullanici) DO UPDATE SET veri = ?2",
+                params![id, serde_json::to_string(g).map_err(|x| x.to_string())?],
+            )
+            .map_err(e)?;
+        Ok(())
+    }
+}
+
+/// PUT /api/profil/gorunum {kapak?, renk?, biyografi?, vitrin?}
+pub async fn gorunum_kaydet(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Json(g): Json<Gorunum>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let g = g.temizle();
+    s.db()
+        .gorunum_kaydet(&ben.id, &g)
+        .map_err(|x| hata(StatusCode::INTERNAL_SERVER_ERROR, x))?;
+    Ok(Json(json!({ "gorunum": g })))
 }
 
 // ---------------- rozetler ----------------
@@ -340,6 +421,39 @@ mod tests {
         )
         .unwrap();
         assert_eq!(db.oy_ver("2", id, 1).unwrap(), OySonuc::Bitti);
+    }
+
+    #[test]
+    fn gorunum_temizlenir() {
+        let db = Db::bellekte();
+        kisi(&db, "1");
+        assert_eq!(db.gorunum("1"), Gorunum::default());
+        let g = Gorunum {
+            kapak: Some("https://kotu.com/x.png".into()),
+            renk: Some("#E3C270".into()),
+            biyografi: "  CS2 & Valorant  ".into(),
+            vitrin: vec![
+                "CS2".into(),
+                "".into(),
+                "LoL".into(),
+                "Valorant".into(),
+                "Dota 2".into(),
+            ],
+        }
+        .temizle();
+        assert_eq!(g.kapak, None);
+        assert_eq!(g.renk.as_deref(), Some("#E3C270"));
+        assert_eq!(g.biyografi, "CS2 & Valorant");
+        assert_eq!(g.vitrin, vec!["CS2", "LoL", "Valorant"]);
+        assert!(Gorunum {
+            renk: Some("red".into()),
+            ..Default::default()
+        }
+        .temizle()
+        .renk
+        .is_none());
+        db.gorunum_kaydet("1", &g).unwrap();
+        assert_eq!(db.gorunum("1"), g);
     }
 
     #[test]

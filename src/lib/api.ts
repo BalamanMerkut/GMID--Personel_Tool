@@ -623,6 +623,9 @@ export const api = {
 
   overlay: {
     takeOsd: () => call<OsdMessage | null>("take_osd"),
+    /** Sağ alttan kayan kart (oyunun üstünde de görünür). Yalnız uygulamada. */
+    toast: (icon: string, title: string, text: string) =>
+      inTauri ? call<void>("social_toast", { icon, title, text }) : Promise.resolve(),
     alerts: () => call<Alerts>("alerts_list"),
     fitAlerts: (height: number) => call<void>("alerts_fit", { height }),
     closeAlerts: () => call<void>("alerts_close"),

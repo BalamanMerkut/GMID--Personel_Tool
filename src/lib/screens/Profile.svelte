@@ -9,7 +9,7 @@
   import { once, puanYaz, saat } from "../components/social/metin";
   import { api } from "../api";
   import { nav } from "../player.svelte";
-  import { arkadasEkle, arkadasSil, istek, sohbetAc, sosyal, tamAdres, type Kisi, type Olay, type Profil, type Puan } from "../social.svelte";
+  import { arkadasEkle, arkadasSil, gorunumKaydet, istek, kapakResmiYukle, sohbetAc, sosyal, tamAdres, type Gorunum, type Kisi, type Olay, type Profil, type Puan } from "../social.svelte";
   import { notify } from "../toast.svelte";
 
   interface Yanit {
@@ -22,6 +22,8 @@
     /** Başkalarından alınan beğeni ve yorum (süresi dolup silinen kliplerinki dahil). */
     begeni?: number;
     yorum?: number;
+    /** Kapak, vurgu rengi, tanıtım, vitrin (eski sunucuda yok). */
+    gorunum?: Gorunum;
     /** Rozetler (eski sunucuda yok). */
     rozetler?: { id: string; ad: string; aciklama: string; zaman: number | null; kez: number }[];
   }
@@ -127,6 +129,61 @@
   /** Arka plan: favori ya da en çok oynanan oyunun kapağı. */
   const arkaPlan = $derived(tamAdres(favOyun[0]?.kapak ?? enCok[0]?.kapak ?? favDizi[0]?.kapak ?? favFilm[0]?.kapak ?? null));
   const SAYI = (n: number) => n.toLocaleString("tr-TR");
+
+  // ---- profil özelleştirme ----
+  const g = $derived(veri?.gorunum ?? null);
+  const kapakResmi = $derived(g?.kapak ? tamAdres(g.kapak) : null);
+  const RENKLER = ["#e3c270", "#ff8a5c", "#ff6b8b", "#c77dff", "#7c9dff", "#4fc3f7", "#5cd6a0", "#b8c2cc"];
+  /** Vitrindeki oyunun kapağı (profilinde varsa). */
+  const vitrinKapak = (ad: string) => {
+    const k = ad.toLocaleLowerCase("tr");
+    return p.puanlar.find((x) => x.ad.toLocaleLowerCase("tr") === k)?.kapak ?? p.oyunlar.find((x) => x.ad.toLocaleLowerCase("tr") === k)?.kapak ?? null;
+  };
+  let duzenle = $state(false);
+  let dKapak = $state<string | null>(null);
+  let dRenk = $state<string | null>(null);
+  let dBio = $state("");
+  let dVitrin = $state<string[]>([]);
+  let kaydediliyor = $state(false);
+  let kapakSec = $state<HTMLInputElement | null>(null);
+  const vitrinSecenek = $derived([...new Set([...dVitrin, ...p.oyunlar.slice().sort((a, b) => b.dakika - a.dakika).map((o) => o.ad), ...puanli("game").map((x) => x.ad)])].slice(0, 30));
+  function duzenleAc() {
+    dKapak = g?.kapak ?? null;
+    dRenk = g?.renk ?? null;
+    dBio = g?.biyografi ?? "";
+    dVitrin = [...(g?.vitrin ?? [])];
+    duzenle = true;
+  }
+  async function kapakSecildi(e: Event) {
+    const f = (e.currentTarget as HTMLInputElement).files?.[0];
+    (e.currentTarget as HTMLInputElement).value = "";
+    if (!f) return;
+    if (!f.type.startsWith("image/")) return notify("Yalnız resim seçilebilir", "info");
+    kaydediliyor = true;
+    try {
+      dKapak = await kapakResmiYukle(f);
+    } catch (err) {
+      hata(err);
+    } finally {
+      kaydediliyor = false;
+    }
+  }
+  function vitrinDegistir(ad: string) {
+    dVitrin = dVitrin.includes(ad) ? dVitrin.filter((x) => x !== ad) : dVitrin.length < 3 ? [...dVitrin, ad] : dVitrin;
+  }
+  async function gorunumuKaydet() {
+    if (!veri) return;
+    kaydediliyor = true;
+    try {
+      veri.gorunum = await gorunumKaydet({ kapak: dKapak, renk: dRenk, biyografi: dBio, vitrin: dVitrin });
+      duzenle = false;
+      notify("Profilin güncellendi", "check");
+    } catch (err) {
+      hata(err);
+    } finally {
+      kaydediliyor = false;
+    }
+  }
 </script>
 
 {#snippet vitrin(baslik: string, simge: "trophy" | "film" | "library" | "users" | "sparkle" | "clock", alt: string)}
@@ -156,17 +213,19 @@
   {:else if !veri}
     <div class="ust iskelet"><span class="sk-av"></span><span class="sk-satir"></span></div>
   {:else}
-    <section class="ust" style:--arka={arkaPlan ? `url("${arkaPlan}")` : "none"}>
+    <section class="ust" class:kapakli={!!kapakResmi} style:--arka={kapakResmi ? `url("${kapakResmi}")` : arkaPlan ? `url("${arkaPlan}")` : "none"} style:--vurgu={g?.renk ?? "var(--gold)"}>
       <div class="ust-arka" aria-hidden="true"></div>
       <div class="ust-ic">
         <div class="cerceve"><Avatar kisi={veri.kisi} boy={132} nokta={false} /></div>
         <div class="kimlik">
           <h1>{veri.kisi.ad}</h1>
+          {#if g?.biyografi}<p class="bio">{g.biyografi}</p>{/if}
           <span class="durum" class:oyunda={!!oyunu} class:acik={!!canli}>
             {#if oyunu}<i></i>Şu an {oyunu} oynuyor{:else if canli}<i></i>Çevrim içi{:else}Çevrim dışı{/if}
           </span>
           <div class="dugmeler">
             {#if benim}
+              <button class="btn sm" onclick={duzenleAc}><Icon name="palette" size={14} />Profili özelleştir</button>
               <button class="btn ghost sm" onclick={() => nav.go("settings/topluluk")}><Icon name="gear" size={14} />Paylaşımı düzenle</button>
             {:else if iliski === "arkadas"}
               <button class="btn sm" onclick={() => veri && sohbetAc(veri.kisi)}><Icon name="chat" size={14} />Mesaj gönder</button>
@@ -188,8 +247,57 @@
       </div>
     </section>
 
+    {#if duzenle}
+      <section class="duzenle">
+        <div class="d-satir">
+          <span class="d-etiket">Kapak resmi</span>
+          <div class="d-kapak" style:background-image={dKapak ? `url("${tamAdres(dKapak)}")` : "none"}>{#if !dKapak}<span class="sub small">Yok (favori oyununun kapağı kullanılır)</span>{/if}</div>
+          <div class="d-dugmeler">
+            <button class="btn ghost sm" disabled={kaydediliyor} onclick={() => kapakSec?.click()}><Icon name="image" size={14} />Resim seç</button>
+            {#if dKapak}<button class="btn ghost sm" onclick={() => (dKapak = null)}>Kaldır</button>{/if}
+            <input bind:this={kapakSec} type="file" accept="image/*" hidden onchange={kapakSecildi} />
+          </div>
+        </div>
+        <div class="d-satir">
+          <span class="d-etiket">Vurgu rengi</span>
+          <div class="renkler">
+            <button class="renk varsayilan" class:secili={!dRenk} title="Varsayılan (altın)" aria-label="Varsayılan" onclick={() => (dRenk = null)}></button>
+            {#each RENKLER as r (r)}<button class="renk" class:secili={dRenk === r} style:background={r} aria-label={r} onclick={() => (dRenk = r)}></button>{/each}
+          </div>
+        </div>
+        <div class="d-satir">
+          <span class="d-etiket">Tanıtım</span>
+          <textarea bind:value={dBio} maxlength="160" rows="2" placeholder="Kendini bir cümleyle anlat (ör. Gece CS, gündüz Valorant)"></textarea>
+        </div>
+        <div class="d-satir">
+          <span class="d-etiket">Vitrin <em>(en çok 3 oyun)</em></span>
+          <div class="vitrin-sec">
+            {#each vitrinSecenek as ad (ad)}
+              <button class="cip" class:secili={dVitrin.includes(ad)} disabled={!dVitrin.includes(ad) && dVitrin.length >= 3} onclick={() => vitrinDegistir(ad)}>{ad}</button>
+            {:else}
+              <span class="sub small">Oyunların Topluluk ayarlarından paylaşılınca burada seçebilirsin.</span>
+            {/each}
+          </div>
+        </div>
+        <div class="d-alt">
+          <button class="btn ghost sm" onclick={() => (duzenle = false)}>Vazgeç</button>
+          <button class="btn sm" disabled={kaydediliyor} onclick={gorunumuKaydet}><Icon name="check" size={14} />{kaydediliyor ? "Kaydediliyor…" : "Kaydet"}</button>
+        </div>
+      </section>
+    {/if}
+
     <div class="govde">
       <div class="vitrinler">
+        {#if g?.vitrin.length}
+          <section class="vitrin">
+            {@render vitrin("Vitrin", "sparkle", "en sevdiği oyunlar")}
+            <div class="vitrin-oyunlar">
+              {#each g.vitrin as ad (ad)}
+                <div class="vo"><Cover url={vitrinKapak(ad)} ad={ad} kose={12} /><span>{ad}</span></div>
+              {/each}
+            </div>
+          </section>
+        {/if}
         {#if oyunu}
           <section class="vitrin simdi">
             <Icon name="bolt" size={18} />
@@ -282,8 +390,8 @@
             <div class="rozetler">
               {#each veri.rozetler as r (r.id)}
                 {@const [ikon, renk] = ROZET[r.id] ?? ["star", "#e3c270"]}
-                <span class="rozet" style:--r={renk} title={r.aciklama}>
-                  <span class="rozet-ikon"><Icon name={ikon} size={15} /></span>{r.ad}{#if r.kez > 1}<b class="tnum">×{r.kez}</b>{/if}
+                <span class="rz" style:--r={renk} title={r.aciklama}>
+                  <span class="rz-ikon"><Icon name={ikon} size={15} /></span>{r.ad}{#if r.kez > 1}<b class="tnum">×{r.kez}</b>{/if}
                 </span>
               {/each}
             </div>
@@ -322,7 +430,7 @@
   .ust { position: relative; overflow: hidden; border-radius: 20px; border: 1px solid var(--line-2); min-height: 210px; display: flex; align-items: flex-end; }
   .ust-arka { position: absolute; inset: -30px; background-image: linear-gradient(180deg, rgba(14, 15, 18, 0.35), rgba(14, 15, 18, 0.92)), var(--arka); background-color: #20232a; background-size: cover; background-position: center 30%; filter: blur(14px) saturate(1.2); }
   .ust-ic { position: relative; display: flex; align-items: flex-end; gap: 22px; width: 100%; padding: 26px 28px; }
-  .cerceve { padding: 4px; border-radius: 50%; background: linear-gradient(140deg, var(--gold-glow), #6a5424 60%, var(--gold)); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); }
+  .cerceve { padding: 4px; border-radius: 50%; background: linear-gradient(140deg, color-mix(in srgb, var(--vurgu) 70%, #fff), color-mix(in srgb, var(--vurgu) 45%, #000) 60%, var(--vurgu)); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); }
   .kimlik { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   h1 { margin: 0; font-family: var(--f-display); font-size: 32px; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); }
   .durum { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--muted); }
@@ -333,9 +441,32 @@
   .dugmeler { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
   .sm { padding: 6px 12px; font-size: 13px; }
   .kirmizi { color: #ff7a7e; }
-  .seviye { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(227, 194, 112, 0.35); }
-  .seviye span { font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
-  .seviye b { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-family: var(--f-display); border: 2px solid var(--gold); color: var(--gold-glow); }
+  .seviye { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.35); border: 1px solid color-mix(in srgb, var(--vurgu) 45%, transparent); }
+  .seviye span { font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--vurgu); }
+  .seviye b { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-family: var(--f-display); border: 2px solid var(--vurgu); color: color-mix(in srgb, var(--vurgu) 70%, #fff); }
+  .ust.kapakli { min-height: 260px; }
+  .ust.kapakli .ust-arka { inset: 0; filter: none; background-position: center; }
+  .bio { margin: 0; max-width: 560px; color: var(--text); font-size: 14.5px; line-height: 1.45; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7); }
+  .duzenle { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 16px; border: 1px solid rgba(227, 194, 112, 0.35); background: rgba(26, 28, 33, 0.92); }
+  .d-satir { display: flex; flex-direction: column; gap: 8px; }
+  .d-etiket { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .d-etiket em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .d-kapak { height: 110px; border-radius: 12px; border: 1px dashed var(--line-2); background-size: cover; background-position: center; display: grid; place-items: center; }
+  .d-dugmeler, .d-alt { display: flex; gap: 8px; }
+  .d-alt { justify-content: flex-end; }
+  .renkler { display: flex; gap: 8px; flex-wrap: wrap; }
+  .renk { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25); }
+  .renk.varsayilan { background: linear-gradient(135deg, var(--gold-glow), #6a5424); }
+  .renk.secili { border-color: #fff; }
+  .duzenle textarea { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; color: var(--text); font: inherit; font-size: 14px; resize: none; outline: none; }
+  .vitrin-sec { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cip { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+  .cip.secili { border-color: var(--gold); color: var(--gold-glow); background: rgba(227, 194, 112, 0.12); }
+  .cip:disabled { opacity: 0.4; cursor: default; }
+  .vitrin-oyunlar { display: grid; grid-template-columns: repeat(auto-fill, 140px); gap: 14px; }
+  .vo { display: flex; flex-direction: column; gap: 6px; }
+  .vo :global(img), .vo :global(.cover) { aspect-ratio: 3 / 4; }
+  .vo span { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .govde { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
   .vitrinler { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -403,7 +534,7 @@
     .ust-ic { flex-wrap: wrap; }
   }
   .rozetler { display: flex; flex-wrap: wrap; gap: 6px; }
-  .rozet { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--r) 12%, transparent); border: 1px solid color-mix(in srgb, var(--r) 45%, transparent); cursor: default; }
-  .rozet-ikon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #15171b; background: var(--r); }
-  .rozet b { color: var(--r); }
+  .rz { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--r) 12%, transparent); border: 1px solid color-mix(in srgb, var(--r) 45%, transparent); cursor: default; }
+  .rz-ikon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #15171b; background: var(--r); }
+  .rz b { color: var(--r); }
 </style>
