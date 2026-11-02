@@ -260,6 +260,7 @@ pub fn run() {
             commands::social_image,
             commands::social_stream,
             commands::social_resolve,
+            commands::social_stream_audio,
             commands::report_create,
             commands::search_all,
             commands::wrapped_get,

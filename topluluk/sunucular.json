@@ -1,7 +1,17 @@
 {
   "surum": 1,
   "discord": "https://discord.gg/upu9VQwFrV",
-  "servers": [],
+  "servers": [
+    {
+      "id": "gmid-cs16",
+      "name": "GMID · CS 1.6 JailBreak / 35 HP / IceWorld",
+      "game": "cs16",
+      "host": "gmid.molayazilim.com.tr",
+      "port": 27015,
+      "description": "Harita türüne göre mod: jail_ haritalarında JailBreak, 35hp_ haritalarında bunny hop açık 35 HP, fy_iceworld'de Pro Public. Komutlar: /mod, JailBreak'te /simon, /ac, /fd, /lr.",
+      "connect": "Oyunda konsol: connect gmid.molayazilim.com.tr:27015"
+    }
+  ],
   "ornek": [
     {
       "id": "cod2",

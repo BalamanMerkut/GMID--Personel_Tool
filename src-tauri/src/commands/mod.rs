@@ -445,6 +445,84 @@ pub async fn social_stream(app: AppHandle, url: String) -> CmdResult<String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Birlikte dinleme: şarkının sesi (baytlar). YouTube'un doğrudan ses adresini uygulama içinde çalmak bazı
+/// bilgisayarlarda "kaynak desteklenmiyor" hatası veriyordu; ses yt-dlp ile geçici klasöre alınır (birkaç saniye,
+/// en çok 80 MB) ve oradan çalınır. Son 6 şarkı saklanır (aynı şarkıya yeniden katılmak anında olur), eskileri
+/// silinir. Kullanıcının kütüphanesine bir şey eklenmez.
+#[tauri::command]
+pub async fn social_stream_audio(app: AppHandle, url: String) -> CmdResult<tauri::ipc::Response> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Geçersiz bağlantı".into());
+    }
+    let root = tauri::Manager::state::<DataDir>(&app).root().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::hash::{Hash, Hasher};
+        let dir = std::env::temp_dir().join("gmid-birlikte");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        url.hash(&mut h);
+        let ad = format!("{:016x}", h.finish());
+        let onceki = std::fs::read_dir(&dir).ok().and_then(|d| {
+            d.filter_map(Result::ok).map(|e| e.path()).find(|p| {
+                p.file_stem().and_then(|s| s.to_str()) == Some(ad.as_str())
+                    && p.extension().is_some_and(|x| x != "part")
+            })
+        });
+        let yol = match onceki {
+            Some(p) => p,
+            None => {
+                let sablon = dir.join(format!("{ad}.%(ext)s"));
+                let mut cmd = crate::downloader::tools::ytdlp(&root);
+                cmd.args([
+                    "--no-playlist",
+                    "--no-warnings",
+                    "--no-part",
+                    "--max-filesize",
+                    "80M",
+                    "-f",
+                    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                    "--print",
+                    "after_move:filepath",
+                    "-o",
+                ])
+                .arg(&sablon)
+                .args(["--", &url]);
+                let out = cmd.output().map_err(|_| {
+                    "yt-dlp bulunamadı; Video İndirici'den araçları kur".to_string()
+                })?;
+                let text = String::from_utf8_lossy(&out.stdout);
+                let p = text
+                    .lines()
+                    .map(str::trim)
+                    .rfind(|l| !l.is_empty())
+                    .map(std::path::PathBuf::from)
+                    .filter(|p| p.is_file())
+                    .ok_or_else(|| {
+                        crate::downloader::ytdlp::friendly_error(&String::from_utf8_lossy(
+                            &out.stderr,
+                        ))
+                    })?;
+                // En yeni 6 şarkı kalsın.
+                if let Ok(d) = std::fs::read_dir(&dir) {
+                    let mut l: Vec<(std::time::SystemTime, std::path::PathBuf)> = d
+                        .filter_map(Result::ok)
+                        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+                        .collect();
+                    l.sort_by_key(|x| std::cmp::Reverse(x.0));
+                    for (_, eski) in l.into_iter().skip(6) {
+                        let _ = std::fs::remove_file(eski);
+                    }
+                }
+                p
+            }
+        };
+        let bayt = std::fs::read(&yol).map_err(|e| e.to_string())?;
+        Ok(tauri::ipc::Response::new(bayt))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Birlikte dinleme odası (indirmeden): bağlantı ya da şarkı adı → kaynak sayfa, başlık, süre, kapak.
 /// Ad yazıldıysa YouTube'daki ilk sonuç alınır.
 #[derive(Serialize)]

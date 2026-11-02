@@ -103,6 +103,35 @@ wsEk.add((v) => {
   if (birlikte.dinlenen === oda.sahip.id) void eslestir();
 });
 
+// ---------- ses kaynağı ----------
+
+/** Şimdiki blob adresleri (eskisi serbest bırakılsın). */
+const bloblar: Record<"host" | "dinle", string | null> = { host: null, dinle: null };
+
+/**
+ * Şarkının sesi: GMID ses dosyasını geçici klasöre alır (yt-dlp), baytlar bir blob adresiyle çalınır. YouTube'un
+ * doğrudan adresini uygulama içinde çalmak bazı bilgisayarlarda "desteklenen kaynak yok" hatası veriyordu.
+ */
+async function sesAdresi(url: string, kim: "host" | "dinle"): Promise<string> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const bayt = await invoke<ArrayBuffer>("social_stream_audio", { url });
+  const tur = sesTuru(new Uint8Array(bayt.slice(0, 12)));
+  const adres = URL.createObjectURL(new Blob([bayt], { type: tur }));
+  const eski = bloblar[kim];
+  bloblar[kim] = adres;
+  // Eskisi çalan öğeden ayrıldıktan sonra bırakılır.
+  if (eski) setTimeout(() => URL.revokeObjectURL(eski), 2000);
+  return adres;
+}
+
+/** Dosyanın ilk baytlarından ses türü (m4a / webm / mp3 / ogg). */
+function sesTuru(b: Uint8Array): string {
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "audio/mp4";
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "audio/webm";
+  if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg";
+  return "audio/mpeg";
+}
+
 // ---------- yayın (sahip) ----------
 
 let bekleyen: ReturnType<typeof setTimeout> | undefined;
@@ -285,8 +314,8 @@ export async function baglantiOdasi(giris: string) {
     const bilgi = await ytdlp(() =>
       invoke<{ url: string; title: string; duration: number | null; thumbnail: string | null }>("social_resolve", { query: giris }),
     );
-    birlikte.asama = "Ses hazırlanıyor…";
-    const kaynak = await ytdlp(() => invoke<string>("social_stream", { url: bilgi.url }));
+    birlikte.asama = "Şarkı yükleniyor…";
+    const kaynak = await ytdlp(() => sesAdresi(bilgi.url, "host"));
     if (birlikte.dinlenen) await ayril();
     // Oynatıcıdan yayın yapılıyorsa bağlantılı odaya geçilir; kendi oynatıcın da duraklar.
     if (player.playing) controls.toggle();
@@ -342,8 +371,13 @@ async function eslestir() {
   if (o.sarki.url !== yukluKaynak) {
     birlikte.hazirlaniyor = true;
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const kaynak = await invoke<string>("social_stream", { url: o.sarki.url });
+      // Dinleyende de yt-dlp yoksa bir kez kendiliğinden kurulur.
+      const kaynak = await sesAdresi(o.sarki.url, "dinle").catch(async (e) => {
+        if (!String(e).includes("yt-dlp bulunamadı")) throw e;
+        notify("Birlikte dinleme için araçlar kuruluyor (bir kez)…", "download");
+        await api.videos.installTools();
+        return sesAdresi(o.sarki.url, "dinle");
+      });
       // Hazırlanırken oda değiştiyse ya da ayrıldıysa bırak.
       if (birlikte.dinlenen !== o.sahip.id) return;
       ses.src = kaynak;
