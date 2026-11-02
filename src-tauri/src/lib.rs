@@ -1,3 +1,4 @@
+mod akis;
 mod alarm;
 mod audio;
 mod backup;
@@ -262,6 +263,9 @@ pub fn run() {
             commands::social_resolve,
             commands::social_stream_audio,
             commands::social_stream_file,
+            akis::oda_akis_baslat,
+            akis::oda_akis_durum,
+            akis::oda_akis_oku,
             commands::social_toast,
             commands::report_create,
             commands::search_all,

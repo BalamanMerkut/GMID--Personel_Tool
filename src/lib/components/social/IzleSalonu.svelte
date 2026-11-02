@@ -176,13 +176,15 @@
 
       <div class="kontrol-kart">
         {#if oda.simdiki}
+          {@const enCok = birlikte.sure || oda.simdiki.sarki.sure || 1}
+          {@const inen = isFinite(birlikte.yuklenen) ? Math.min(100, (birlikte.yuklenen / enCok) * 100) : 100}
           <div class="simdi">
             <b title={oda.simdiki.sarki.baslik}>{oda.simdiki.sarki.baslik}</b>
             <span class="sub small">{oda.simdiki.ekleyen.ad} ekledi{oda.caliyor ? "" : " · duraklatıldı"}</span>
           </div>
           <div class="ilerle">
             <span class="tnum">{formatDuration(birlikte.konum) || "0:00"}</span>
-            <input type="range" min="0" max={birlikte.sure || oda.simdiki.sarki.sure || 1} step="1" value={birlikte.konum} disabled={!yonetici} onchange={(e) => sar(+e.currentTarget.value)} aria-label="Konum" />
+            <input type="range" min="0" max={enCok} step="1" value={birlikte.konum} disabled={!yonetici} onchange={(e) => sar(+e.currentTarget.value)} aria-label="Konum" style:--inen="{inen}%" class:iniyor={inen < 100} title={inen < 100 ? `İnen kısım: ${formatDuration(birlikte.yuklenen)} (ileri sarma buraya kadar)` : undefined} />
             <span class="tnum">{formatDuration(birlikte.sure || oda.simdiki.sarki.sure) || "–"}</span>
           </div>
         {/if}
@@ -335,6 +337,8 @@
 </div>
 
 <style>
+  /* Video inerken: inen kısım çizginin arkasında açık renkle görünür. */
+  .ilerle input.iniyor { background: linear-gradient(to right, rgba(227, 194, 112, 0.4) var(--inen), rgba(255, 255, 255, 0.08) var(--inen)) center / 100% 4px no-repeat; }
   .salon { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; padding: 16px; }
   .salon:has(.lobi) { grid-template-columns: minmax(0, 1fr); }
   .sahne-kolon { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
