@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "gmid-sunucu"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "getrandom 0.3.4",

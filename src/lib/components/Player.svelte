@@ -17,6 +17,8 @@
   import { countPlay } from "../library.svelte";
   import { controls, nav, player } from "../player.svelte";
   import { notify } from "../toast.svelte";
+  import { birlikte, paylasilabilir, yayinBaslat, yayinBitir, yayinDurumu } from "../birlikte.svelte";
+  import { sosyal } from "../social.svelte";
   import type { Download, GmidPlayerState, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
 
   let {
@@ -591,16 +593,23 @@
     repeat === "off" ? "Tekrar: kapalı" : repeat === "all" ? "Tekrar: tüm liste" : "Tekrar: bu parça",
   );
 
+  // Birlikte dinleme: yayın açıksa her oynat/duraklat/sarma/parça değişikliği arkadaşlara gider.
+  const yayinla = () => yayinDurumu(item, media?.currentTime ?? 0, !!media && !media.paused);
   // <audio> ve <video> aynı olayları dinler.
-  const onplay = () => ((playing = true), wake());
-  const onpause = () => ((playing = false), wake());
+  const onplay = () => ((playing = true), wake(), yayinla());
+  const onpause = () => ((playing = false), wake(), yayinla());
   const onloadedmetadata = () => {
     if (media && isFinite(media.duration)) duration = media.duration;
     applySpeed();
+    yayinla();
   };
   const onseeked = () => {
     if (media) time = media.currentTime;
+    yayinla();
   };
+  // Oynatıcı kapanınca yayın da biter.
+  $effect(() => () => yayinDurumu(null, 0, false));
+  const dinleyenSayisi = $derived(sosyal.ben ? (birlikte.odalar[sosyal.ben.id]?.dinleyiciler.length ?? 0) : 0);
   const onerror = () => {
     playable = false;
     startDemo();
@@ -875,6 +884,16 @@
     </div>
 
     <div class="right">
+      {#if sosyal.anahtar && paylasilabilir(item)}
+        <button
+          class="pill birlikte"
+          class:lit={birlikte.yayin}
+          title={birlikte.yayin ? "Yayını bitir" : "Arkadaşların bu parçayı seninle aynı anda dinlesin (Sosyal → Birlikte dinle)"}
+          onclick={() => (birlikte.yayin ? yayinBitir() : yayinBaslat())}
+        >
+          <Icon name="headphones" size={15} />{birlikte.yayin ? (dinleyenSayisi ? `${dinleyenSayisi} kişi dinliyor` : "Yayında") : "Arkadaşlarla dinle"}
+        </button>
+      {/if}
       {#if !item.audioOnly && (tracks.length || segments.length)}
         <div class="ccwrap">
           <button class="pill" class:lit={sub !== "off"} title="Altyazı" aria-expanded={ccOpen} onclick={() => (ccOpen = !ccOpen)}>CC</button>
@@ -1067,6 +1086,8 @@
   .vol .range { width: 110px; }
   .vpct { width: 26px; text-align: right; }
   .pill { border: 1px solid var(--line-2); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-weight: 700; }
+  .pill.birlikte { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pill.birlikte.lit { border-color: var(--good); color: var(--good); }
   .pill:hover, .pill.lit { color: var(--gold); border-color: rgba(227, 194, 112, 0.5); }
   .menuwrap { position: relative; }
   .menu { position: absolute; bottom: calc(100% + 10px); right: 0; z-index: 5; width: 230px; padding: 12px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--coal-2); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 10px; }

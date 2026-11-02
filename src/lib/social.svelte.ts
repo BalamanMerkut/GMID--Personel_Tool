@@ -221,6 +221,9 @@ export function tamAdres(u: string | null | undefined): string | null {
   return u.startsWith("/") ? sosyal.sunucu + u : u;
 }
 
+/** Başka modüllerin dinlediği canlı iletiler (birlikte dinleme). */
+export const wsEk = new Set<(v: Record<string, unknown>) => void>();
+
 type MesajDinleyici = (m: Mesaj, kisi: Kisi) => void;
 const mesajDinleyiciler = new Set<MesajDinleyici>();
 export function mesajlariDinle(f: MesajDinleyici): () => void {
@@ -363,6 +366,9 @@ function baglan() {
         notify(yazi, ikon);
         break;
       }
+      case "dinle":
+        for (const f of wsEk) f(v);
+        break;
       case "hata":
         cikis(false);
         break;

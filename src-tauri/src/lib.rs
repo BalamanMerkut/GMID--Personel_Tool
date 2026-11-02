@@ -258,6 +258,7 @@ pub fn run() {
             commands::open_url,
             commands::social_login,
             commands::social_image,
+            commands::social_stream,
             commands::report_create,
             commands::search_all,
             commands::wrapped_get,

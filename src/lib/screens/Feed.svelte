@@ -8,6 +8,7 @@
   import FeedCard from "../components/social/FeedCard.svelte";
   import GeceKart from "../components/social/GeceKart.svelte";
   import GecePlanla from "../components/social/GecePlanla.svelte";
+  import { ayril, birlikte, katil, odaListesi } from "../birlikte.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { arkadasEkle, gonderiPaylas, istek, konuGoster, profilGoster, sosyal, uyelerYukle, type Kisi, type Olay } from "../social.svelte";
   import { nav } from "../player.svelte";
@@ -312,6 +313,28 @@
           <p class="sub small">Şu an kimse oyunda değil.</p>
         {/each}
       </section>
+
+      {#if odaListesi().some((o) => o.sahip.id !== sosyal.ben?.id)}
+        <section class="kutu">
+          <h3>Birlikte dinle</h3>
+          {#each odaListesi().filter((o) => o.sahip.id !== sosyal.ben?.id) as o (o.sahip.id)}
+            <div class="satir">
+              <button class="satir-sol" onclick={() => profilGoster(o.sahip.id)}>
+                <Avatar kisi={o.sahip} boy={36} />
+                <span class="satir-yazi">
+                  <b>{o.sarki.baslik}</b>
+                  <span class="sub small">{o.sahip.ad}{o.dinleyiciler.length ? ` · ${o.dinleyiciler.length} kişi dinliyor` : ""}{o.caliyor ? "" : " · duraklatıldı"}</span>
+                </span>
+              </button>
+              {#if birlikte.dinlenen === o.sahip.id}
+                <button class="btn ghost sm takip" onclick={ayril}>Ayrıl</button>
+              {:else}
+                <button class="btn sm takip" onclick={() => katil(o.sahip.id)}><Icon name="headphones" size={14} />Katıl</button>
+              {/if}
+            </div>
+          {/each}
+        </section>
+      {/if}
 
       {#if yaklasan.length}
         <section class="kutu">

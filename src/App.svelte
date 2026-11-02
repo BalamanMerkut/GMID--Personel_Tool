@@ -26,6 +26,7 @@
   import Feed from "./lib/screens/Feed.svelte";
   import Profile from "./lib/screens/Profile.svelte";
   import FriendsDock from "./lib/components/social/FriendsDock.svelte";
+  import BirlikteCubuk from "./lib/components/social/BirlikteCubuk.svelte";
   import Fun from "./lib/screens/Fun.svelte";
   import Ping from "./lib/screens/Ping.svelte";
   import Install from "./lib/screens/Install.svelte";
@@ -249,6 +250,8 @@
 
   <!-- Steam'deki gibi: arkadaş listesi ve sohbet her ekranda sağ altta. -->
   <FriendsDock />
+  <!-- Birlikte dinleme: kiminle dinlediğin / yayındaysan kaç kişinin dinlediği. -->
+  <BirlikteCubuk />
 
   {#if player.item}
     <!-- Ekran değişse de çalmaya devam eder; küçültülünce altta çalma çubuğu. -->

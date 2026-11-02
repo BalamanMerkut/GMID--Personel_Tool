@@ -6,6 +6,7 @@
 mod api;
 mod ayar;
 mod db;
+mod dinle;
 mod discord;
 mod durum;
 mod gece;
@@ -26,6 +27,8 @@ pub struct Sunucu {
     pub durum: durum::Durum,
     /// Klip yüklemeleri sırayla: kişi başı ve toplam sınır aynı anda gelen yüklemelerle aşılmasın.
     pub klip_kilidi: tokio::sync::Mutex<()>,
+    /// Birlikte dinleme odaları (bellekte).
+    pub dinleme: dinle::Odalar,
 }
 
 impl Sunucu {
@@ -79,6 +82,14 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/akis/{id}", delete(sosyal_api::etkinlik_sil))
         .route("/api/gonderi", post(sosyal_api::gonderi))
         .route("/api/gundem", get(sosyal_api::gundem))
+        .route(
+            "/api/dinle",
+            get(dinle::liste).post(dinle::durum).delete(dinle::kapat),
+        )
+        .route(
+            "/api/dinle/{sahip}/katil",
+            post(dinle::katil).delete(dinle::ayril),
+        )
         .route("/api/gece", post(gece::ac))
         .route("/api/geceler", get(gece::liste))
         .route("/api/gece/{id}", delete(gece::sil))
@@ -151,6 +162,7 @@ async fn main() {
         db: Mutex::new(db),
         durum: durum::Durum::default(),
         klip_kilidi: tokio::sync::Mutex::new(()),
+        dinleme: dinle::Odalar::default(),
     });
     // Süresi dolan oturumlar günde bir temizlenir.
     let s2 = s.clone();
@@ -246,6 +258,7 @@ mod tests {
             db: Mutex::new(db::Db::bellekte()),
             durum: durum::Durum::default(),
             klip_kilidi: tokio::sync::Mutex::new(()),
+            dinleme: dinle::Odalar::default(),
         })
     }
 

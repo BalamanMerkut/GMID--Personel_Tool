@@ -410,6 +410,41 @@ pub async fn social_login(server: String) -> CmdResult<serde_json::Value> {
         .map_err(|e| e.to_string())?
 }
 
+/// Birlikte dinleme: kaynak sayfanın (YouTube vb.) doğrudan ses adresi (yt-dlp ile; birkaç saat geçerli).
+/// Dinleyen kendi bilgisayarında bu adresten çalar; dosya paylaşılmaz.
+#[tauri::command]
+pub async fn social_stream(app: AppHandle, url: String) -> CmdResult<String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Geçersiz bağlantı".into());
+    }
+    let root = tauri::Manager::state::<DataDir>(&app).root().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = crate::downloader::tools::ytdlp(&root);
+        cmd.args([
+            "--no-playlist",
+            "--no-warnings",
+            "-f",
+            "bestaudio[ext=m4a]/bestaudio/best",
+            "-g",
+            "--",
+            &url,
+        ]);
+        let out = cmd
+            .output()
+            .map_err(|_| "yt-dlp bulunamadı; Video İndirici'den araçları kur".to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        text.lines()
+            .map(str::trim)
+            .find(|l| l.starts_with("http"))
+            .map(String::from)
+            .ok_or_else(|| {
+                crate::downloader::ytdlp::friendly_error(&String::from_utf8_lossy(&out.stderr))
+            })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Topluluk: paylaşılacak kapak/afiş resminin baytları (arayüz küçültüp sunucuya yükler). Yalnız resim
 /// dosyaları, en çok 15 MB.
 #[tauri::command]
