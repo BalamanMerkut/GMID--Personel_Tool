@@ -60,7 +60,7 @@ fi
 # Uygulama 90 bazen ilk denemede eksik iner (bilinen Steam sorunu): cstrike gelene kadar birkaç kez.
 for deneme in 1 2 3 4; do
   olarak "$DIZIN/steamcmd/steamcmd.sh" +force_install_dir "$HLDS" +login anonymous \
-    +app_set_config 90 mod cstrike +app_update 90 validate +quit >"$gecici/steam.log" 2>&1 || true
+    +app_set_config 90 mod cstrike +app_update 90 -beta steam_legacy validate +quit >"$gecici/steam.log" 2>&1 || true
   [ -f "$CS/liblist.gam" ] && [ -f "$HLDS/hlds_linux" ] && break
   echo "  deneme $deneme eksik kaldı, yeniden…"
 done
@@ -117,16 +117,12 @@ tar -xzf "$gecici/amxx-base.tgz" -C "$CS" --wildcards --overwrite 'addons/amxmod
 echo "linux addons/amxmodx/dlls/amxmodx_mm_i386.so" >"$CS/addons/metamod/plugins.ini"
 
 # ---------- 6. GMID eklentileri (bu depodan, sunucuda derlenir) ----------
-adim "GMID eklentileri (mod seçici + JailBreak)"
-SCR="$CS/addons/amxmodx/scripting"
+adim "GMID eklentileri: kapalı (JailBreak ve mod seçici kullanılmıyor; haritalar normal oynanır)"
+# ReHLDS yalnız Steam'in eski kolundaki HLDS ile açılır (yukarıda -beta steam_legacy). Discord duyurusu eklentiyle değil,
+# sunucudaki gmid-duyuru zamanlayıcısıyla (15 dakikada bir) yapılır.
 for e in gmid_mod gmid_jail; do
-  curl -fsSL "$DEPO_HAM/eklentiler/$e.sma" -o "$SCR/$e.sma"
   rm -f "$CS/addons/amxmodx/plugins/$e.amxx"
-  ( cd "$SCR" && ./amxxpc "$e.sma" -o"../plugins/$e.amxx" ) >"$gecici/$e.log" 2>&1 || true
-  if [ ! -s "$CS/addons/amxmodx/plugins/$e.amxx" ]; then
-    echo "$e derlenemedi:"; cat "$gecici/$e.log"; exit 1
-  fi
-  grep -q "^$e.amxx" "$CS/addons/amxmodx/configs/plugins.ini" || echo "$e.amxx" >>"$CS/addons/amxmodx/configs/plugins.ini"
+  sed -i "/^$e\.amxx/d" "$CS/addons/amxmodx/configs/plugins.ini" 2>/dev/null || true
 done
 
 # Tam yetkili yönetici (isteğe bağlı).

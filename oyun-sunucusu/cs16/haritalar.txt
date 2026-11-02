@@ -1,15 +1,5 @@
 # GMID CS 1.6 harita sırası (yukarıdan aşağı döner). Dosyası sunucuda yoksa atlanır.
-# Mod harita adından seçilir: jail_* / jb_* → JailBreak, 35hp_* → 35 HP (bunny hop açık), diğerleri → Pro Public.
-
-# JailBreak
-jail_xmf
-jail_ms_shawshank
-jail_alcatraz
-
-# 35 HP (bunny hop açık)
-35hp_2
-35hp_rmx
-
-# Pro Public (bunny hop kapalı)
-fy_iceworld
-fy_iceworld2k
+35hp_2_s_arena
+fy_iceworld16
+awp_india
+de_dust2
