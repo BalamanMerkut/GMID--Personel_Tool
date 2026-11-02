@@ -46,6 +46,8 @@ export interface Oda {
   guncelleme: number;
 }
 
+const BASLANGIC_SESI = 0.1;
+
 export const birlikte = $state({
   /** Görebildiğim odalar (kimlik → oda). */
   odalar: {} as Record<string, Oda>,
@@ -57,7 +59,8 @@ export const birlikte = $state({
   hazirlaniyor: false,
   /** Şarkı ekleniyor: hangi aşamada (düğmede yazar). */
   asama: "",
-  ses: 0.8,
+  /** Odaya girince %10 sesle başlar (yüksek başlamasın); odadayken değiştirilen ses odadan çıkana kadar kalır. */
+  ses: BASLANGIC_SESI,
   /** Yerelde çalan konum ve süre (çubuk için). */
   konum: 0,
   sure: 0,
@@ -148,6 +151,7 @@ export async function odaAc(a: OdaAyar = {}) {
     const r = await istek<{ oda: Oda; simdi: number }>("POST", "/api/oda", a);
     saat(r.simdi);
     odaYaz(r.oda);
+    sesAyarla(BASLANGIC_SESI);
     birlikte.odaId = r.oda.id;
     birlikte.panel = true;
   } catch (e) {
@@ -175,6 +179,7 @@ export async function katil(id: string) {
     saat(r.simdi);
     durdur();
     odaYaz(r.oda);
+    sesAyarla(BASLANGIC_SESI);
     birlikte.odaId = id;
     birlikte.panel = true;
     // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).
