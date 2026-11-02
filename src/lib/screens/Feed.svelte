@@ -4,6 +4,7 @@
   // beğeniler) ve tanıyor olabileceklerin. Bir #etikete ya da gündeme tıklayınca akış o konuya süzülür.
   import { onMount } from "svelte";
   import Icon from "../Icon.svelte";
+  import logo from "../../assets/gmid-logo.webp";
   import Avatar from "../components/social/Avatar.svelte";
   import FeedCard from "../components/social/FeedCard.svelte";
   import GeceKart from "../components/social/GeceKart.svelte";
@@ -47,6 +48,16 @@
   let gonderiliyor = $state(false);
   let planAcik = $state(false);
   let odaGiris = $state("");
+  let odaAlan = $state<HTMLInputElement | null>(null);
+  /** Kutu boşsa ne yazılacağını söyler; doluysa odayı açar (ya da şarkıyı değiştirir). */
+  function odaAc() {
+    if (!odaGiris.trim()) {
+      odaAlan?.focus();
+      notify("Önce kutuya bir şarkı adı (ör. Tarkan Kuzu Kuzu) ya da YouTube bağlantısı yaz", "headphones");
+      return;
+    }
+    void baglantiOdasi(odaGiris).then(() => (odaGiris = ""));
+  }
   const yaklasan = $derived(Object.values(sosyal.geceler).sort((a, b) => a.zaman - b.zaman).slice(0, 4));
   let dosyaSec = $state<HTMLInputElement | null>(null);
   const kalanHarf = $derived(SINIR - [...taslak].length);
@@ -192,6 +203,30 @@
     }
   }
 
+  // ---------- en üste dön / yeni gönderiler ----------
+  let tunel = $state<HTMLElement | null>(null);
+  let yeniVar = $state(false);
+  /** Akışta aşağı inilmiş mi (üst kısım ekranın dışında)? */
+  const asagida = () => !!tunel && tunel.getBoundingClientRect().top < -120;
+  function enUste() {
+    tunel?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function yenileriGoster() {
+    yeniVar = false;
+    void yukle();
+    enUste();
+  }
+  // Başkasından yeni paylaşım: yukarıdaysan hemen görünür; aşağıdaysan okuduğun yer kaymaz, düğme çıkar.
+  let sonYeni = sosyal.yeniGonderi;
+  $effect(() => {
+    if (sosyal.yeniGonderi !== sonYeni) {
+      sonYeni = sosyal.yeniGonderi;
+      void gundemYukle();
+      if (asagida()) yeniVar = true;
+      else void yukle();
+    }
+  });
+
   // Akış değişince (biri paylaştı, beğendi, yanıtladı) ilk sayfa sessizce yenilenir.
   let surum = sosyal.akisSurum;
   $effect(() => {
@@ -228,12 +263,16 @@
   </section>
 {:else}
   <div class="duzen">
-    <main class="zaman-tuneli">
+    <main class="zaman-tuneli" bind:this={tunel}>
       <div class="sekmeler" role="tablist">
+        <button class="logo-ust" title="En üste dön" aria-label="En üste dön" onclick={enUste}><img src={logo} alt="" /></button>
         <button role="tab" aria-selected={!yalnizArkadas} onclick={() => suzgec(false)}><span>Herkes</span></button>
         <button role="tab" aria-selected={yalnizArkadas} onclick={() => suzgec(true)}><span>Arkadaşlarım</span></button>
         <button class="yenile" title="Yenile" aria-label="Yenile" disabled={yukleniyor} onclick={() => yukle()}><Icon name="refresh" size={16} /></button>
       </div>
+      {#if yeniVar}
+        <div class="yeni-yer"><button class="yeni-dugme" onclick={yenileriGoster}><Icon name="arrow" size={14} />Yeni gönderiler</button></div>
+      {/if}
 
       <!-- Malikâneye not: GMID'in kendi kartı (altın çerçeve), hazır başlangıçlar, resim. -->
       <form class="yaz" onsubmit={(e) => (e.preventDefault(), paylas())}>
@@ -317,23 +356,25 @@
 
       <section class="kutu">
           <h3>Birlikte dinle</h3>
-          <form class="oda-ac" onsubmit={(e) => (e.preventDefault(), void baglantiOdasi(odaGiris).then(() => (odaGiris = "")))}>
-            <input bind:value={odaGiris} placeholder="YouTube bağlantısı ya da şarkı adı" aria-label="Şarkı" disabled={birlikte.aciliyor} />
-            <button class="btn sm" disabled={!odaGiris.trim() || birlikte.aciliyor}>
-              {birlikte.aciliyor ? "Aranıyor…" : birlikte.yayin && birlikte.kaynak === "baglanti" ? "Değiştir" : "Oda aç"}
+          <form class="oda-ac" onsubmit={(e) => (e.preventDefault(), odaAc())}>
+            <input bind:this={odaAlan} bind:value={odaGiris} placeholder="Şarkı adı ya da YouTube bağlantısı yaz…" aria-label="Şarkı" disabled={birlikte.aciliyor} />
+            <button class="btn sm oda-dugme" disabled={birlikte.aciliyor}><Icon name="headphones" size={14} />
+              {birlikte.aciliyor ? birlikte.asama || "Açılıyor…" : birlikte.yayin && birlikte.kaynak === "baglanti" ? "Değiştir" : "Oda aç"}
             </button>
           </form>
           <span class="sub small oda-not">İndirmek yok: herkes aynı şarkıyı aynı anda dinler.</span>
-          {#each odaListesi().filter((o) => o.sahip.id !== sosyal.ben?.id) as o (o.sahip.id)}
+          {#each odaListesi() as o (o.sahip.id)}
             <div class="satir">
               <button class="satir-sol" onclick={() => profilGoster(o.sahip.id)}>
                 <Avatar kisi={o.sahip} boy={36} />
                 <span class="satir-yazi">
                   <b>{o.sarki.baslik}</b>
-                  <span class="sub small">{o.sahip.ad}{o.dinleyiciler.length ? ` · ${o.dinleyiciler.length} kişi dinliyor` : ""}{o.caliyor ? "" : " · duraklatıldı"}</span>
+                  <span class="sub small">{o.sahip.id === sosyal.ben?.id ? "Senin odan" : o.sahip.ad}{o.dinleyiciler.length ? ` · ${o.dinleyiciler.length} kişi dinliyor` : ""}{o.caliyor ? "" : " · duraklatıldı"}</span>
                 </span>
               </button>
-              {#if birlikte.dinlenen === o.sahip.id}
+              {#if o.sahip.id === sosyal.ben?.id}
+                <span class="canli-rozet">Yayında</span>
+              {:else if birlikte.dinlenen === o.sahip.id}
                 <button class="btn ghost sm takip" onclick={ayril}>Ayrıl</button>
               {:else}
                 <button class="btn sm takip" onclick={() => katil(o.sahip.id)}><Icon name="headphones" size={14} />Katıl</button>
@@ -392,6 +433,13 @@
   .sekmeler [role="tab"] span { position: relative; height: 100%; display: grid; place-items: center; }
   .sekmeler [role="tab"][aria-selected="true"] { color: var(--text); font-weight: 800; }
   .sekmeler [role="tab"][aria-selected="true"] span::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-radius: 999px; background: var(--gold); }
+  .logo-ust { flex: none; width: 56px; border: 0; background: none; display: grid; place-items: center; cursor: pointer; }
+  .logo-ust img { width: 32px; height: 32px; border-radius: 50%; box-shadow: 0 0 12px rgba(227, 194, 112, 0.25); transition: transform 0.15s; }
+  .logo-ust:hover img { transform: scale(1.08); }
+  .yeni-yer { position: sticky; top: 64px; z-index: 3; height: 0; display: flex; justify-content: center; overflow: visible; }
+  .yeni-dugme { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; border: 0; background: var(--gold); color: #1b1608; font: inherit; font-weight: 800; font-size: 13.5px; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); animation: yeni-gel 0.25s ease-out; }
+  .yeni-dugme :global(svg) { transform: rotate(-90deg); }
+  @keyframes yeni-gel { from { transform: translateY(-8px); opacity: 0; } }
   .yenile { flex: none; width: 52px; border: 0; background: none; color: var(--dim); display: grid; place-items: center; cursor: pointer; }
   .yenile:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
   .yaz { margin: 14px 14px 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; border-radius: 16px; border: 1px solid rgba(227, 194, 112, 0.28); background: linear-gradient(160deg, rgba(227, 194, 112, 0.07), rgba(255, 255, 255, 0.02) 55%); }
@@ -422,7 +470,9 @@
   .sm { padding: 6px 11px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .plan-yer { margin: 0 14px 10px; }
   .acik-plan { border-color: var(--gold-dim); color: var(--gold-glow); }
-  .oda-ac { display: flex; gap: 6px; padding: 0 12px; }
+  .canli-rozet { flex: none; font-size: 11.5px; font-weight: 800; color: var(--good); padding: 3px 9px; border-radius: 999px; background: rgba(80, 200, 120, 0.12); }
+  .oda-ac { display: flex; flex-direction: column; gap: 8px; padding: 0 12px; }
+  .oda-dugme { justify-content: center; }
   .oda-ac input { flex: 1; min-width: 0; background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; color: var(--text); font: inherit; font-size: 13px; outline: none; }
   .oda-ac input:focus { border-color: var(--gold-dim); }
   .oda-not { padding: 6px 16px 10px; }

@@ -141,6 +141,8 @@ export const sosyal = $state({
   bildirim: 0,
   /** Akış her değiştiğinde artar; ekran buna bakıp yeniler. */
   akisSurum: 0,
+  /** Başkasından yeni paylaşım geldikçe artar (Twitter'daki "Yeni gönderiler"). */
+  yeniGonderi: 0,
   paylas: { oyunlar: true, oyunPuan: true, filmPuan: true, simdi: true } as Paylasim,
   /** Arkadaşlar ve istekler. */
   arkadaslar: [] as Kisi[],
@@ -335,7 +337,9 @@ function baglan() {
         break;
       }
       case "akis":
-        sosyal.akisSurum++;
+        // Kimliksiz: yeni paylaşım (Sosyal aşağıdaysa "Yeni gönderiler" düğmesi çıkar); kimlikli: beğeni/yorum.
+        if (v.id == null) sosyal.yeniGonderi++;
+        else sosyal.akisSurum++;
         break;
       case "gece":
         void gecelerYukle();

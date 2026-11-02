@@ -5,7 +5,7 @@
 //     kaynağından çalar (oynatıcıya ve indirmeye gerek yok), duraklat/sar/değiştir çubuktan yapılır.
 //   Dinleyen: odaya katılınca şarkının kaynağından (YouTube vb.) kendi bilgisayarında ses alınır ve sahibin
 //     konumuna eşitlenir (saat farkı sunucu saatiyle düzeltilir; 1,2 sn'den fazla kayınca sarılır).
-import { inTauri } from "./api";
+import { api, inTauri } from "./api";
 import { controls, player } from "./player.svelte";
 import { istek, sosyal, wsEk, type Kisi } from "./social.svelte";
 import { notify } from "./toast.svelte";
@@ -43,6 +43,8 @@ export const birlikte = $state({
   hostSure: 0,
   /** Bağlantı / şarkı adı çözülüyor. */
   aciliyor: false,
+  /** Oda açılırken hangi aşamada (düğmede yazar). */
+  asama: "",
   /** Dinlediğim odanın sahibi. */
   dinlenen: null as string | null,
   /** Ses kaynağı hazırlanıyor (yt-dlp). */
@@ -257,11 +259,34 @@ export async function baglantiOdasi(giris: string) {
   if (!giris.trim() || birlikte.aciliyor) return;
   birlikte.aciliyor = true;
   try {
+    // Sunucu birlikte dinlemeyi biliyor mu (0.12+)?
+    birlikte.asama = "Sunucu…";
+    try {
+      await istek("GET", "/api/dinle");
+    } catch (e) {
+      const m = String(e instanceof Error ? e.message : e);
+      throw new Error(
+        m.includes("404") ? "GMID sunucusu henüz güncellenmemiş. Mola sohbetinde sunucu güncelleme komutunu çalıştır." : m,
+      );
+    }
     const { invoke } = await import("@tauri-apps/api/core");
-    const bilgi = await invoke<{ url: string; title: string; duration: number | null; thumbnail: string | null }>("social_resolve", {
-      query: giris,
-    });
-    const kaynak = await invoke<string>("social_stream", { url: bilgi.url });
+    // yt-dlp yoksa bir kez kendiliğinden kurulur.
+    const ytdlp = async <T,>(f: () => Promise<T>): Promise<T> => {
+      try {
+        return await f();
+      } catch (e) {
+        if (!String(e).includes("yt-dlp bulunamadı")) throw e;
+        birlikte.asama = "Araçlar kuruluyor…";
+        await api.videos.installTools();
+        return await f();
+      }
+    };
+    birlikte.asama = "Şarkı aranıyor…";
+    const bilgi = await ytdlp(() =>
+      invoke<{ url: string; title: string; duration: number | null; thumbnail: string | null }>("social_resolve", { query: giris }),
+    );
+    birlikte.asama = "Ses hazırlanıyor…";
+    const kaynak = await ytdlp(() => invoke<string>("social_stream", { url: bilgi.url }));
     if (birlikte.dinlenen) await ayril();
     // Oynatıcıdan yayın yapılıyorsa bağlantılı odaya geçilir; kendi oynatıcın da duraklar.
     if (player.playing) controls.toggle();
@@ -272,16 +297,26 @@ export async function baglantiOdasi(giris: string) {
     birlikte.hostSure = bilgi.duration ?? 0;
     birlikte.kaynak = "baglanti";
     birlikte.yayin = true;
-    await a.play().catch(() => {});
-    hostBildir();
+    birlikte.asama = "Başlıyor…";
+    try {
+      await a.play();
+    } catch (e) {
+      hostDurdur();
+      birlikte.yayin = false;
+      birlikte.kaynak = null;
+      throw new Error(`ses çalınamadı (${String(e instanceof Error ? e.message : e)})`);
+    }
+    // Oda sunucuda açılsın (hata varsa hemen söylensin).
+    await istek("POST", "/api/dinle", { ...birlikte.simdiki, konum: a.currentTime, caliyor: !a.paused });
     // Yarım dakikada bir konum: geç katılan ya da bağlantısı kopan dinleyen kaymasın.
     clearInterval(nabiz);
     nabiz = setInterval(hostBildir, 30_000);
     notify(`Oda açıldı: ${bilgi.title}`, "headphones");
   } catch (e) {
-    notify(`Açılamadı: ${String(e instanceof Error ? e.message : e)}`, "info");
+    notify(`Oda açılamadı: ${String(e instanceof Error ? e.message : e)}`, "info");
   } finally {
     birlikte.aciliyor = false;
+    birlikte.asama = "";
   }
 }
 
