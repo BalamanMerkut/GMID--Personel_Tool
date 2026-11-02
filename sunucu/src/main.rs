@@ -108,6 +108,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/oda/{id}/sira", post(oda::sira_ekle))
         .route("/api/oda/{id}/sira/{oge}", delete(oda::sira_sil))
         .route("/api/oda/{id}/oynat", post(oda::oynat))
+        .route("/api/oda/{id}/yayin", post(oda::yayin))
         .route("/api/oda/{id}/sonraki", post(oda::sonraki))
         .route("/api/oda/{id}/at/{kisi}", post(oda::at))
         .route("/api/gece", post(gece::ac))

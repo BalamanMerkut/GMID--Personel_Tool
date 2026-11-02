@@ -32,6 +32,9 @@ pub struct Sarki {
     /// Birlikte izleme: görüntüsüyle oynatılır.
     #[serde(default)]
     pub video: bool,
+    /// Eklentiden gelen videolarda videonun bulunduğu sayfa (site oynatmak için ister).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sayfa: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -104,6 +107,8 @@ pub struct Oda {
     pub tekrar: Tekrar,
     /// Karıştır: sıradaki şarkı rastgele seçilir.
     pub karisik: bool,
+    /// Şu an ekranını/sekmesini paylaşan üye (görüntü üyeler arasında doğrudan gider; sunucu yalnız aracı).
+    pub yayinci: Option<String>,
 }
 
 /// [0, n) arası rastgele sayı.
@@ -198,6 +203,9 @@ impl Oda {
 
     /// Kişi ayrılır. Sahipse yönetim en eski üyeye geçer. Oda boşaldıysa `true` (kapanmalı).
     pub fn ayril(&mut self, id: &str) -> bool {
+        if self.yayinci.as_deref() == Some(id) {
+            self.yayinci = None;
+        }
         self.uyeler.retain(|u| u.id != id);
         self.djler.retain(|d| d != id);
         if self.uyeler.is_empty() {
@@ -418,6 +426,7 @@ pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(a): Json<Ayar>)
         guncelleme: simdi(),
         tekrar: Tekrar::Yok,
         karisik: false,
+        yayinci: None,
     };
     s.odalar.kilit().insert(id, oda.clone());
     yay(&s, &oda);
@@ -568,6 +577,7 @@ pub async fn sira_ekle(
         .kapak
         .filter(|k| k.starts_with("https://") && k.len() <= 500);
     sarki.sure = sarki.sure.filter(|x| x.is_finite() && *x > 0.0);
+    sarki.sayfa = sarki.sayfa.filter(|k| url_gecerli(k));
     let oge = s.odalar.yeni_oge(sarki, &ben);
     let ((), oda) = s
         .odalar
@@ -702,6 +712,62 @@ pub async fn sonraki(
     Ok(Json(json!({ "oda": oda, "simdi": simdi() })))
 }
 
+#[derive(Deserialize)]
+pub struct YayinIstek {
+    acik: bool,
+}
+
+/// POST /api/oda/{id}/yayin {acik}: ekran/sekme paylaşımını başlat (sahip/DJ) ya da bitir (paylaşan ya da
+/// sahip). Başlayınca sıradaki video duraklar.
+pub async fn yayin(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(i): Json<YayinIstek>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    let t = simdi();
+    let ((), oda) = s
+        .odalar
+        .degistir(&id, |o| {
+            if i.acik {
+                if !o.yonetir(&ben.id) {
+                    return Err(Hata::Yetki("Ekran paylaşımını sahip ve DJ'ler başlatır"));
+                }
+                if o.caliyor {
+                    o.konum = o.konum_simdi(t);
+                    o.caliyor = false;
+                    o.guncelleme = t;
+                }
+                o.yayinci = Some(ben.id.clone());
+            } else {
+                if o.yayinci.as_deref() != Some(ben.id.as_str()) && o.sahip.id != ben.id {
+                    return Err(Hata::Yetki("Paylaşımı paylaşan kişi ya da sahip bitirir"));
+                }
+                o.yayinci = None;
+            }
+            Ok(())
+        })
+        .map_err(cevir)?;
+    yay(&s, &oda);
+    Ok(Json(json!({ "oda": oda, "simdi": simdi() })))
+}
+
+/// Canlı bağlantıdan gelen ekran paylaşımı kurulum mesajını (teklif/cevap/aday) aynı odadaki kişiye iletir.
+pub fn sinyal(s: &Sunucu, kimden: &str, v: &Value) {
+    let (Some(oda), Some(kime)) = (v["oda"].as_str(), v["kime"].as_str()) else {
+        return;
+    };
+    let Some(o) = s.odalar.al(oda) else { return };
+    if !o.uye_mi(kimden) || !o.uye_mi(kime) || v["veri"].to_string().len() > 64 * 1024 {
+        return;
+    }
+    s.durum.kisiye(
+        kime,
+        &json!({ "tip": "yayin-sinyal", "oda": oda, "kimden": kimden, "veri": v["veri"] }),
+    );
+}
+
 /// POST /api/oda/{id}/at/{kisi}: odadan çıkar (sahip ya da yönetici).
 pub async fn at(
     State(s): State<Arc<Sunucu>>,
@@ -752,6 +818,7 @@ mod tests {
             kapak: None,
             sure: Some(sure),
             video: false,
+            sayfa: None,
         }
     }
 
@@ -773,6 +840,7 @@ mod tests {
             guncelleme: 0,
             tekrar: Tekrar::Yok,
             karisik: false,
+            yayinci: None,
         }
     }
 

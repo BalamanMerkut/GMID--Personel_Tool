@@ -454,8 +454,11 @@ pub async fn social_stream_audio(
     app: AppHandle,
     url: String,
     video: Option<bool>,
+    sayfa: Option<String>,
 ) -> CmdResult<tauri::ipc::Response> {
     let video = video.unwrap_or(false);
+    // Eklentiden gelen videolarda sitenin istediği sayfa adresi (Referer).
+    let sayfa = sayfa.filter(|s| s.starts_with("https://") || s.starts_with("http://"));
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("Geçersiz bağlantı".into());
     }
@@ -481,11 +484,14 @@ pub async fn social_stream_audio(
                 let sablon = dir.join(format!("{ad}.%(ext)s"));
                 let mut cmd = crate::downloader::tools::ytdlp(&root);
                 cmd.args(["--no-playlist", "--no-warnings", "--no-part"]);
+                if let Some(s) = &sayfa {
+                    cmd.args(["--referer", s]);
+                }
                 if video {
                     // En çok 720p, tek MP4 (ses + görüntü); uygulamanın oynatıcısı açar.
                     cmd.args([
                         "--max-filesize",
-                        "600M",
+                        "2500M",
                         "-f",
                         "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4][height<=720]/b[height<=720]/b",
                         "--merge-output-format",

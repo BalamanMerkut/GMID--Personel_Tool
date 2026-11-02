@@ -128,6 +128,17 @@ function optionsView(p, jobs) {
       el("span", {}, el("b", {}, o.label), o.recommended ? el("span", { class: "tag" }, "ÖNERİLEN") : null,
         o.detail ? el("small", {}, " · " + o.detail) : null),
       el("small", {}, size(o.size))))));
+  // Birlikte izle: bu videoyu GMID'de içinde olduğun odaya gönder (oda yoksa izleme odası açılır).
+  parts.push(el("button", { class: "opt rec", onclick: async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      await send({ type: "room", url: p.url, context: p.context });
+      b.replaceChildren(el("b", {}, "Odaya gönderildi ✓"));
+    } catch (err) {
+      b.replaceChildren(el("span", { class: "err" }, explain(err)));
+    }
+  } }, el("span", {}, el("b", {}, "GMID odasında birlikte izle")), el("small", {}, "Birlikte izle")));
   parts.push(jobs);
   return parts;
 }

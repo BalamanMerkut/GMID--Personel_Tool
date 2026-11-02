@@ -57,7 +57,9 @@ async fn oturum(mut sock: WebSocket, s: Arc<Sunucu>) {
                 gelen = sock.recv() => match gelen {
                     Some(Ok(Message::Text(t))) => {
                         if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                            if v["tip"] == "durum" {
+                            if v["tip"] == "yayin-sinyal" {
+                                crate::oda::sinyal(&s, &kisi.id, &v);
+                            } else if v["tip"] == "durum" {
                                 let oyun = oyun_adi(v["oyun"].as_str());
                                 if s.durum.oyun(&kisi.id, oyun.clone()) {
                                     // Oyuna girdi: akışa "X oynuyor" (aynı oyun 12 saatte bir).

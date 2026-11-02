@@ -313,6 +313,22 @@ fn handle(app: &AppHandle, mut req: Request) {
                 json!({ "downloads": recent, "live": app.state::<Downloader>().live() }),
             )
         }
+        (Method::Post, "/v1/room") => {
+            // Birlikte izle: yakalanan videoyu uygulamaya ilet; uygulama içinde olduğun odaya ekler.
+            let Ok(b) = serde_json::from_str::<ProbeBody>(&body) else {
+                return reply(req, 400, json!({ "error": "Eksik bilgi" }));
+            };
+            if !(b.url.starts_with("https://") || b.url.starts_with("http://")) {
+                return reply(req, 400, json!({ "error": "Bu video paylaşılamıyor" }));
+            }
+            let _ = tauri::Emitter::emit(
+                app,
+                "oda-ekle",
+                json!({ "url": b.url, "baslik": b.context.title, "sayfa": b.context.referer }),
+            );
+            crate::window::show_main_at(app, "feed".into());
+            reply(req, 200, json!({ "ok": true }))
+        }
         (Method::Post, "/v1/open") => {
             crate::window::show_main_at(app, "videos".into());
             reply(req, 200, json!({ "ok": true }))

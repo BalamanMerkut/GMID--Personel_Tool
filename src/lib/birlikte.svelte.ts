@@ -17,6 +17,8 @@ export interface Sarki {
   sure: number | null;
   /** Birlikte izleme: görüntüsüyle. */
   video: boolean;
+  /** Eklentiden gelen videoda videonun bulunduğu sayfa (site ister). */
+  sayfa?: string | null;
 }
 
 export interface Oge {
@@ -164,6 +166,33 @@ wsEk.add((v) => {
   odaYaz(o);
   if (birlikte.odaId === o.id) void eslestir();
 });
+
+// Eklentiden "GMID odasında birlikte izle": içinde olduğun odaya eklenir; oda yoksa izleme odası açılır.
+if (inTauri) {
+  void import("@tauri-apps/api/event").then(({ listen }) =>
+    listen<{ url: string; baslik: string | null; sayfa: string | null }>("oda-ekle", async (e) => {
+      if (!sosyal.anahtar) return notify("Önce Topluluk'tan Discord ile giriş yap", "info");
+      if (!birlikte.odaId) await odaAc({ tur: "video" });
+      const id = birlikte.odaId;
+      if (!id) return;
+      const o = benimOdam();
+      try {
+        await sirayaYaz(id, {
+          baslik: e.payload.baslik?.trim() || "Tarayıcıdan video",
+          url: e.payload.url,
+          kapak: null,
+          sure: null,
+          video: !o || odaTuru(o) === "video",
+          sayfa: e.payload.sayfa,
+        });
+        notify("Video odaya eklendi", "film");
+        odayiGoster();
+      } catch (err) {
+        notify(hataYaz(err), "info");
+      }
+    }),
+  );
+}
 
 // ---------------- oda ----------------
 
@@ -517,7 +546,7 @@ async function eslestir() {
     birlikte.hazirlaniyor = true;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const bayt = await aracla(() => invoke<ArrayBuffer>("social_stream_audio", { url: simdiki.sarki.url, video: simdiki.sarki.video }));
+      const bayt = await aracla(() => invoke<ArrayBuffer>("social_stream_audio", { url: simdiki.sarki.url, video: simdiki.sarki.video, sayfa: simdiki.sarki.sayfa ?? null }));
       // Hazırlanırken şarkı değiştiyse ya da odadan çıkıldıysa bırak.
       if (benimOdam()?.simdiki?.id !== simdiki.id) return;
       const yeni = URL.createObjectURL(new Blob([bayt], { type: tur(new Uint8Array(bayt.slice(0, 12)), simdiki.sarki.video) }));
