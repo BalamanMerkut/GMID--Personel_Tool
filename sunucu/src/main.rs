@@ -578,6 +578,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn izleme_odasi_goruntulu() {
+        let s = sunucu();
+        let a = s
+            .db()
+            .giris(&db::Kullanici {
+                id: "1".into(),
+                ad: "A".into(),
+                avatar: None,
+            })
+            .unwrap();
+        let istek = |yol: &str, govde: &str| {
+            Request::builder()
+                .method("POST")
+                .uri(yol)
+                .header("authorization", format!("Bearer {a}"))
+                .header("content-type", "application/json")
+                .body(Body::from(govde.to_string()))
+                .unwrap()
+        };
+        let (_, v) = iste(&s, istek("/api/oda", r#"{"tur":"video"}"#)).await;
+        assert_eq!(v["oda"]["tur"], "video");
+        assert_eq!(v["oda"]["ad"], "A izleme odası");
+        let id = v["oda"]["id"].as_str().unwrap().to_string();
+        let (_, v) = iste(
+            &s,
+            istek(
+                &format!("/api/oda/{id}/sira"),
+                r#"{"baslik":"Film","url":"https://youtu.be/f","video":false}"#,
+            ),
+        )
+        .await;
+        // İzleme odasında her şey görüntülü çalar.
+        assert_eq!(v["oda"]["simdiki"]["sarki"]["video"], true);
+    }
+
+    #[tokio::test]
     async fn oda_ac_katil_ekle_yonet() {
         let s = sunucu();
         let kisi = |id: &str| db::Kullanici {

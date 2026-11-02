@@ -5,7 +5,7 @@
 // Ses (ya da 720p görüntü) GMID'in kendi aracıyla (yt-dlp) geçici klasöre alınır ve oradan çalınır: kütüphaneye
 // eklenmez, doğrudan YouTube adresini çalmaktaki "desteklenen kaynak yok" hatası olmaz.
 import { api, inTauri } from "./api";
-import { controls, player } from "./player.svelte";
+import { controls, nav, player } from "./player.svelte";
 import { istek, sosyal, wsEk, type Kisi } from "./social.svelte";
 import { notify } from "./toast.svelte";
 import type { Download } from "./types";
@@ -29,9 +29,13 @@ export type Gizlilik = "herkes" | "arkadaslar";
 export type Yetki = "sahip" | "dj" | "herkes";
 
 export type Tekrar = "yok" | "sarki" | "liste";
+/** Müzik odası (yalnız ses) ya da izleme odası (görüntülü). */
+export type OdaTuru = "muzik" | "video";
 
 export interface Oda {
   id: string;
+  /** Eski sunucuda yok (müzik sayılır). */
+  tur?: OdaTuru;
   ad: string;
   sahip: Kisi;
   gizlilik: Gizlilik;
@@ -60,6 +64,10 @@ export const birlikte = $state({
   odaId: null as string | null,
   /** Oda paneli açık. */
   panel: false,
+  /** Sosyal'de "Birlikte izle" sekmesi seçili. */
+  izle: false,
+  /** İzleme salonu ekranda (medya öğesi orada; yüzen panel ve çubuk gizlenir). */
+  salonAcik: false,
   /** Şarkı hazırlanıyor (yt-dlp). */
   hazirlaniyor: false,
   /** Şarkı ekleniyor: hangi aşamada (düğmede yazar). */
@@ -88,8 +96,26 @@ export const yonetir = (o: Oda, id = ben()) => o.sahip.id === id || o.djler.incl
 export const ekleyebilir = (o: Oda, id = ben()) =>
   o.yetki === "sahip" ? o.sahip.id === id : o.yetki === "dj" ? yonetir(o, id) : o.uyeler.some((u) => u.id === id);
 
-export function odaListesi(): Oda[] {
-  return Object.values(birlikte.odalar).sort((a, b) => b.uyeler.length - a.uyeler.length);
+export const odaTuru = (o: Oda): OdaTuru => o.tur ?? "muzik";
+
+export function odaListesi(tur?: OdaTuru): Oda[] {
+  return Object.values(birlikte.odalar)
+    .filter((o) => !tur || odaTuru(o) === tur)
+    .sort((a, b) => b.uyeler.length - a.uyeler.length);
+}
+
+/** Sosyal → Birlikte izle sekmesini açar (izleme odası orada büyük oynar). */
+export function izleAc() {
+  birlikte.izle = true;
+  birlikte.panel = false;
+  nav.go("feed");
+}
+
+/** Odanın penceresini aç: izleme odası büyük salonda, müzik odası yüzen panelde. */
+export function odayiGoster() {
+  const o = benimOdam();
+  if (o && odaTuru(o) === "video") izleAc();
+  else birlikte.panel = true;
 }
 
 function saat(simdi: unknown) {
@@ -142,6 +168,7 @@ wsEk.add((v) => {
 // ---------------- oda ----------------
 
 export interface OdaAyar {
+  tur?: OdaTuru;
   ad?: string;
   gizlilik?: Gizlilik;
   /** 0: sınırsız. */
@@ -158,7 +185,7 @@ export async function odaAc(a: OdaAyar = {}) {
     odaYaz(r.oda);
     sesAyarla(BASLANGIC_SESI);
     birlikte.odaId = r.oda.id;
-    birlikte.panel = true;
+    odayiGoster();
   } catch (e) {
     const m = hataYaz(e);
     notify(m.includes("404") ? "GMID sunucusu henüz güncellenmemiş (Mola sohbetinde sunucu güncellemesi)" : m, "info");
@@ -176,7 +203,7 @@ export async function ayarla(d: OdaAyar & { dj?: { kisi: string; ver: boolean };
 export async function katil(id: string) {
   if (!inTauri) return notify("Dinleme odaları yalnız GMID Tool'da çalışır", "info");
   if (birlikte.odaId === id) {
-    birlikte.panel = true;
+    odayiGoster();
     return;
   }
   try {
@@ -186,7 +213,7 @@ export async function katil(id: string) {
     odaYaz(r.oda);
     sesAyarla(BASLANGIC_SESI);
     birlikte.odaId = id;
-    birlikte.panel = true;
+    odayiGoster();
     // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).
     if (player.playing) controls.toggle();
     await eslestir();
@@ -256,6 +283,9 @@ export async function ekle(giris: string, video = false) {
   if (!birlikte.odaId) await odaAc();
   const id = birlikte.odaId;
   if (!id) return;
+  // Sunucu da odanın türüne göre düzeltir; eski sunucu için burada da.
+  const o = benimOdam();
+  if (o?.tur) video = o.tur === "video";
   try {
     if (listeMi(giris)) {
       birlikte.asama = "Liste açılıyor…";

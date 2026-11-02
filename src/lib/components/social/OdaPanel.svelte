@@ -37,7 +37,7 @@
   const ekler = $derived(!!oda && ekleyebilir(oda, benId));
 
   let giris = $state("");
-  let video = $state(false);
+  const video = false;
   let ayarAcik = $state(false);
   /** Geniş panel (videoyu büyük izlemek için). */
   let genis = $state(false);
@@ -107,7 +107,7 @@
 
 <svelte:window onkeydown={(e) => tam && e.key === "Escape" && tamEkran(false)} />
 
-{#if oda && birlikte.panel}
+{#if oda && birlikte.panel && !birlikte.salonAcik}
   <section class="panel-oda" class:genis class:tam aria-label="Dinleme odası">
     <header>
       <span class="baslik">
@@ -180,8 +180,7 @@
 
     {#if ekler}
       <form class="ekle" onsubmit={gonder}>
-        <input bind:value={giris} placeholder="Şarkı adı, YouTube bağlantısı ya da listesi" disabled={!!birlikte.asama} />
-        <label class="vid" title="Görüntüsüyle birlikte izle"><input type="checkbox" bind:checked={video} />Video</label>
+        <input bind:value={giris} placeholder={oda.tur === "video" ? "YouTube bağlantısı, video adı ya da listesi" : "Şarkı adı, YouTube bağlantısı ya da listesi"} disabled={!!birlikte.asama} />
         <button class="btn sm" disabled={!!birlikte.asama || !giris.trim()}>{birlikte.asama || "Ekle"}</button>
       </form>
     {/if}
@@ -283,7 +282,6 @@
   .ses { width: 110px; accent-color: var(--gold); }
   .ekle { display: flex; gap: 6px; align-items: center; }
   .ekle input:not([type="checkbox"]) { flex: 1; min-width: 0; }
-  .vid { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
   .liste { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px; }
   .ara-baslik { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-dim); margin-top: 6px; }
   .satir { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }

@@ -62,6 +62,15 @@ pub enum Yetki {
     Herkes,
 }
 
+/// Oda türü: müzik (yalnız ses) ya da izleme (görüntülü, birlikte izle).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum OdaTuru {
+    #[default]
+    Muzik,
+    Video,
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Tekrar {
@@ -77,6 +86,7 @@ pub enum Tekrar {
 pub struct Oda {
     pub id: String,
     pub ad: String,
+    pub tur: OdaTuru,
     pub sahip: Kullanici,
     pub gizlilik: Gizlilik,
     /// Kişi sınırı (sahip dahil).
@@ -348,6 +358,8 @@ pub async fn liste(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
 
 #[derive(Deserialize)]
 pub struct Ayar {
+    #[serde(default)]
+    tur: OdaTuru,
     ad: Option<String>,
     gizlilik: Option<Gizlilik>,
     /// 0: sınırsız.
@@ -380,7 +392,19 @@ pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(a): Json<Ayar>)
     let id: String = b.iter().map(|x| format!("{x:02x}")).collect();
     let oda = Oda {
         id: id.clone(),
-        ad: ad_temizle(a.ad, &format!("{} odası", ben.ad)),
+        tur: a.tur,
+        ad: ad_temizle(
+            a.ad,
+            &format!(
+                "{} {}",
+                ben.ad,
+                if a.tur == OdaTuru::Video {
+                    "izleme odası"
+                } else {
+                    "odası"
+                }
+            ),
+        ),
         sahip: ben.clone(),
         gizlilik: a.gizlilik.unwrap_or_default(),
         sinir: sinir_temizle(a.sinir),
@@ -551,6 +575,9 @@ pub async fn sira_ekle(
             if !o.ekleyebilir(&ben.id) {
                 return Err(Hata::Yetki("Bu odada şarkı ekleme yetkin yok"));
             }
+            // Müzik odasında yalnız ses, izleme odasında görüntüyle.
+            let mut oge = oge;
+            oge.sarki.video = o.tur == OdaTuru::Video;
             if !o.ekle(oge, simdi()) {
                 return Err(Hata::Gecersiz("Sıra dolu (en çok 50 şarkı)"));
             }
@@ -731,6 +758,7 @@ mod tests {
     fn oda() -> Oda {
         Oda {
             id: "o".into(),
+            tur: OdaTuru::Muzik,
             ad: "Akşam".into(),
             sahip: k("1"),
             gizlilik: Gizlilik::Herkes,

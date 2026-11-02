@@ -2,7 +2,7 @@
   // Dinleme odası çubuğu (her ekranda, alt ortada): bir odadaysan ve oda paneli kapalıysa odanın adı, çalan şarkı,
   // (sahip/DJ isen) oynat/duraklat, ses, "Odayı aç" ve "Ayrıl".
   import Icon from "../../Icon.svelte";
-  import { ayril, birlikte, odalariYukle, oynatDuraklat, sesAyarla, yonetir } from "../../birlikte.svelte";
+  import { ayril, birlikte, odalariYukle, odayiGoster, oynatDuraklat, sesAyarla, yonetir } from "../../birlikte.svelte";
   import { sosyal } from "../../social.svelte";
 
   const oda = $derived(birlikte.odaId ? (birlikte.odalar[birlikte.odaId] ?? null) : null);
@@ -13,14 +13,14 @@
   });
 </script>
 
-{#if oda && !birlikte.panel}
+{#if oda && !birlikte.panel && !birlikte.salonAcik}
   <div class="cubuk" role="status">
     {#if yonetir(oda) && oda.simdiki}
       <button class="oynat" title={oda.caliyor ? "Duraklat" : "Oynat"} onclick={oynatDuraklat}><Icon name={oda.caliyor ? "pause" : "play"} size={15} /></button>
     {:else}
       <span class="simge"><Icon name="headphones" size={16} /></span>
     {/if}
-    <button class="yazi" title="Odayı aç" onclick={() => (birlikte.panel = true)}>
+    <button class="yazi" title="Odayı aç" onclick={odayiGoster}>
       <span class="ust">{oda.ad} · {oda.uyeler.length} kişi</span>
       <b title={oda.simdiki?.sarki.baslik}>
         {birlikte.hazirlaniyor ? "Hazırlanıyor…" : (oda.simdiki?.sarki.baslik ?? "Sıra boş, bir şarkı ekleyin")}
@@ -28,7 +28,7 @@
     </button>
     {#if oda.simdiki && !oda.caliyor && !birlikte.hazirlaniyor}<span class="durak">Duraklatıldı</span>{/if}
     <input class="ses" type="range" min="0" max="1" step="0.05" value={birlikte.ses} oninput={(e) => sesAyarla(+e.currentTarget.value)} aria-label="Ses" />
-    <button class="btn ghost sm" onclick={() => (birlikte.panel = true)}><Icon name="expand" size={14} />Oda</button>
+    <button class="btn ghost sm" onclick={odayiGoster}><Icon name="expand" size={14} />Oda</button>
     <button class="btn ghost sm" onclick={ayril}><Icon name="x" size={14} />Ayrıl</button>
   </div>
 {/if}
