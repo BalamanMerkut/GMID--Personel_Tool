@@ -292,7 +292,13 @@ export async function istek<T>(yontem: string, yol: string, govde?: unknown): Pr
     cikis(false);
     throw new Error("Oturum sona erdi, yeniden giriş yap");
   }
-  if (!r.ok) throw new Error((v as { hata?: string }).hata ?? `Sunucu ${r.status} döndü`);
+  if (!r.ok) {
+    const h = (v as { hata?: string }).hata;
+    // Açıklamasız 404/405: sunucu bu özelliği tanımıyor (eski sürüm).
+    if (!h && (r.status === 404 || r.status === 405))
+      throw new Error("Bu özellik için GMID sunucusunun güncellenmesi gerekiyor (yöneticiye haber ver)");
+    throw new Error(h ?? `Sunucu ${r.status} döndü`);
+  }
   return v as T;
 }
 
