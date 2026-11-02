@@ -140,7 +140,7 @@
 
     {#if ekler}
       <form class="ekle" onsubmit={gonder}>
-        <input bind:value={giris} placeholder="Şarkı adı ya da YouTube bağlantısı" disabled={!!birlikte.asama} />
+        <input bind:value={giris} placeholder="Şarkı adı, YouTube bağlantısı ya da listesi" disabled={!!birlikte.asama} />
         <label class="vid" title="Görüntüsüyle birlikte izle"><input type="checkbox" bind:checked={video} />Video</label>
         <button class="btn sm" disabled={!!birlikte.asama || !giris.trim()}>{birlikte.asama || "Ekle"}</button>
       </form>

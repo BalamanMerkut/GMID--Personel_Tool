@@ -13,6 +13,8 @@
   import { loadStats, stats, toggleFav } from "../library.svelte";
   import { controls, play, player, playQuiet } from "../player.svelte";
   import { getJson, setJson } from "../settings.svelte";
+  import { birlikte, ekleListe } from "../birlikte.svelte";
+  import { sosyal } from "../social.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
   import type { Clip, Download, UserPlaylist } from "../types";
@@ -400,6 +402,11 @@
           <div class="btitle">
             <b>{viewName}</b>
             <span class="sub small tnum">{shown.length} şarkı</span>
+            {#if sosyal.anahtar && inTauri && shown.length}
+              <button class="btn ghost sm" disabled={!!birlikte.asama} title="Bu listedeki şarkıları dinleme odasının sırasına ekle (oda yoksa açılır)" onclick={() => ekleListe(shown, viewName)}>
+                <Icon name="headphones" size={15} />{birlikte.asama || (birlikte.odaId ? "Odaya ekle" : "Odada çal")}
+              </button>
+            {/if}
             {#if currentList}
               <button class="btn ghost sm" onclick={() => (editing = currentList)}><Icon name="edit" size={15} />Düzenle</button>
               <button class="btn ghost sm" class:danger={armedList} onclick={deleteList}><Icon name="trash" size={15} />{armedList ? "Emin misin?" : "Sil"}</button>

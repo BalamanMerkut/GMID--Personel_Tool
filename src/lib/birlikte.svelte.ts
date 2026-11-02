@@ -223,14 +223,31 @@ async function aracla<T>(f: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Şarkı adı ya da bağlantı → sıraya. `video`: birlikte izleme. Oda yoksa önce oda açılır. */
+/** YouTube / SoundCloud çalma listesi bağlantısı mı? */
+const listeMi = (g: string) => /^https?:\/\//.test(g) && /[?&]list=|\/playlist\b|\/sets\//.test(g);
+
+/** Şarkı adı ya da bağlantı → sıraya. Çalma listesi bağlantısıysa listedeki her şey sıraya girer.
+ *  `video`: birlikte izleme. Oda yoksa önce oda açılır. */
 export async function ekle(giris: string, video = false) {
-  if (!giris.trim() || birlikte.asama) return;
+  giris = giris.trim();
+  if (!giris || birlikte.asama) return;
   if (!birlikte.odaId) await odaAc();
   const id = birlikte.odaId;
   if (!id) return;
-  birlikte.asama = "Aranıyor…";
   try {
+    if (listeMi(giris)) {
+      birlikte.asama = "Liste açılıyor…";
+      const p = await aracla(() => api.videos.probe(giris, true));
+      if (p.kind === "playlist") {
+        await topluEkle(
+          id,
+          p.entries.map((e) => ({ baslik: e.title, url: e.url, kapak: e.thumbnail?.startsWith("https://") ? e.thumbnail : null, sure: e.duration, video })),
+          p.title,
+        );
+        return;
+      }
+    }
+    birlikte.asama = "Aranıyor…";
     const { invoke } = await import("@tauri-apps/api/core");
     const b = await aracla(() =>
       invoke<{ url: string; title: string; duration: number | null; thumbnail: string | null }>("social_resolve", { query: giris }),
@@ -244,20 +261,64 @@ export async function ekle(giris: string, video = false) {
   }
 }
 
+const indirilenSarki = (item: Download): Sarki => ({
+  baslik: item.title,
+  url: item.url,
+  kapak: item.thumbnail?.startsWith("https://") ? item.thumbnail : null,
+  sure: item.duration,
+  video: !item.audioOnly,
+});
+
 /** Medya'daki indirilmiş parçayı odaya ekler (oda yoksa açar). */
 export async function ekleIndirilen(item: Download) {
   if (!/^https?:\/\//.test(item.url)) return notify("Bu parçanın internet kaynağı yok", "info");
   if (!birlikte.odaId) await odaAc();
   const id = birlikte.odaId;
   if (!id) return;
-  await sirayaYaz(id, {
-    baslik: item.title,
-    url: item.url,
-    kapak: item.thumbnail?.startsWith("https://") ? item.thumbnail : null,
-    sure: item.duration,
-    video: !item.audioOnly,
-  }).catch((e) => notify(hataYaz(e), "info"));
-  notify(`Odaya eklendi: ${item.title}`, "headphones");
+  try {
+    await sirayaYaz(id, indirilenSarki(item));
+    notify(`Odaya eklendi: ${item.title}`, "headphones");
+  } catch (e) {
+    notify(hataYaz(e), "info");
+  }
+}
+
+/** Medya'daki bir listenin tamamını (internet kaynağı olanları) odanın sırasına ekler. */
+export async function ekleListe(items: Download[], ad: string) {
+  const uygun = items.filter((d) => /^https?:\/\//.test(d.url));
+  if (!uygun.length) return notify("Bu listedeki parçaların internet kaynağı yok", "info");
+  if (birlikte.asama) return;
+  if (!birlikte.odaId) await odaAc();
+  const id = birlikte.odaId;
+  if (!id) return;
+  try {
+    await topluEkle(id, uygun.map(indirilenSarki), ad);
+  } finally {
+    birlikte.asama = "";
+  }
+}
+
+/** Sıradaki yer kadarını sırayla ekler; sıra dolunca durur. */
+async function topluEkle(id: string, sarkilar: Sarki[], ad: string) {
+  const bos = Math.max(0, 50 - (benimOdam()?.sira.length ?? 0) + (benimOdam()?.simdiki ? 0 : 1));
+  const eklenecek = sarkilar.filter((s) => s.url).slice(0, bos);
+  if (!eklenecek.length) return notify("Sıra dolu (en çok 50 şarkı)", "info");
+  let n = 0;
+  for (const s of eklenecek) {
+    birlikte.asama = `Ekleniyor ${n + 1}/${eklenecek.length}…`;
+    try {
+      const r = await istek<{ oda: Oda; simdi: number }>("POST", `/api/oda/${id}/sira`, s);
+      saat(r.simdi);
+      odaYaz(r.oda);
+      n++;
+    } catch (e) {
+      if (!n) throw e;
+      break;
+    }
+  }
+  void eslestir();
+  const kalan = sarkilar.length - n;
+  notify(`"${ad}" listesinden ${n} parça odaya eklendi${kalan > 0 ? ` (${kalan} tanesi sığmadı; sıra en çok 50)` : ""}`, "headphones");
 }
 
 async function sirayaYaz(id: string, s: Sarki) {
