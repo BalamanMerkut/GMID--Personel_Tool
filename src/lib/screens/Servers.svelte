@@ -301,17 +301,21 @@
 
 <div class="srv">
   <div class="top">
-    <div class="summary">
-      <p class="sub">
-        {#if counts.online}
-          Şu an <b class="tnum">{playing}</b> kişi oyunda · <b class="tnum">{counts.online}/{counts.all}</b> sunucu açık
-        {:else if busy}
-          Sunucular kontrol ediliyor…
-        {:else}
-          GMID topluluğunun ve senin eklediğin sunucular.
-        {/if}
-      </p>
-      {#if lastCheck}<span class="sub small">Son kontrol {ago(lastCheck, now)} · her 30 saniyede yenilenir</span>{/if}
+    <div class="ozet">
+      <div class="kutu-ozet">
+        <span class="buyuk tnum">{playing}</span>
+        <span class="sub small">kişi şu an oyunda</span>
+      </div>
+      <div class="kutu-ozet">
+        <span class="buyuk tnum">{counts.online}<small>/{counts.all}</small></span>
+        <span class="sub small">sunucu açık</span>
+      </div>
+      <div class="kutu-ozet yazi">
+        <span class="durum-satir">
+          <span class="nokta" class:canli={!busy}></span>{busy ? "Kontrol ediliyor…" : "Canlı"}
+        </span>
+        <span class="sub small">{lastCheck ? `Son kontrol ${ago(lastCheck, now)} · 30 sn'de bir` : "GMID topluluğunun ve senin eklediğin sunucular"}</span>
+      </div>
     </div>
     <div class="row">
       <button class="btn ghost" onclick={refresh} disabled={busy || cooldown}>
@@ -338,13 +342,19 @@
       {@const st = statuses[s.id]}
       {@const info = st?.state === "online" ? st.info : null}
       {@const state = st?.state ?? "checking"}
-      <article class="tile" class:off={state === "offline"}>
+      {@const logo = s.logo ? api.fileSrc(s.logo) : (info?.favicon ?? null)}
+      <article class="tile" class:off={state === "offline"} style:--c={COLORS[s.game] ?? "#7a8088"}>
+        <div class="banner">
+          {#if logo}<img class="bg" src={logo} alt="" />{/if}
+          <span class="pill {state}" class:stale={st?.stale} title={st?.stale ? "Son kontrolde yanıt gelmedi; bir önceki bilgi gösteriliyor" : ""}>
+            {state === "online" ? "Açık" : state === "offline" ? "Kapalı" : state === "unknown" ? "Bilinmiyor" : "Bakılıyor"}
+          </span>
+          {#if info?.pingMs}<span class="ping-rozet {pingClass(info.pingMs)} tnum" title="Gecikme">{info.pingMs} ms</span>{/if}
+        </div>
         <header>
-          <div class="logo" style:--c={COLORS[s.game] ?? "#7a8088"}>
-            {#if s.logo}
-              <img src={api.fileSrc(s.logo)} alt="" />
-            {:else if info?.favicon}
-              <img src={info.favicon} alt="" class="pixel" />
+          <div class="logo">
+            {#if logo}
+              <img src={logo} alt="" class:pixel={!s.logo} />
             {:else}
               <span>{g?.short ?? "?"}</span>
             {/if}
@@ -353,26 +363,20 @@
             <b title={s.name}>{s.name}</b>
             <span class="sub small">{g?.name ?? s.game}{#if s.remote}<span class="gmid">GMID</span>{/if}</span>
           </div>
-          <span class="pill {state}" class:stale={st?.stale} title={st?.stale ? "Son kontrolde yanıt gelmedi; bir önceki bilgi gösteriliyor" : ""}>
-            {state === "online" ? "Açık" : state === "offline" ? "Kapalı" : state === "unknown" ? "Bilinmiyor" : "Bakılıyor"}
-          </span>
         </header>
-
-        {#if s.description}<p class="desc">{s.description}</p>{/if}
 
         <div class="stats">
           {#if info}
             <div class="players">
-              <Icon name="users" size={17} />
-              <span class="tnum"><b>{info.players}</b> / {info.maxPlayers || "?"}</span>
-              <div class="bar"><i style:width="{info.maxPlayers ? Math.min(100, (info.players / info.maxPlayers) * 100) : 0}%"></i></div>
+              <span class="sayi tnum"><b>{info.players}</b><span>/{info.maxPlayers || "?"}</span></span>
+              <span class="oyuncu">{info.players ? "oyuncu oyunda" : "oyuncu · ilk sen gir!"}</span>
               {#if info.password}<span class="lock" title="Şifreli sunucu"><Icon name="lock" size={15} /></span>{/if}
             </div>
+            <div class="bar"><i style:width="{info.maxPlayers ? Math.max(info.players ? 4 : 0, Math.min(100, (info.players / info.maxPlayers) * 100)) : 0}%"></i></div>
             <div class="meta">
-              {#if info.map}<span>{prettyMap(info.map)}</span>{/if}
-              {#if info.mode && !sameAsGame(info.mode, g)}<span>{modeLabel(info.mode, s.game)}</span>{/if}
-              {#if info.version}<span>{info.version}</span>{/if}
-              {#if info.pingMs}<span class="ping {pingClass(info.pingMs)} tnum">{info.pingMs} ms</span>{/if}
+              {#if info.map}<span class="chip" title="Harita"><Icon name="flag" size={13} />{prettyMap(info.map)}</span>{/if}
+              {#if info.mode && !sameAsGame(info.mode, g)}<span class="chip">{modeLabel(info.mode, s.game)}</span>{/if}
+              {#if info.version}<span class="chip" title="Sürüm">{info.version}</span>{/if}
             </div>
           {:else if state === "offline"}
             <span class="sub small">{st?.error ?? "Yanıt vermedi"} · sunucu kapalı olabilir</span>
@@ -383,32 +387,38 @@
           {/if}
         </div>
 
-        <div class="addr">
-          <code>{s.host}:{s.port}</code>
-          <button class="mini" title="Adresi kopyala" onclick={() => copy(`${s.host}:${s.port}`)}><Icon name="copy" size={16} /></button>
-          {#if !s.remote}
-            <button class="mini" title="Düzenle" onclick={() => openEdit(s)}><Icon name="edit" size={16} /></button>
-            <button class="mini" class:armed={armed === s.id} title="Sil" onclick={() => remove(s)}>
-              <Icon name="trash" size={16} />{#if armed === s.id}<span>Sil?</span>{/if}
-            </button>
-          {/if}
-        </div>
+        {#if s.description}<p class="desc" title={s.description}>{s.description}</p>{/if}
 
-        <div class="acts">
-          <button class="btn" onclick={() => join(s)} disabled={state === "offline" && !st?.stale && g?.join === "copy"}>
-            <Icon name={g?.join === "copy" ? "copy" : "play"} size={17} />{g?.join === "copy" ? "Adresi kopyala" : "Oyna"}
-          </button>
-          <button class="btn ghost sm" aria-expanded={open[s.id] === "how"} onclick={() => toggle(s.id, "how")}>Nasıl bağlanırım?</button>
-          {#if state !== "unknown"}
-            <button class="btn ghost sm bell" class:on={!!watch[s.id]} title="Bildirim: açılınca ya da dolunca haber ver" aria-expanded={open[s.id] === "notify"} onclick={() => toggle(s.id, "notify")}>
-              <Icon name="bell" size={16} />
+        <div class="alt">
+          <div class="addr">
+            <code title="Sunucu adresi">{s.host}:{s.port}</code>
+            <button class="mini" title="Adresi kopyala" onclick={() => copy(`${s.host}:${s.port}`)}><Icon name="copy" size={15} /></button>
+            {#if !s.remote}
+              <button class="mini" title="Düzenle" onclick={() => openEdit(s)}><Icon name="edit" size={15} /></button>
+              <button class="mini" class:armed={armed === s.id} title="Sil" onclick={() => remove(s)}>
+                <Icon name="trash" size={15} />{#if armed === s.id}<span>Sil?</span>{/if}
+              </button>
+            {/if}
+          </div>
+
+          <div class="acts">
+            <button class="btn oyna" onclick={() => join(s)} disabled={state === "offline" && !st?.stale && g?.join === "copy"}>
+              <Icon name={g?.join === "copy" ? "copy" : "play"} size={17} />{g?.join === "copy" ? "Adresi kopyala" : "Oyna"}
             </button>
-          {/if}
-          {#if info?.playerList.length}
-            <button class="btn ghost sm" title="Oyuncular" aria-expanded={open[s.id] === "players"} onclick={() => toggle(s.id, "players")}>
-              <Icon name="users" size={16} /><span class="tnum">{info.playerList.length}</span>
+            <button class="kare" class:on={open[s.id] === "how"} title="Nasıl bağlanırım?" aria-label="Nasıl bağlanırım?" aria-expanded={open[s.id] === "how"} onclick={() => toggle(s.id, "how")}>
+              <Icon name="info" size={17} />
             </button>
-          {/if}
+            {#if info?.playerList.length}
+              <button class="kare" class:on={open[s.id] === "players"} title="Oyuncular" aria-label="Oyuncular" aria-expanded={open[s.id] === "players"} onclick={() => toggle(s.id, "players")}>
+                <Icon name="users" size={17} />
+              </button>
+            {/if}
+            {#if state !== "unknown"}
+              <button class="kare" class:on={open[s.id] === "notify"} class:aktif={!!watch[s.id]} title="Bildirim: açılınca ya da dolunca haber ver" aria-label="Bildirim" aria-expanded={open[s.id] === "notify"} onclick={() => toggle(s.id, "notify")}>
+                <Icon name="bell" size={17} />
+              </button>
+            {/if}
+          </div>
         </div>
 
         {#if open[s.id] === "notify"}
@@ -573,56 +583,85 @@
   .tip :global(svg) { vertical-align: -2px; margin-right: 4px; }
   .tip code { font-size: 11.5px; white-space: nowrap; }
   .srv { display: flex; flex-direction: column; gap: 16px; max-width: 1500px; margin: 0 auto; }
-  .top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  .summary { display: flex; flex-direction: column; gap: 2px; }
-  .summary b { color: var(--gold); }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .ozet { display: flex; gap: 10px; flex-wrap: wrap; }
+  .kutu-ozet { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 10px 16px; min-width: 120px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.025); }
+  .kutu-ozet .buyuk { font-family: var(--f-display); font-size: 24px; font-weight: 800; color: var(--gold-glow); line-height: 1.1; }
+  .kutu-ozet .buyuk small { font-size: 15px; color: var(--dim); font-weight: 700; }
+  .kutu-ozet.yazi { min-width: 220px; }
+  .durum-satir { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .nokta.canli { background: var(--good); box-shadow: 0 0 0 4px rgba(92, 192, 138, 0.18); animation: nabiz 2s ease-in-out infinite; }
+  @keyframes nabiz { 50% { box-shadow: 0 0 0 7px rgba(92, 192, 138, 0.04); } }
   .seg .n { color: var(--dim); margin-left: 4px; font-variant-numeric: tabular-nums; }
   .warn { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(224, 106, 106, 0.4); background: rgba(224, 106, 106, 0.08); color: var(--text); font-size: 13px; }
   .spin { display: inline-grid; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 18px; align-items: stretch; }
   .tile {
-    display: flex; flex-direction: column; gap: 12px; min-width: 0;
-    background: rgba(34, 37, 42, 0.78); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px;
-    transition: border-color 0.15s;
+    position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow: hidden;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c) 7%, rgba(30, 33, 38, 0.92)), rgba(26, 28, 33, 0.92) 55%);
+    border: 1px solid color-mix(in srgb, var(--c) 22%, var(--line)); border-radius: 18px; padding: 0 16px 16px;
+    transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
   }
-  .tile:hover { border-color: var(--line-2); }
-  .tile.off { opacity: 0.78; }
-  header { display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .tile:hover { border-color: color-mix(in srgb, var(--c) 55%, var(--line-2)); transform: translateY(-2px); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35), 0 0 0 1px color-mix(in srgb, var(--c) 18%, transparent); }
+  .tile.off { filter: saturate(0.5); opacity: 0.8; }
+  .banner {
+    position: relative; height: 74px; margin: 0 -16px; overflow: hidden;
+    background:
+      radial-gradient(120% 140% at 15% 0%, color-mix(in srgb, var(--c) 55%, transparent), transparent 60%),
+      linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, #15171b), #15171b 75%);
+  }
+  .banner::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 12px), linear-gradient(180deg, transparent 40%, rgba(20, 22, 26, 0.85)); }
+  .banner .bg { position: absolute; inset: -20px; width: calc(100% + 40px); height: calc(100% + 40px); object-fit: cover; filter: blur(22px) saturate(1.4); opacity: 0.45; }
+  .banner .pill { position: absolute; top: 10px; right: 12px; z-index: 1; backdrop-filter: blur(6px); background: rgba(12, 13, 16, 0.55); }
+  .ping-rozet { position: absolute; top: 10px; left: 92px; z-index: 1; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: rgba(12, 13, 16, 0.55); backdrop-filter: blur(6px); }
+  .ping-rozet.good { color: var(--good); }
+  .ping-rozet.ok { color: #c8b25a; }
+  .ping-rozet.slow { color: var(--bad); }
+  header { display: flex; gap: 14px; align-items: flex-end; min-width: 0; margin-top: -40px; position: relative; z-index: 1; }
   .logo {
-    width: 52px; height: 52px; flex: none; border-radius: 12px; overflow: hidden;
+    width: 66px; height: 66px; flex: none; border-radius: 16px; overflow: hidden;
     display: grid; place-items: center;
-    background: color-mix(in srgb, var(--c) 18%, var(--coal-2)); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+    background: color-mix(in srgb, var(--c) 18%, var(--coal-2)); border: 2px solid color-mix(in srgb, var(--c) 55%, #14161a);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   }
-  .logo.sm { width: 40px; height: 40px; border-radius: 10px; }
-  .logo span { font-family: var(--f-display); font-weight: 800; font-size: 14px; color: var(--c); letter-spacing: 0.02em; }
+  .logo.sm { width: 40px; height: 40px; border-radius: 10px; border-width: 1px; box-shadow: none; }
+  .logo span { font-family: var(--f-display); font-weight: 800; font-size: 16px; color: var(--c); letter-spacing: 0.02em; }
   .logo img { width: 100%; height: 100%; object-fit: cover; }
   .logo img.pixel { image-rendering: pixelated; }
-  .title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .title b { font-family: var(--f-display); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .gmid { margin-left: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 999px; padding: 0 6px; }
+  .title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-bottom: 2px; }
+  .title b { font-family: var(--f-display); font-size: 16.5px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gmid { margin-left: 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #1b1608; background: var(--gold); border-radius: 999px; padding: 1px 7px; }
   .pill { flex: none; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
   .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-  .pill.online { color: var(--good); border-color: rgba(92, 192, 138, 0.45); background: rgba(92, 192, 138, 0.08); }
+  .pill.online { color: var(--good); border-color: rgba(92, 192, 138, 0.45); }
+  .pill.online::before { box-shadow: 0 0 8px currentColor; }
   .pill.online.stale { color: #c8b25a; border-color: rgba(200, 178, 90, 0.4); }
   .pill.offline { color: var(--bad); border-color: rgba(224, 106, 106, 0.4); }
   .pill.checking::before { animation: blink 1s ease-in-out infinite; }
   @keyframes blink { 50% { opacity: 0.2; } }
-  .desc { margin: 0; color: var(--muted); font-size: 13px; }
-  .stats { display: flex; flex-direction: column; gap: 6px; min-height: 44px; justify-content: center; }
-  .players { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-  .players b { color: var(--text); font-size: 16px; }
-  .bar { flex: 1; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
-  .bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--teal), var(--neon)); }
-  .lock { color: var(--gold); display: inline-grid; }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
-  .ping.good { color: var(--good); }
-  .ping.ok { color: #c8b25a; }
-  .ping.slow { color: var(--bad); }
-  .addr { display: flex; align-items: center; gap: 6px; }
-  .addr code { flex: 1; min-width: 0; padding: 5px 10px; }
-  .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .desc { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .stats { display: flex; flex-direction: column; gap: 8px; min-height: 44px; justify-content: center; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--line); }
+  .players { display: flex; align-items: baseline; gap: 8px; color: var(--muted); }
+  .sayi b { font-family: var(--f-display); font-size: 26px; color: var(--text); line-height: 1; }
+  .sayi span { font-size: 14px; color: var(--dim); font-weight: 700; margin-left: 2px; }
+  .oyuncu { font-size: 12.5px; flex: 1; }
+  .bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 70%, var(--gold)), var(--gold-glow)); }
+  .lock { color: var(--gold); display: inline-grid; align-self: center; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alt { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  .addr { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 0; border-radius: 10px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); }
+  .addr code { flex: 1; min-width: 0; padding: 5px 10px; background: none; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acts { display: flex; gap: 8px; align-items: stretch; }
+  .oyna { flex: 1; justify-content: center; font-weight: 800; }
+  .kare { flex: none; width: 40px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.03); color: var(--muted); cursor: pointer; }
+  .kare:hover { color: var(--text); border-color: var(--gold-dim); }
+  .kare.on { color: var(--gold-glow); border-color: var(--gold-dim); background: rgba(227, 194, 112, 0.1); }
+  .kare.aktif { color: var(--gold); }
   .sm { padding: 6px 11px; font-size: 13px; }
   .mini { border: 0; background: transparent; color: var(--dim); padding: 6px; border-radius: 6px; display: grid; place-items: center; }
   .mini:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
@@ -631,7 +670,6 @@
   .drawer p { margin: 0; }
   .notify .nl { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .notify select { background: var(--coal-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; color: var(--text); }
-  .bell.on { border-color: var(--gold); color: var(--gold-glow); }
   .note { display: flex; gap: 8px; align-items: flex-start; color: var(--gold-glow); }
   .plist { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
   .plist li { display: flex; gap: 12px; padding: 4px 8px; border-radius: 6px; }

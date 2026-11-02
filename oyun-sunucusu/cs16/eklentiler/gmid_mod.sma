@@ -1,11 +1,10 @@
 /*
  * GMID Mod Seçici
  *
- * Harita adına göre sunucunun "modunu" ayarlar; tek sunucuda JailBreak, 35 HP ve Pro Public haritaları döner:
+ * Harita adına göre sunucunun "modunu" ayarlar; tek sunucuda 35 HP ve Pro Public haritaları döner:
  *
  *   35hp_*            → 35 HP: herkes 35 canla doğar, zırh yok, otomatik bunny hop AÇIK (boşluğu basılı tut),
  *                       sv_airaccelerate 100.
- *   jail_*, jb_*      → JailBreak ayarları (asıl kurallar gmid_jail eklentisinde): uzun tur, takım dengesi kapalı.
  *   diğerleri         → Pro Public (fy_iceworld vb.): bunny hop KAPALI, sv_airaccelerate 10, kısa donma,
  *                       otomatik takım dengesi.
  *
@@ -25,8 +24,7 @@
 enum
 {
 	MOD_PUB = 0,
-	MOD_35HP,
-	MOD_JAIL
+	MOD_35HP
 }
 
 new g_mod
@@ -42,8 +40,6 @@ public plugin_init()
 
 	if (equal(map, "35hp", 4))
 		g_mod = MOD_35HP
-	else if (equal(map, "jail_", 5) || equal(map, "jb_", 3))
-		g_mod = MOD_JAIL
 	else
 		g_mod = MOD_PUB
 
@@ -88,16 +84,6 @@ public ayarla()
 			server_cmd("mp_autoteambalance 1")
 			server_cmd("mp_limitteams 2")
 		}
-		case MOD_JAIL:
-		{
-			server_cmd("sv_airaccelerate 10")
-			server_cmd("mp_freezetime 0")
-			server_cmd("mp_roundtime 6")
-			server_cmd("mp_buytime 0")
-			// Takımları JailBreak eklentisi dengeler (3 mahkûma 1 gardiyan).
-			server_cmd("mp_autoteambalance 0")
-			server_cmd("mp_limitteams 0")
-		}
 		default:
 		{
 			// Pro Public
@@ -115,7 +101,7 @@ public ayarla()
 
 public cmd_mod(id)
 {
-	static const adlar[][] = { "Pro Public (bunny hop kapali)", "35 HP (bunny hop acik)", "JailBreak" }
+	static const adlar[][] = { "Pro Public (bunny hop kapali)", "35 HP (bunny hop acik)" }
 	client_print(id, print_chat, "[GMID] Bu haritanin modu: %s", adlar[g_mod])
 	return PLUGIN_CONTINUE
 }

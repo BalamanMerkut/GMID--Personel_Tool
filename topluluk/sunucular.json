@@ -4,11 +4,11 @@
   "servers": [
     {
       "id": "gmid-cs16",
-      "name": "GMID · CS 1.6 35 HP / IceWorld / AWP",
+      "name": "GMID · CS 1.6 Pro Public",
       "game": "cs16",
       "host": "31.57.187.132",
       "port": 27015,
-      "description": "GMID'in CS 1.6 sunucusu. Harita sırası: 35hp_2_s_arena, fy_iceworld16, awp_india, de_dust2 (her harita 25 dakika). Klasik kurallar, eklenti yok. Takım kurmak, etkinlik ve turnuva için Discord: discord.gg/upu9VQwFrV",
+      "description": "GMID'in CS 1.6 Pro Public sunucusu. Harita sırası: 35hp_2_s_arena, fy_iceworld16, awp_india, de_dust2 (her harita 45 dakika). Klasik kurallar, eklenti yok. Takım kurmak, etkinlik ve turnuva için Discord: discord.gg/upu9VQwFrV",
       "connect": "Oyunda konsol: connect gmid.molayazilim.com.tr:27015 · Discord: discord.gg/upu9VQwFrV",
       "logo": "logolar/cs16.png"
     },

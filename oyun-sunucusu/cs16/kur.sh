@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GMID CS 1.6 sunucusu: JailBreak + 35 HP (bunny hop) + Pro Public (fy_iceworld) tek sunucuda, harita türüne göre.
+# GMID CS 1.6 sunucusu: Pro Public (35hp_2_s_arena, fy_iceworld16, awp_india, de_dust2; her harita 45 dakika).
 #
 #   sudo bash kur.sh                 → kur ya da güncelle (ayarlar, rcon şifresi, yöneticiler korunur)
 #   GMID_CS_YONETICI="STEAM_0:1:123" sudo -E bash kur.sh   → bu Steam kimliğini tam yetkili yönetici yap
@@ -15,7 +15,7 @@ CS=$HLDS/cstrike
 KULLANICI=cs16
 PORT="${GMID_CS_PORT:-27015}"
 SLOT="${GMID_CS_SLOT:-24}"
-AD="${GMID_CS_AD:-GMID | JailBreak - 35HP - IceWorld | discord.gg/upu9VQwFrV}"
+AD="${GMID_CS_AD:-GMID | Pro Public - 35HP - IceWorld | discord.gg/upu9VQwFrV}"
 DEPO_HAM="https://raw.githubusercontent.com/BalamanMerkut/GMID--Personel_Tool/${GMID_DAL:-HEAD}/oyun-sunucusu/cs16"
 HIZMET=gmid-cs16
 
@@ -117,7 +117,8 @@ tar -xzf "$gecici/amxx-base.tgz" -C "$CS" --wildcards --overwrite 'addons/amxmod
 echo "linux addons/amxmodx/dlls/amxmodx_mm_i386.so" >"$CS/addons/metamod/plugins.ini"
 
 # ---------- 6. GMID eklentileri (bu depodan, sunucuda derlenir) ----------
-adim "GMID eklentileri: kapalı (JailBreak ve mod seçici kullanılmıyor; haritalar normal oynanır)"
+adim "GMID eklentileri: kapalı (mod seçici kullanılmıyor; haritalar Pro Public olarak normal oynanır)"
+# Eski kurulumdan kalmış olabilecek eklentiler (JailBreak dahil) kaldırılır.
 # ReHLDS yalnız Steam'in eski kolundaki HLDS ile açılır (yukarıda -beta steam_legacy). Discord duyurusu eklentiyle değil,
 # sunucudaki gmid-duyuru zamanlayıcısıyla (15 dakikada bir) yapılır.
 for e in gmid_mod gmid_jail; do
@@ -160,8 +161,8 @@ if [ ! -s "$RCON_DOSYA" ]; then
 fi
 RCON=$(cat "$RCON_DOSYA")
 cat >"$CS/server.cfg" <<CFG
-// GMID CS 1.6 (kur.sh yazar; elle değiştirme, yeniden kurulumda yenilenir). Harita türüne göre ayarları
-// gmid_mod eklentisi yapar: 35hp_* bunny hop açık, jail_*/jb_* JailBreak, diğerleri Pro Public.
+// GMID CS 1.6 (kur.sh yazar; elle değiştirme, yeniden kurulumda yenilenir). Pro Public: eklenti yok,
+// klasik kurallar; her harita 45 dakika.
 hostname "$AD"
 rcon_password "$RCON"
 sv_lan 0
@@ -174,7 +175,7 @@ sv_minupdaterate 30
 sys_ticrate 1000
 sv_allowdownload 1
 sv_allowupload 0
-mp_timelimit 25
+mp_timelimit 45
 mp_friendlyfire 0
 mp_footsteps 1
 mp_flashlight 1
@@ -194,7 +195,7 @@ chown -R "$KULLANICI:$KULLANICI" "$DIZIN"
 adim "Hizmet ($HIZMET)"
 cat >/etc/systemd/system/$HIZMET.service <<UNIT
 [Unit]
-Description=GMID CS 1.6 sunucusu (JailBreak / 35HP / Pro Public)
+Description=GMID CS 1.6 sunucusu (Pro Public)
 After=network-online.target
 Wants=network-online.target
 
