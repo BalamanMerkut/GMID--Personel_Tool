@@ -266,6 +266,7 @@ pub fn run() {
             akis::oda_akis_baslat,
             akis::oda_akis_durum,
             akis::oda_akis_oku,
+            akis::oda_akis_birak,
             commands::social_toast,
             commands::report_create,
             commands::search_all,

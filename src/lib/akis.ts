@@ -3,13 +3,19 @@
 // geri döner. İndirme bitince oynatıcı tamamlanmış dosyaya geçer (her yere sarılabilir).
 
 export interface AkisKaynagi {
-  /** Akışı başlatır: { id, hazir (tam dosya yolu), mime }. */
-  baslat(): Promise<{ id: string; hazir: string | null; mime: string }>;
-  durum(id: string): Promise<{ boyut: number; bitti: boolean; hata: string | null; yol: string | null }>;
+  /** Akışı başlatır: { id, hazir (tam dosya yolu) }. */
+  baslat(): Promise<{ id: string; hazir: string | null }>;
+  /** `mime`: dosyanın başı inince (o zamana kadar boyut 0). */
+  durum(id: string): Promise<{ boyut: number; bitti: boolean; hata: string | null; yol: string | null; mime: string | null }>;
   oku(id: string, konum: number): Promise<ArrayBuffer>;
   /** Dosya yolunu oynatıcının açabileceği adrese çevirir. */
   dosyaAdresi(yol: string): string;
+  /** İzleme bırakıldı: indirme durdurulsun. */
+  birak(id: string): void;
 }
+
+/** İlk görüntü bu kadar sürede gelmezse eski yola geçilir. */
+const ILK_SINIR = 40_000;
 
 export interface Akis {
   /** Oynatıcıya eklenmiş (izlenebilir) son saniye. */
@@ -32,24 +38,45 @@ export class AkisYok extends Error {}
  * `hata`: indirme sonradan kesilirse çağrılır.
  */
 export async function akisBagla(m: HTMLVideoElement, k: AkisKaynagi, hata: (e: string) => void): Promise<Akis> {
+  const yok = (e: unknown) => (String(e).includes("AKIS_YOK") ? new AkisYok() : e);
   let b;
   try {
     b = await k.baslat();
   } catch (e) {
-    if (String(e).includes("AKIS_YOK")) throw new AkisYok();
-    throw e;
+    throw yok(e);
   }
   if (b.hazir) {
     m.src = k.dosyaAdresi(b.hazir);
     return { yuklenen: () => Infinity, bitti: () => true, iptal: () => {} };
   }
-  if (!akisDesteklenir(b.mime)) throw new AkisYok();
   const id = b.id;
+  // Videonun türü dosyanın başından okunur (tahmin edilirse oynatıcı siyah ekranda kalabiliyor).
+  const t0 = Date.now();
+  let mime: string | null = null;
+  try {
+    for (;;) {
+      const d = await k.durum(id);
+      if (d.hata) throw new AkisYok();
+      if (d.mime) {
+        mime = d.mime;
+        break;
+      }
+      if (Date.now() - t0 > ILK_SINIR) throw new AkisYok();
+      await bekle(300);
+    }
+  } catch (e) {
+    k.birak(id);
+    throw yok(e);
+  }
+  if (!akisDesteklenir(mime)) {
+    k.birak(id);
+    throw new AkisYok();
+  }
   const ms = new MediaSource();
   const adres = URL.createObjectURL(ms);
   m.src = adres;
   await new Promise<void>((ok) => ms.addEventListener("sourceopen", () => ok(), { once: true }));
-  const sb = ms.addSourceBuffer(b.mime);
+  const sb = ms.addSourceBuffer(mime);
 
   let iptal = false;
   let bittiMi = false;
@@ -95,15 +122,31 @@ export async function akisBagla(m: HTMLVideoElement, k: AkisKaynagi, hata: (e: s
       duzeltiyor = true;
       m.currentTime = Math.max(0, son - 1.5);
       duzeltiyor = false;
-    } else if (t < baslangic() - 0.5) {
+    } else if (t < baslangic() - 0.5 && baslangic() > ilkBas + 1) {
       yenidenBasla = true;
     }
   };
   m.addEventListener("seeking", sarildi);
   let yenidenBasla = false;
+  /** İlk parçanın başladığı saniye (bazı videolar tam 0'dan başlamaz). */
+  let ilkBas = 0;
 
   let ilkParca: () => void = () => {};
-  const hazir = new Promise<void>((ok) => (ilkParca = ok));
+  let ilkHata: (e: unknown) => void = () => {};
+  let basladi = false;
+  const hazir = new Promise<void>((ok, no) => {
+    ilkParca = () => {
+      basladi = true;
+      ok();
+    };
+    ilkHata = no;
+  });
+  // Oynatıcı parçayı çözemezse (siyah ekran) ya da ilk görüntü gecikirse eski yola geçilir.
+  const oynaticiHatasi = () => {
+    if (!basladi) ilkHata(new AkisYok());
+  };
+  m.addEventListener("error", oynaticiHatasi, { once: true });
+  const sinir = setTimeout(() => ilkHata(new AkisYok()), ILK_SINIR);
 
   void (async () => {
     try {
@@ -129,7 +172,12 @@ export async function akisBagla(m: HTMLVideoElement, k: AkisKaynagi, hata: (e: s
           if (bayt.byteLength) {
             await ekle(bayt);
             konum += bayt.byteLength;
-            if (yuklenen() > 0) ilkParca();
+            if (yuklenen() > 0 && !basladi) {
+              ilkBas = baslangic();
+              // Başta boşluk varsa oynatıcı orada takılmasın (siyah ekran).
+              if (m.currentTime < ilkBas) m.currentTime = ilkBas;
+              ilkParca();
+            }
             continue;
           }
         }
@@ -153,19 +201,32 @@ export async function akisBagla(m: HTMLVideoElement, k: AkisKaynagi, hata: (e: s
         await bekle(400);
       }
     } catch (e) {
-      if (!iptal) hata(String(e instanceof Error ? e.message : e));
-      ilkParca();
+      if (!basladi) ilkHata(yok(e));
+      else if (!iptal) hata(String(e instanceof Error ? e.message : e));
     }
   })();
 
-  await hazir;
+  const birak = () => {
+    iptal = true;
+    clearTimeout(sinir);
+    m.removeEventListener("seeking", sarildi);
+    m.removeEventListener("error", oynaticiHatasi);
+    URL.revokeObjectURL(adres);
+    if (!bittiMi) k.birak(id);
+  };
+  try {
+    await hazir;
+  } catch (e) {
+    birak();
+    m.removeAttribute("src");
+    m.load();
+    throw e;
+  }
+  clearTimeout(sinir);
+  m.removeEventListener("error", oynaticiHatasi);
   return {
     yuklenen: () => (bittiMi ? Infinity : yuklenen()),
     bitti: () => bittiMi,
-    iptal: () => {
-      iptal = true;
-      m.removeEventListener("seeking", sarildi);
-      URL.revokeObjectURL(adres);
-    },
+    iptal: birak,
   };
 }

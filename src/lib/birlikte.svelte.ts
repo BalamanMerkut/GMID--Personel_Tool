@@ -585,6 +585,7 @@ async function eslestir() {
                 durum: (id) => invoke("oda_akis_durum", { id }),
                 oku: (id, konum) => invoke<ArrayBuffer>("oda_akis_oku", { id, konum }),
                 dosyaAdresi: api.fileSrc,
+                birak: (id) => void invoke("oda_akis_birak", { id }).catch(() => {}),
               },
               (e) => {
                 if (akis === a) notify(`Video inerken kesildi: ${e}`, "info");

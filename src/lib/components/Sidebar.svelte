@@ -90,7 +90,7 @@
         <Icon name="download" size={15} /><span>Güncelleme var</span>
       </button>
     {/if}
-    <div class="foot"><span>Merkut Studios</span><span class="tnum">v{version}{update?.current ? ` · ${update.current}` : ""}</span></div>
+    <div class="foot"><span>Merkut Studios</span><span class="tnum" title="Sürüm (her güncellemede artar)">{update?.current ? `Sürüm ${update.current}` : `v${version}`}</span></div>
     <!-- Kendi kartın, sol altta (Discord ve Steam'deki gibi): profil resmin, adın, durumun; tıklayınca profilin. -->
     {#if sosyal.anahtar && sosyal.ben}
       {@const benOyun = sosyal.cevrimici[sosyal.ben.id]?.oyun}

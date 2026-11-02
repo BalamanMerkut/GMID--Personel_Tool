@@ -447,8 +447,8 @@ pub async fn social_stream(app: AppHandle, url: String) -> CmdResult<String> {
 
 /// Birlikte dinleme: şarkının sesi (baytlar). YouTube'un doğrudan ses adresini uygulama içinde çalmak bazı
 /// bilgisayarlarda "kaynak desteklenmiyor" hatası veriyordu; ses yt-dlp ile geçici klasöre alınır (birkaç saniye,
-/// en çok 80 MB) ve oradan çalınır. Son 6 şarkı saklanır (aynı şarkıya yeniden katılmak anında olur), eskileri
-/// silinir. Kullanıcının kütüphanesine bir şey eklenmez.
+/// en çok 80 MB) ve oradan çalınır. Son 2 şarkı/video saklanır (aynı şarkıya yeniden katılmak anında olur), üçüncüsü
+/// açılınca en eskisi, 1 günden eskiler her durumda silinir. Kullanıcının kütüphanesine bir şey eklenmez.
 #[tauri::command]
 pub async fn social_stream_audio(
     app: AppHandle,
@@ -518,6 +518,11 @@ async fn birlikte_indir(
             })
         });
         if let Some(p) = onceki {
+            // Yeniden açıldı: en yeni sayılsın (1 gün buradan sayılır).
+            if let Ok(f) = std::fs::File::options().write(true).open(&p) {
+                let _ = f.set_modified(std::time::SystemTime::now());
+            }
+            crate::akis::onbellek_topla(&dir, &ad);
             return Ok(p);
         }
         let sablon = dir.join(format!("{ad}.%(ext)s"));
@@ -588,17 +593,8 @@ async fn birlikte_indir(
         let p = Some(std::path::PathBuf::from(&son_satir))
             .filter(|p| p.is_file())
             .ok_or_else(|| crate::downloader::ytdlp::friendly_error(&hata))?;
-        // En yeni 6 dosya kalsın.
-        if let Ok(d) = std::fs::read_dir(&dir) {
-            let mut l: Vec<(std::time::SystemTime, std::path::PathBuf)> = d
-                .filter_map(Result::ok)
-                .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-                .collect();
-            l.sort_by_key(|x| std::cmp::Reverse(x.0));
-            for (_, eski) in l.into_iter().skip(6) {
-                let _ = std::fs::remove_file(eski);
-            }
-        }
+        // En çok 2 video kalsın, 1 günden eskiler silinsin.
+        crate::akis::onbellek_topla(&dir, &ad);
         Ok(p)
     })
     .await
