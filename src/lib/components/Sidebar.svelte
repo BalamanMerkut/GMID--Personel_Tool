@@ -5,7 +5,9 @@
   import { groupOf, NAV } from "../nav";
   import { player } from "../player.svelte";
   import { onMount } from "svelte";
-  import { api } from "../api";
+  import { api, inTauri } from "../api";
+  import { onceHazirla } from "../footballCache";
+  import { getJson } from "../settings.svelte";
   import { on } from "../bus";
   import type { UpdateStatus } from "../types";
   import { community, joinDiscord, startCommunity } from "../community.svelte";
@@ -26,9 +28,16 @@
     startCommunity();
     startDealsBadge();
     sosyalBaslat();
+    // Futbol ilk açılışta beklemesin: açılıştan biraz sonra bu haftanın maçları arkada hazırlanır.
+    const futbol = setTimeout(() => {
+      if (inTauri) void onceHazirla(api.football, getJson<string>("football.league", "all")).catch(() => {});
+    }, 15_000);
     void api.update.status().then((s) => (update = s)).catch(() => {});
     const stop = on<UpdateStatus>("update", (s) => (update = s));
-    return () => void stop.then((f) => f());
+    return () => {
+      clearTimeout(futbol);
+      void stop.then((f) => f());
+    };
   });
 </script>
 

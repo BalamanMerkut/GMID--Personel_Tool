@@ -64,3 +64,41 @@ export const FRESH = {
   leaders: 60 * 60_000,
   team: 20 * 60_000,
 };
+
+/**
+ * Açılışta (ekran açılmadan) seçili ligin bu haftaki maçlarını ve puan durumunu arkada hazırlar: Futbol'a ilk
+ * girişte veri hazır gelir. Anahtarlar Futbol ekranındakiyle aynı; taze veri varsa hiç istenmez.
+ */
+export async function onceHazirla(api: {
+  leagues: () => Promise<[string, string][]>;
+  week: (leagues: string[], from: string, to: string) => Promise<unknown>;
+  standings: (league: string) => Promise<unknown>;
+}, league: string) {
+  const leagues = await api.leagues().catch(() => [] as [string, string][]);
+  if (!leagues.length) return;
+  const lg = league !== "all" && leagues.some(([s]) => s === league) ? league : "all";
+  const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const mon = new Date();
+  mon.setHours(12, 0, 0, 0);
+  mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const plus = (n: number) => {
+    const x = new Date(mon);
+    x.setDate(x.getDate() + n);
+    return x;
+  };
+  const want = lg === "all" ? leagues.map(([s]) => s) : [lg];
+  const from = ymd(plus(-1));
+  const key = `w:${want.join(",")}:${from}`;
+  const eski = peek<unknown>(key);
+  if (!eski || eski.age > FRESH.today) {
+    const list = await api.week(want, from, ymd(plus(6))).catch(() => null);
+    if (list) store(key, list);
+  }
+  if (lg !== "all") {
+    const t = peek<unknown>(`t:${lg}`);
+    if (!t || t.age > FRESH.table) {
+      const g = await api.standings(lg).catch(() => null);
+      if (g) store(`t:${lg}`, g);
+    }
+  }
+}
