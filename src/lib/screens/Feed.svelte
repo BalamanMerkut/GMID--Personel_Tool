@@ -449,7 +449,10 @@
 <style>
   .duzen { display: grid; grid-template-columns: minmax(0, 620px) 300px; gap: 28px; justify-content: center; align-items: start; }
   .zaman-tuneli { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 100%; background: rgba(0, 0, 0, 0.12); }
-  .sekmeler { position: sticky; top: 0; z-index: 2; display: flex; border-bottom: 1px solid var(--line); background: rgba(20, 22, 26, 0.88); backdrop-filter: blur(10px); }
+  /* Aşağı inince sekmeler üst çubuğa yapışır: ana alanın üst boşluğu (24px; dar ekranda 20px) kadar yukarı
+     çekilir ki arada içerik görünen bir aralık kalmasın. */
+  .sekmeler { position: sticky; top: -24px; z-index: 2; display: flex; border-bottom: 1px solid var(--line); background: rgba(20, 22, 26, 0.97); backdrop-filter: blur(12px); }
+  @media (max-width: 1100px) { .sekmeler { top: -20px; } }
   .sekmeler [role="tab"] { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; font-size: 15px; padding: 0; height: 52px; cursor: pointer; display: grid; place-items: center; }
   .sekmeler [role="tab"]:hover { background: rgba(255, 255, 255, 0.04); }
   .sekmeler [role="tab"] span { position: relative; height: 100%; display: grid; place-items: center; }
@@ -458,7 +461,7 @@
   .logo-ust { flex: none; width: 56px; border: 0; background: none; display: grid; place-items: center; cursor: pointer; }
   .logo-ust img { width: 32px; height: 32px; border-radius: 50%; box-shadow: 0 0 12px rgba(227, 194, 112, 0.25); transition: transform 0.15s; }
   .logo-ust:hover img { transform: scale(1.08); }
-  .yeni-yer { position: sticky; top: 64px; z-index: 3; height: 0; display: flex; justify-content: center; overflow: visible; }
+  .yeni-yer { position: sticky; top: 40px; z-index: 3; height: 0; display: flex; justify-content: center; overflow: visible; }
   .yeni-dugme { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; border: 0; background: var(--gold); color: #1b1608; font: inherit; font-weight: 800; font-size: 13.5px; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); animation: yeni-gel 0.25s ease-out; }
   .yeni-dugme :global(svg) { transform: rotate(-90deg); }
   @keyframes yeni-gel { from { transform: translateY(-8px); opacity: 0; } }
