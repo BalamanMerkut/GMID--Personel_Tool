@@ -167,6 +167,8 @@ export interface Server {
   port: number;
   queryPort: number | null;
   logo: string | null;
+  /** Kart kapağı (https): listede verilen ya da oyunun Steam/Wikipedia kapağı. */
+  cover: string | null;
   description: string;
   connectNotes: string;
   /** Sunucu şifresi (Oyna'da oyuna verilir). */

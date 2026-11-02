@@ -271,6 +271,8 @@ const MIGRATIONS: &[&str] = &[
     "UPDATE titles SET meta_at = NULL WHERE poster IS NULL;",
     // 17: kendi eklenen sunucuların şifresi (Oyna'da oyuna verilir).
     "ALTER TABLE servers ADD COLUMN password TEXT NOT NULL DEFAULT '';",
+    // 18: sunucu kartının kapak resmi (topluluk listesinden ya da oyunun Steam/Wikipedia kapağı; adres).
+    "ALTER TABLE servers ADD COLUMN cover TEXT;",
 ];
 
 pub struct Db(Mutex<Connection>);

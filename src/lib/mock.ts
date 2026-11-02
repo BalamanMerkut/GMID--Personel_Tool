@@ -99,13 +99,13 @@ const games: GameInfo[] = (
 }));
 
 const servers: Server[] = [
-  { id: "r-cod2", name: "GMID · Call of Duty 2", game: "cod2", host: "cod2.gmid.gg", port: 28960, queryPort: null, logo: null,
+  { id: "r-cod2", name: "GMID · Call of Duty 2", game: "cod2", host: "cod2.gmid.gg", port: 28960, queryPort: null, logo: null, cover: null,
     description: "Her akşam 21:00'de TDM. Toujane, Carentan, Dawnville dönüyor.", connectNotes: "Şifre Discord'da #sunucular kanalında.", remote: true, createdAt: 1, password: "" },
-  { id: "r-mc", name: "GMID Survival", game: "minecraft", host: "mc.gmid.gg", port: 25565, queryPort: null, logo: null,
+  { id: "r-mc", name: "GMID Survival", game: "minecraft", host: "mc.gmid.gg", port: 25565, queryPort: null, logo: null, cover: null,
     description: "1.21 hayatta kalma, beyaz liste var. Discord'dan isim yaz, eklensin.", connectNotes: "", remote: true, createdAt: 2, password: "" },
-  { id: "r-cs", name: "GMID · CS 1.6 Public", game: "cs16", host: "cs.gmid.gg", port: 27015, queryPort: null, logo: null,
+  { id: "r-cs", name: "GMID · CS 1.6 Public", game: "cs16", host: "cs.gmid.gg", port: 27015, queryPort: null, logo: null, cover: null,
     description: "Klasik haritalar, 5v5 hafta sonu.", connectNotes: "", remote: true, createdAt: 3, password: "" },
-  { id: "l-1", name: "Kuzenlerle Valheim", game: "valheim", host: "88.231.14.7", port: 2456, queryPort: null, logo: null,
+  { id: "l-1", name: "Kuzenlerle Valheim", game: "valheim", host: "88.231.14.7", port: 2456, queryPort: null, logo: null, cover: null,
     description: "", connectNotes: "", password: "kahve", remote: false, createdAt: 4 },
 ];
 
@@ -817,7 +817,7 @@ export async function handle(cmd: string, a: Record<string, unknown>): Promise<u
       let [host, port] = input.host.trim().split(":");
       const srv: Server = {
         id: input.id ?? id(), name: input.name.trim() || `${game.name} sunucusu`, game: input.game, host: host.toLowerCase(),
-        port: Number(port) || input.port || game.defaultPort, queryPort: input.queryPort, logo: input.logo,
+        port: Number(port) || input.port || game.defaultPort, queryPort: input.queryPort, logo: input.logo, cover: null,
         description: input.description, connectNotes: input.connectNotes, password: input.password ?? "", remote: false, createdAt: now(),
       };
       const i = servers.findIndex((x) => x.id === srv.id);

@@ -39,6 +39,8 @@ pub struct Server {
     pub query_port: Option<u16>,
     /// `Sunucular` klasöründeki logo dosyası.
     pub logo: Option<String>,
+    /// Kartın üstündeki kapak resmi (https adresi): listede verilen ya da oyunun kapağı.
+    pub cover: Option<String>,
     pub description: String,
     pub connect_notes: String,
     /// Sunucu şifresi (yalnız kendi eklediklerinde; Oyna'da oyuna verilir).
@@ -67,7 +69,7 @@ pub struct ServerInput {
 }
 
 const COLUMNS: &str =
-    "id, name, game, host, port, query_port, logo, description, connect_notes, remote, created_at, password";
+    "id, name, game, host, port, query_port, logo, description, connect_notes, remote, created_at, password, cover";
 
 fn from_row(r: &Row) -> rusqlite::Result<Server> {
     Ok(Server {
@@ -83,7 +85,39 @@ fn from_row(r: &Row) -> rusqlite::Result<Server> {
         remote: r.get(9)?,
         created_at: r.get(10)?,
         password: r.get(11)?,
+        cover: r
+            .get::<_, Option<String>>(12)?
+            .or_else(|| default_cover(&r.get::<_, String>(2).ok()?)),
     })
+}
+
+/// Oyunun Steam kütüphane kapağı (geniş resim). Steam'de olmayanlarda yok.
+fn steam_app(game: &str) -> Option<u32> {
+    Some(match game {
+        "cs16" => 10,
+        "cs2" => 730,
+        "cod1" => 2620,
+        "coduo" => 2640,
+        "cod2" => 2630,
+        "cod4" => 7940,
+        "valheim" => 892970,
+        _ => return None,
+    })
+}
+
+pub fn default_cover(game: &str) -> Option<String> {
+    steam_app(game).map(|id| {
+        format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{id}/library_hero.jpg")
+    })
+}
+
+/// Steam'de olmayan oyunlar için Wikipedia'da aranacak ad.
+fn wiki_name(game: &str) -> Option<&'static str> {
+    match game {
+        "minecraft" | "minecraft-bedrock" => Some("Minecraft"),
+        "samp" | "mta" => Some("Grand Theft Auto: San Andreas"),
+        _ => None,
+    }
 }
 
 /// Önce topluluk sunucuları (listedeki sırayla), sonra kendi eklediklerin.
@@ -311,6 +345,9 @@ struct RemoteServer {
     port: Option<u16>,
     query_port: Option<u16>,
     logo: Option<String>,
+    /// Kart kapağı (geniş resim; tam ya da listeye göreli adres). Yoksa oyunun kapağı kullanılır.
+    #[serde(default, alias = "kapak")]
+    cover: Option<String>,
     #[serde(default)]
     description: String,
     #[serde(default)]
@@ -424,13 +461,15 @@ fn download_list(db: &Db, logos: &Path, url: &str) -> Result<(), String> {
 
 /// Listedeki sunucuları ekler/günceller, listeden çıkanları siler.
 fn apply_list(db: &Db, logos: &Path, url: &str, items: Vec<RemoteServer>) -> Result<(), String> {
-    let old: HashMap<String, (Option<String>, Option<String>)> = {
+    // id → (logo dosyası, logo adresi, kapak adresi)
+    type Eski = (Option<String>, Option<String>, Option<String>);
+    let old: HashMap<String, Eski> = {
         let conn = db.conn();
         let mut stmt = conn
-            .prepare("SELECT id, logo, logo_url FROM servers WHERE remote = 1")
+            .prepare("SELECT id, logo, logo_url, cover FROM servers WHERE remote = 1")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))
+            .query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?))))
             .map_err(|e| e.to_string())?;
         rows.filter_map(Result::ok).collect()
     };
@@ -456,7 +495,20 @@ fn apply_list(db: &Db, logos: &Path, url: &str, items: Vec<RemoteServer>) -> Res
 
         // Logo: listeye göre göreli ya da tam adres. Değişmediyse tekrar indirilmez.
         let logo_url = s.logo.as_deref().map(|l| resolve_url(url, l));
-        let (old_logo, old_url) = old.get(&id).cloned().unwrap_or_default();
+        let (old_logo, old_url, old_cover) = old.get(&id).cloned().unwrap_or_default();
+        // Kapak: listede verilen; yoksa (Steam'de olmayan oyunda) bir kez Wikipedia'dan bulunan kalır.
+        let cover = s
+            .cover
+            .as_deref()
+            .map(|c| resolve_url(url, c))
+            .filter(|c| c.starts_with("https://"))
+            .or_else(|| {
+                let n = wiki_name(game.id)?;
+                old_cover
+                    .clone()
+                    .filter(|c| c.contains("wikimedia"))
+                    .or_else(|| crate::games::meta::wiki_image(n).ok().flatten())
+            });
         let logo = match &logo_url {
             Some(u)
                 if old_url.as_ref() == Some(u)
@@ -471,20 +523,31 @@ fn apply_list(db: &Db, logos: &Path, url: &str, items: Vec<RemoteServer>) -> Res
             }
         };
         keep.push(id.clone());
-        rows.push((id, s, game.id, host, port, logo, logo_url, sort as i64));
+        rows.push((
+            id,
+            s,
+            game.id,
+            host,
+            port,
+            logo,
+            logo_url,
+            cover,
+            sort as i64,
+        ));
     }
 
     let now = now_ms();
     let mut conn = db.conn();
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    for (id, s, game, host, port, logo, logo_url, sort) in rows {
+    for (id, s, game, host, port, logo, logo_url, cover, sort) in rows {
         tx.execute(
             "INSERT INTO servers (id, name, game, host, port, query_port, logo, logo_url, description,
-                                  connect_notes, remote, sort, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11, ?12, ?12)
+                                  connect_notes, remote, sort, created_at, updated_at, cover)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11, ?12, ?12, ?13)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name, game = excluded.game, host = excluded.host, port = excluded.port,
                 query_port = excluded.query_port, logo = excluded.logo, logo_url = excluded.logo_url,
+                cover = excluded.cover,
                 description = excluded.description, connect_notes = excluded.connect_notes,
                 remote = 1, sort = excluded.sort, updated_at = excluded.updated_at",
             params![
@@ -499,12 +562,13 @@ fn apply_list(db: &Db, logos: &Path, url: &str, items: Vec<RemoteServer>) -> Res
                 s.description.trim(),
                 s.connect.trim(),
                 sort,
-                now
+                now,
+                cover
             ],
         )
         .map_err(|e| e.to_string())?;
     }
-    for (id, (logo, _)) in &old {
+    for (id, (logo, _, _)) in &old {
         if !keep.contains(id) {
             tx.execute("DELETE FROM servers WHERE id = ?1", [id])
                 .map_err(|e| e.to_string())?;
@@ -835,9 +899,21 @@ mod tests {
             port: None,
             query_port: None,
             logo: None,
+            cover: None,
             description: String::new(),
             connect: String::new(),
         }
+    }
+
+    #[test]
+    fn covers() {
+        assert!(default_cover("cs16").unwrap().contains("/apps/10/"));
+        assert_eq!(default_cover("minecraft"), None);
+        let r: RemoteServer = serde_json::from_str(
+            r#"{"id":"x","name":"X","game":"other","host":"1.2.3.4","port":7240,"kapak":"https://ornek.com/k.jpg"}"#,
+        )
+        .unwrap();
+        assert_eq!(r.cover.as_deref(), Some("https://ornek.com/k.jpg"));
     }
 
     #[test]
@@ -943,6 +1019,7 @@ mod tests {
             port: 19132,
             query_port: None,
             logo: None,
+            cover: None,
             description: String::new(),
             connect_notes: String::new(),
             password: String::new(),

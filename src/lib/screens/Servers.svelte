@@ -46,6 +46,8 @@
     void api.serverWatch.set(id, rule).catch((e) => notify(String(e), "info"));
   }
   let now = $state(Date.now());
+  /** Kapak resmi açılamayan sunucular (yerine logo bulanığı). */
+  let kapakYok: Record<string, boolean> = $state({});
 
   // ekle / düzenle
   let form: ServerInput | null = $state(null);
@@ -347,8 +349,10 @@
       {@const state = st?.state ?? "checking"}
       {@const logo = s.logo ? api.fileSrc(s.logo) : (info?.favicon ?? null)}
       <article class="tile" class:off={state === "offline"} style:--c={COLORS[s.game] ?? "#7a8088"}>
-        <div class="banner">
-          {#if logo}<img class="bg" src={logo} alt="" />{/if}
+        <div class="banner" class:kapakli={!!s.cover && !kapakYok[s.id]}>
+          {#if s.cover && !kapakYok[s.id]}
+            <img class="kapak" src={s.cover} alt="" loading="lazy" onerror={() => (kapakYok = { ...kapakYok, [s.id]: true })} />
+          {:else if logo}<img class="bg" src={logo} alt="" />{/if}
           <span class="pill {state}" class:stale={st?.stale} title={st?.stale ? "Son kontrolde yanıt gelmedi; bir önceki bilgi gösteriliyor" : ""}>
             {state === "online" ? "Açık" : state === "offline" ? "Kapalı" : state === "unknown" ? "Bilinmiyor" : "Bakılıyor"}
           </span>
@@ -617,6 +621,10 @@
       linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, #15171b), #15171b 75%);
   }
   .banner::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 12px), linear-gradient(180deg, transparent 40%, rgba(20, 22, 26, 0.85)); }
+  .banner.kapakli { height: 118px; }
+  .banner .kapak { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; transition: transform 0.4s ease; }
+  .tile:hover .banner .kapak { transform: scale(1.04); }
+  .banner.kapakli::after { background: linear-gradient(180deg, rgba(10, 11, 14, 0.15) 0%, rgba(10, 11, 14, 0.35) 45%, rgba(24, 26, 31, 0.98) 100%); }
   .banner .bg { position: absolute; inset: -20px; width: calc(100% + 40px); height: calc(100% + 40px); object-fit: cover; filter: blur(22px) saturate(1.4); opacity: 0.45; }
   .banner .pill { position: absolute; top: 10px; right: 12px; z-index: 1; backdrop-filter: blur(6px); background: rgba(12, 13, 16, 0.55); }
   .ping-rozet { position: absolute; top: 10px; left: 92px; z-index: 1; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: rgba(12, 13, 16, 0.55); backdrop-filter: blur(6px); }
