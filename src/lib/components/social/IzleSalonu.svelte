@@ -164,8 +164,9 @@
         {:else if birlikte.hazirlaniyor}
           <div class="bos-sahne yari">
             <span class="donen"></span>
-            <b>Video hazırlanıyor…</b>
-            <span class="sub">İlk açılışta birkaç saniye sürebilir.</span>
+            <b>Video hazırlanıyor{birlikte.yuzde > 0 ? ` · %${Math.floor(birlikte.yuzde)}` : "…"}</b>
+            <div class="hazirlik"><i style:width="{birlikte.yuzde}%"></i></div>
+            <span class="sub">Video önce bilgisayarına iner, sonra herkeste aynı saniyede başlar. Uzun videolarda birkaç dakika sürebilir.</span>
           </div>
         {/if}
         <button class="tam-dugme" title={tam ? "Tam ekrandan çık (Esc)" : "Tam ekran (çift tık)"} aria-label="Tam ekran" onclick={() => tamEkran()}>
@@ -344,6 +345,8 @@
   .bos-sahne { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); background: radial-gradient(circle at 50% 40%, rgba(227, 194, 112, 0.1), #000 70%); }
   .bos-sahne :global(svg) { color: var(--gold-dim); }
   .bos-sahne.yari { background: rgba(0, 0, 0, 0.6); }
+  .hazirlik { width: min(360px, 70%); height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+  .hazirlik i { display: block; height: 100%; border-radius: inherit; background: var(--gold); transition: width 0.4s ease; }
   .donen { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(227, 194, 112, 0.25); border-top-color: var(--gold); animation: don 0.9s linear infinite; }
   @keyframes don { to { transform: rotate(360deg); } }
   .tam-dugme { position: absolute; right: 10px; bottom: 10px; width: 38px; height: 38px; border-radius: 10px; border: 0; background: rgba(0, 0, 0, 0.55); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity 0.15s; }

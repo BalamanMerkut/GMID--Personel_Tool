@@ -456,15 +456,54 @@ pub async fn social_stream_audio(
     video: Option<bool>,
     sayfa: Option<String>,
 ) -> CmdResult<tauri::ipc::Response> {
-    let video = video.unwrap_or(false);
-    // Eklentiden gelen videolarda sitenin istediği sayfa adresi (Referer).
-    let sayfa = sayfa.filter(|s| s.starts_with("https://") || s.starts_with("http://"));
+    let yol = birlikte_indir(app, url, video.unwrap_or(false), sayfa).await?;
+    let bayt = std::fs::read(&yol).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bayt))
+}
+
+/// Birlikte dinleme/izleme: hazırlanan dosyanın yolu (oynatıcı doğrudan dosyadan açar; büyük videolar belleğe
+/// okunmaz). İndirme sürerken `oda-hazirlik` olayıyla yüzde gönderilir.
+#[tauri::command]
+pub async fn social_stream_file(
+    app: AppHandle,
+    url: String,
+    video: Option<bool>,
+    sayfa: Option<String>,
+) -> CmdResult<String> {
+    let yol = birlikte_indir(app.clone(), url, video.unwrap_or(false), sayfa).await?;
+    if let Some(d) = yol.parent() {
+        let _ = tauri::Manager::asset_protocol_scope(&app).allow_directory(d, false);
+    }
+    Ok(yol.to_string_lossy().into_owned())
+}
+
+/// yt-dlp ilerleme satırı: "GMIDILERLEME  37.5%" → 37.5
+fn ilerleme_yuzdesi(satir: &str) -> Option<f64> {
+    satir
+        .strip_prefix("GMIDILERLEME")?
+        .trim()
+        .trim_end_matches('%')
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|y| y.is_finite())
+}
+
+async fn birlikte_indir(
+    app: AppHandle,
+    url: String,
+    video: bool,
+    sayfa: Option<String>,
+) -> CmdResult<std::path::PathBuf> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("Geçersiz bağlantı".into());
     }
+    // Eklentiden gelen videolarda sitenin istediği sayfa adresi (Referer).
+    let sayfa = sayfa.filter(|s| s.starts_with("https://") || s.starts_with("http://"));
     let root = tauri::Manager::state::<DataDir>(&app).root().to_path_buf();
     tauri::async_runtime::spawn_blocking(move || {
         use std::hash::{Hash, Hasher};
+        use std::io::{BufRead, Read};
         let dir = std::env::temp_dir().join("gmid-birlikte");
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -478,67 +517,89 @@ pub async fn social_stream_audio(
                     && p.extension().is_some_and(|x| x != "part")
             })
         });
-        let yol = match onceki {
-            Some(p) => p,
-            None => {
-                let sablon = dir.join(format!("{ad}.%(ext)s"));
-                let mut cmd = crate::downloader::tools::ytdlp(&root);
-                cmd.args(["--no-playlist", "--no-warnings", "--no-part"]);
-                if let Some(s) = &sayfa {
-                    cmd.args(["--referer", s]);
-                }
-                if video {
-                    // En çok 720p, tek MP4 (ses + görüntü); uygulamanın oynatıcısı açar.
-                    cmd.args([
-                        "--max-filesize",
-                        "2500M",
-                        "-f",
-                        "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4][height<=720]/b[height<=720]/b",
-                        "--merge-output-format",
-                        "mp4",
-                    ]);
-                } else {
-                    cmd.args([
-                        "--max-filesize",
-                        "80M",
-                        "-f",
-                        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
-                    ]);
-                }
-                cmd.args(["--print", "after_move:filepath", "-o"])
-                .arg(&sablon)
-                .args(["--", &url]);
-                let out = cmd.output().map_err(|_| {
-                    "yt-dlp bulunamadı; Video İndirici'den araçları kur".to_string()
-                })?;
-                let text = String::from_utf8_lossy(&out.stdout);
-                let p = text
-                    .lines()
-                    .map(str::trim)
-                    .rfind(|l| !l.is_empty())
-                    .map(std::path::PathBuf::from)
-                    .filter(|p| p.is_file())
-                    .ok_or_else(|| {
-                        crate::downloader::ytdlp::friendly_error(&String::from_utf8_lossy(
-                            &out.stderr,
-                        ))
-                    })?;
-                // En yeni 6 şarkı kalsın.
-                if let Ok(d) = std::fs::read_dir(&dir) {
-                    let mut l: Vec<(std::time::SystemTime, std::path::PathBuf)> = d
-                        .filter_map(Result::ok)
-                        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-                        .collect();
-                    l.sort_by_key(|x| std::cmp::Reverse(x.0));
-                    for (_, eski) in l.into_iter().skip(6) {
-                        let _ = std::fs::remove_file(eski);
-                    }
-                }
-                p
+        if let Some(p) = onceki {
+            return Ok(p);
+        }
+        let sablon = dir.join(format!("{ad}.%(ext)s"));
+        let mut cmd = crate::downloader::tools::ytdlp(&root);
+        cmd.args(["--no-playlist", "--no-warnings", "--no-part", "--newline"]);
+        cmd.args([
+            "--progress-template",
+            "download:GMIDILERLEME %(progress._percent_str)s",
+        ]);
+        if let Some(s) = &sayfa {
+            cmd.args(["--referer", s]);
+        }
+        if video {
+            // En çok 720p, tek MP4 (ses + görüntü); uygulamanın oynatıcısı açar.
+            cmd.args([
+                "--max-filesize",
+                "2500M",
+                "-f",
+                "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4][height<=720]/b[height<=720]/b",
+                "--merge-output-format",
+                "mp4",
+            ]);
+        } else {
+            cmd.args([
+                "--max-filesize",
+                "80M",
+                "-f",
+                "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+            ]);
+        }
+        cmd.args(["--print", "after_move:filepath", "-o"])
+            .arg(&sablon)
+            .args(["--", &url]);
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut cocuk = cmd
+            .spawn()
+            .map_err(|_| "yt-dlp bulunamadı; Video İndirici'den araçları kur".to_string())?;
+        // Hata çıktısı ayrı okunur (boru dolup yt-dlp takılmasın).
+        let mut hata_borusu = cocuk.stderr.take();
+        let hata_okuyucu = std::thread::spawn(move || {
+            let mut s = String::new();
+            if let Some(e) = hata_borusu.as_mut() {
+                let _ = e.read_to_string(&mut s);
             }
-        };
-        let bayt = std::fs::read(&yol).map_err(|e| e.to_string())?;
-        Ok(tauri::ipc::Response::new(bayt))
+            s
+        });
+        let mut son_satir = String::new();
+        let mut son_yuzde = -1.0;
+        if let Some(o) = cocuk.stdout.take() {
+            for satir in std::io::BufReader::new(o).lines().map_while(Result::ok) {
+                if let Some(y) = ilerleme_yuzdesi(&satir) {
+                    if y - son_yuzde >= 1.0 || y >= 100.0 {
+                        son_yuzde = y;
+                        let _ = tauri::Emitter::emit(
+                            &app,
+                            "oda-hazirlik",
+                            serde_json::json!({ "url": url, "yuzde": y }),
+                        );
+                    }
+                } else if !satir.trim().is_empty() {
+                    son_satir = satir.trim().to_string();
+                }
+            }
+        }
+        let _ = cocuk.wait();
+        let hata = hata_okuyucu.join().unwrap_or_default();
+        let p = Some(std::path::PathBuf::from(&son_satir))
+            .filter(|p| p.is_file())
+            .ok_or_else(|| crate::downloader::ytdlp::friendly_error(&hata))?;
+        // En yeni 6 dosya kalsın.
+        if let Ok(d) = std::fs::read_dir(&dir) {
+            let mut l: Vec<(std::time::SystemTime, std::path::PathBuf)> = d
+                .filter_map(Result::ok)
+                .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+                .collect();
+            l.sort_by_key(|x| std::cmp::Reverse(x.0));
+            for (_, eski) in l.into_iter().skip(6) {
+                let _ = std::fs::remove_file(eski);
+            }
+        }
+        Ok(p)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -726,6 +787,14 @@ pub fn report_create(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ilerleme() {
+        assert_eq!(super::ilerleme_yuzdesi("GMIDILERLEME  37.5%"), Some(37.5));
+        assert_eq!(super::ilerleme_yuzdesi("GMIDILERLEME 100%"), Some(100.0));
+        assert_eq!(super::ilerleme_yuzdesi("GMIDILERLEME   N/A"), None);
+        assert_eq!(super::ilerleme_yuzdesi("C:\\temp\\x.mp4"), None);
+    }
 
     #[test]
     fn resolve_line() {

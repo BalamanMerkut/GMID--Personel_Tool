@@ -151,7 +151,7 @@
     </div>
     {#if oda.simdiki}
       <div class="simdi">
-        <b title={oda.simdiki.sarki.baslik}>{birlikte.hazirlaniyor ? "Hazırlanıyor…" : oda.simdiki.sarki.baslik}</b>
+        <b title={oda.simdiki.sarki.baslik}>{birlikte.hazirlaniyor ? `Hazırlanıyor${birlikte.yuzde > 0 ? ` · %${Math.floor(birlikte.yuzde)}` : "…"}` : oda.simdiki.sarki.baslik}</b>
         <span class="sub small">{oda.simdiki.ekleyen.ad} ekledi{oda.caliyor ? "" : " · duraklatıldı"}</span>
         <div class="ilerle">
           <span class="tnum">{formatDuration(birlikte.konum) || "0:00"}</span>

@@ -23,7 +23,7 @@
     <button class="yazi" title="Odayı aç" onclick={odayiGoster}>
       <span class="ust">{oda.ad} · {oda.uyeler.length} kişi</span>
       <b title={oda.simdiki?.sarki.baslik}>
-        {birlikte.hazirlaniyor ? "Hazırlanıyor…" : (oda.simdiki?.sarki.baslik ?? "Sıra boş, bir şarkı ekleyin")}
+        {birlikte.hazirlaniyor ? `Hazırlanıyor${birlikte.yuzde > 0 ? ` · %${Math.floor(birlikte.yuzde)}` : "…"}` : (oda.simdiki?.sarki.baslik ?? "Sıra boş, bir şarkı ekleyin")}
       </b>
     </button>
     {#if oda.simdiki && !oda.caliyor && !birlikte.hazirlaniyor}<span class="durak">Duraklatıldı</span>{/if}

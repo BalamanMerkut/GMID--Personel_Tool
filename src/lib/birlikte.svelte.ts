@@ -72,6 +72,8 @@ export const birlikte = $state({
   salonAcik: false,
   /** Şarkı hazırlanıyor (yt-dlp). */
   hazirlaniyor: false,
+  /** Hazırlanan dosyanın indirilen yüzdesi (bilinmiyorsa 0). */
+  yuzde: 0,
   /** Şarkı ekleniyor: hangi aşamada (düğmede yazar). */
   asama: "",
   /** Odaya girince %10 sesle başlar (yüksek başlamasın); odadayken değiştirilen ses odadan çıkana kadar kalır. */
@@ -166,6 +168,16 @@ wsEk.add((v) => {
   odaYaz(o);
   if (birlikte.odaId === o.id) void eslestir();
 });
+
+/** Şu an hazırlanan bağlantı (ilerleme olayları buna göre süzülür). */
+let hazirlananUrl: string | null = null;
+if (inTauri) {
+  void import("@tauri-apps/api/event").then(({ listen }) =>
+    listen<{ url: string; yuzde: number }>("oda-hazirlik", (e) => {
+      if (e.payload.url === hazirlananUrl) birlikte.yuzde = Math.min(100, Math.max(0, e.payload.yuzde));
+    }),
+  );
+}
 
 // Eklentiden "GMID odasında birlikte izle": içinde olduğun odaya eklenir; oda yoksa izleme odası açılır.
 if (inTauri) {
@@ -519,13 +531,6 @@ function durdur() {
   birlikte.hazirlaniyor = false;
 }
 
-/** Dosyanın ilk baytlarından tür (m4a/mp4, webm, ogg, mp3). */
-function tur(b: Uint8Array, video: boolean): string {
-  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return video ? "video/mp4" : "audio/mp4";
-  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return video ? "video/webm" : "audio/webm";
-  if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg";
-  return "audio/mpeg";
-}
 
 let yukleniyor: number | null = null;
 
@@ -546,13 +551,17 @@ async function eslestir() {
     birlikte.hazirlaniyor = true;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const bayt = await aracla(() => invoke<ArrayBuffer>("social_stream_audio", { url: simdiki.sarki.url, video: simdiki.sarki.video, sayfa: simdiki.sarki.sayfa ?? null }));
+      birlikte.yuzde = 0;
+      hazirlananUrl = simdiki.sarki.url;
+      // Dosya geçici klasöre iner, oynatıcı doğrudan dosyadan açar (büyük video belleğe okunmaz).
+      const yol = await aracla(() =>
+        invoke<string>("social_stream_file", { url: simdiki.sarki.url, video: simdiki.sarki.video, sayfa: simdiki.sarki.sayfa ?? null }),
+      );
       // Hazırlanırken şarkı değiştiyse ya da odadan çıkıldıysa bırak.
       if (benimOdam()?.simdiki?.id !== simdiki.id) return;
-      const yeni = URL.createObjectURL(new Blob([bayt], { type: tur(new Uint8Array(bayt.slice(0, 12)), simdiki.sarki.video) }));
       if (blob) setTimeout((u: string) => URL.revokeObjectURL(u), 2000, blob);
-      blob = yeni;
-      m.src = yeni;
+      blob = null;
+      m.src = api.fileSrc(yol);
       yukluOge = simdiki.id;
       await new Promise<void>((ok) => {
         const bitti = () => ok();
