@@ -51,6 +51,10 @@ pub fn kur(c: &Connection) -> rusqlite::Result<()> {
            PRIMARY KEY (kimden, kime));
          CREATE INDEX IF NOT EXISTS arkadas_kime ON arkadaslar (kime);
          -- Silinen paylaşımların (süresi dolan klipler dahil) aldığı beğeni ve yorumlar: profilde kalır.
+         CREATE TABLE IF NOT EXISTS sikayetler (
+           etkinlik INTEGER NOT NULL REFERENCES etkinlikler(id) ON DELETE CASCADE,
+           kullanici TEXT NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+           neden TEXT, zaman INTEGER NOT NULL, PRIMARY KEY (etkinlik, kullanici));
          CREATE TABLE IF NOT EXISTS kalici_puan (
            kullanici TEXT PRIMARY KEY REFERENCES kullanicilar(id) ON DELETE CASCADE,
            begeni INTEGER NOT NULL DEFAULT 0, yorum INTEGER NOT NULL DEFAULT 0);",
@@ -147,6 +151,8 @@ pub struct Etkinlik {
     pub begeni: i64,
     pub begendim: bool,
     pub yorumlar: Vec<Yorum>,
+    /// Kaç kişi şikâyet etti (arayüz yalnız yöneticiye gösterir).
+    pub sikayet: i64,
 }
 
 /// Gündemdeki bir konu.
@@ -542,7 +548,8 @@ impl Db {
             .prepare(
                 "SELECT e.id, k.id, k.ad, k.avatar, e.tur, e.veri, e.zaman,
                    (SELECT COUNT(*) FROM begeniler b WHERE b.etkinlik = e.id),
-                   EXISTS (SELECT 1 FROM begeniler b WHERE b.etkinlik = e.id AND b.kullanici = ?1)
+                   EXISTS (SELECT 1 FROM begeniler b WHERE b.etkinlik = e.id AND b.kullanici = ?1),
+                   (SELECT COUNT(*) FROM sikayetler s WHERE s.etkinlik = e.id)
                  FROM etkinlikler e JOIN kullanicilar k ON k.id = e.kullanici
                  WHERE (?2 IS NULL OR e.zaman < ?2) AND (?3 IS NULL OR e.kullanici = ?3)
                    AND (e.tur != 'klip' OR e.zaman > ?6)
@@ -576,6 +583,7 @@ impl Db {
                         begeni: r.get(7)?,
                         begendim: r.get(8)?,
                         yorumlar: Vec::new(),
+                        sikayet: r.get(9)?,
                     })
                 },
             )
@@ -646,16 +654,52 @@ impl Db {
     }
 
     /// Yalnız kendi yorumu ya da kendi olayının altındaki yorum silinebilir.
-    pub fn yorum_sil(&self, ben: &str, id: i64) -> R<bool> {
+    /// `yonetici`: herkesin yorumunu silebilir.
+    pub fn yorum_sil(&self, ben: &str, id: i64, yonetici: bool) -> R<bool> {
         let n = self
             .0
             .execute(
-                "DELETE FROM yorumlar WHERE id = ?1 AND (kullanici = ?2 OR etkinlik IN
+                "DELETE FROM yorumlar WHERE id = ?1 AND (?3 = 1 OR kullanici = ?2 OR etkinlik IN
                    (SELECT id FROM etkinlikler WHERE kullanici = ?2))",
-                params![id, ben],
+                params![id, ben, yonetici as i64],
             )
             .map_err(e)?;
         Ok(n > 0)
+    }
+
+    /// Yönetici mi? Liste boşsa ilk giriş yapan kişi (sunucuyu kuran) yöneticidir.
+    pub fn yonetici_mi(&self, id: &str, liste: &[String]) -> bool {
+        if !liste.is_empty() {
+            return liste.iter().any(|x| x == id);
+        }
+        self.0
+            .query_row(
+                "SELECT id FROM kullanicilar ORDER BY ilk, rowid LIMIT 1",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .is_ok_and(|ilk| ilk == id)
+    }
+
+    /// Şikâyet: aynı kişi aynı paylaşımı bir kez şikâyet eder. Dönen: yeni mi.
+    pub fn sikayet_et(&self, ben: &str, etkinlik: i64, neden: Option<&str>) -> R<bool> {
+        let n = self
+            .0
+            .execute(
+                "INSERT OR IGNORE INTO sikayetler (etkinlik, kullanici, neden, zaman) VALUES (?1, ?2, ?3, ?4)",
+                params![etkinlik, ben, neden, simdi()],
+            )
+            .map_err(e)?;
+        Ok(n > 0)
+    }
+
+    /// Yönetici: herkesin paylaşımını siler (aynı kurallar: puanlar sahibinde kalır). Dönen: tür ve veri.
+    pub fn etkinlik_sil_yonetici(&self, id: i64) -> R<Option<(String, Value)>> {
+        let sahibi = self.etkinlik_sahibi(id);
+        match sahibi {
+            Some(k) => self.etkinlik_sil(&k, id),
+            None => Ok(None),
+        }
     }
 
     /// Kendi paylaşımını siler (aldığı beğeni ve yorumlar profilde kalır). Silindiyse olayın türü ve verisi.
@@ -1071,8 +1115,8 @@ mod tests {
         assert!(!db.akis("1", None, None, 30).unwrap()[0].begendim);
         // Başkasının yorumunu silemez; olay sahibi silebilir.
         kisi(&db, "3", "Veli");
-        assert!(!db.yorum_sil("3", y).unwrap());
-        assert!(db.yorum_sil("1", y).unwrap());
+        assert!(!db.yorum_sil("3", y, false).unwrap());
+        assert!(db.yorum_sil("1", y, false).unwrap());
 
         // Oyun: 12 saatte bir kez; kapak profilden.
         assert!(db.oyun_basladi("1", "cs2").unwrap());

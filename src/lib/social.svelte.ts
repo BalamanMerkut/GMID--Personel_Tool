@@ -79,6 +79,8 @@ export interface Olay {
   begeni: number;
   begendim: boolean;
   yorumlar: Yorum[];
+  /** Kaç kişi şikâyet etti (yalnız yöneticiye gösterilir). */
+  sikayet?: number;
 }
 
 export interface Mesaj {
@@ -135,6 +137,8 @@ export const sosyal = $state({
   sohbetAcik: false,
   /** Arkadaş oyuna girince sağ altta haber ver. */
   oyunHaberi: true,
+  /** Yönetici: herkesin paylaşımını/yorumunu silebilir, şikâyetleri görür. */
+  yonetici: false,
   /** Sosyal'de seçili konu: "#etiket" ya da gündemdeki oyun/film adı (boşsa tüm akış). */
   konu: null as string | null,
 });
@@ -220,6 +224,26 @@ export async function istek<T>(yontem: string, yol: string, govde?: unknown): Pr
   }
   if (!r.ok) throw new Error((v as { hata?: string }).hata ?? `Sunucu ${r.status} döndü`);
   return v as T;
+}
+
+/** Sunucudan gelen bildirimin yazısı ve simgesi. */
+function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [string, "chat" | "heart" | "flag" | "bell" | "users"] {
+  switch (tur) {
+    case "yorum":
+      return [`${ad} paylaşımına yanıt yazdı`, "chat"];
+    case "begeni":
+      return [`${ad} paylaşımını beğendi`, "heart"];
+    case "sikayet":
+      return [`${ad} bir paylaşımı şikâyet etti${v.metin ? `: ${v.metin}` : ""} · Sosyal'de bak`, "flag"];
+    case "anma":
+      return [`${ad} senden bahsetti`, "users"];
+    case "davet":
+      return [`${ad} seni oyun gecesine çağırıyor${v.metin ? `: ${v.metin}` : ""}`, "bell"];
+    case "hatirlat":
+      return [`Oyun gecesi 15 dakika sonra başlıyor${v.metin ? `: ${v.metin}` : ""}`, "bell"];
+    default:
+      return [`${ad} paylaşımınla ilgilendi`, "bell"];
+  }
 }
 
 // ---------- canlı bağlantı ----------
@@ -310,7 +334,8 @@ function baglan() {
       case "bildirim": {
         const kisi = v.kisi as Kisi;
         sosyal.bildirim++;
-        notify(v.tur === "yorum" ? `${kisi.ad} paylaşımına yorum yaptı` : `${kisi.ad} paylaşımını beğendi`, v.tur === "yorum" ? "chat" : "heart");
+        const [yazi, ikon] = bildirimYazisi(String(v.tur), kisi.ad, v);
+        notify(yazi, ikon);
         break;
       }
       case "hata":
@@ -516,6 +541,9 @@ function baslat() {
   if (!sosyal.anahtar) return;
   calisiyor = true;
   baglan();
+  void istek<{ yonetici?: boolean }>("GET", "/api/ben")
+    .then((b) => (sosyal.yonetici = !!b.yonetici))
+    .catch(() => {});
   esitle(8000);
   void okunmamislariYukle().catch(() => {});
   void arkadaslariYukle().catch(() => {});

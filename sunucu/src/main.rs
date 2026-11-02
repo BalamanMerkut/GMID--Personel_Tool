@@ -13,6 +13,7 @@ mod sayfa;
 mod sosyal;
 mod sosyal_api;
 mod ws;
+mod yedek;
 
 use axum::routing::{delete, get, post, put};
 use axum::Router;
@@ -33,6 +34,10 @@ impl Sunucu {
 
     pub fn oturum(&self, anahtar: &str) -> Option<db::Kullanici> {
         self.db().oturum(anahtar)
+    }
+
+    pub fn yonetici_mi(&self, id: &str) -> bool {
+        self.db().yonetici_mi(id, &self.ayar.yoneticiler)
     }
 
     /// Yüklenen kapak/afişler veritabanının yanında durur.
@@ -76,6 +81,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/akis/{id}/begen", post(sosyal_api::begen))
         .route("/api/akis/{id}/yorum", post(sosyal_api::yorum))
         .route("/api/yorum/{id}", delete(sosyal_api::yorum_sil))
+        .route("/api/akis/{id}/sikayet", post(sosyal_api::sikayet))
         .route("/api/arkadaslar", get(sosyal_api::arkadaslar))
         .route(
             "/api/arkadas/{id}",
@@ -153,6 +159,20 @@ async fn main() {
             }
         }
     });
+    // Gece yedeği: açılışta ve 6 saatte bir bakılır; o günün yedeği yoksa alınır, en yeni 7 gün kalır.
+    let s5 = s.clone();
+    tokio::spawn(async move {
+        let mut t = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
+        loop {
+            t.tick().await;
+            let s6 = s5.clone();
+            match tokio::task::spawn_blocking(move || yedek::al(&s6, db::simdi())).await {
+                Ok(Ok(Some(yol))) => eprintln!("Yedek alındı: {}", yol.display()),
+                Ok(Err(e)) => eprintln!("Yedek alınamadı: {e}"),
+                _ => {}
+            }
+        }
+    });
     // Süresi dolan klipler (7 gün) saatte bir silinir; aldıkları beğeniler profilde kalır.
     let s3 = s.clone();
     tokio::spawn(async move {
@@ -206,6 +226,7 @@ mod tests {
                     ))
                     .join("gmid.db"),
                 discord: None,
+                yoneticiler: Vec::new(),
             },
             db: Mutex::new(db::Db::bellekte()),
             durum: durum::Durum::default(),
@@ -405,6 +426,85 @@ mod tests {
         assert_eq!(akis[0].tur, "gonderi");
         assert_eq!(akis[0].veri["metin"], "Bu akşam CS2?");
         assert!(akis[9].veri["resim"].is_null());
+    }
+
+    #[test]
+    fn gece_yedegi() {
+        let s = sunucu();
+        let k = db::Kullanici {
+            id: "1".into(),
+            ad: "Ali".into(),
+            avatar: None,
+        };
+        s.db().giris(&k).unwrap();
+        let _ = std::fs::remove_dir_all(yedek::klasor(&s));
+        let yol = yedek::al(&s, db::simdi())
+            .unwrap()
+            .expect("ilk yedek alınır");
+        assert!(yol.exists());
+        assert!(
+            yedek::al(&s, db::simdi()).unwrap().is_none(),
+            "aynı gün ikinci kez alınmaz"
+        );
+        // Yedek açılabilir ve içinde kullanıcı var.
+        let c = rusqlite::Connection::open(&yol).unwrap();
+        let n: i64 = c
+            .query_row("SELECT COUNT(*) FROM kullanicilar", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn yonetici_siler_sikayet_bildirir() {
+        let s = sunucu();
+        let kisi = |id: &str, ad: &str| db::Kullanici {
+            id: id.into(),
+            ad: ad.into(),
+            avatar: None,
+        };
+        // İlk giren (Ali) yönetici; Veli değil.
+        let a = s.db().giris(&kisi("1", "Ali")).unwrap();
+        let v = s.db().giris(&kisi("2", "Veli")).unwrap();
+        let z = s.db().giris(&kisi("3", "Zeynep")).unwrap();
+        assert!(s.yonetici_mi("1") && !s.yonetici_mi("2"));
+        let yetki = |k: &str| format!("Bearer {k}");
+        let (_, ben) = iste(
+            &s,
+            Request::get("/api/ben")
+                .header("authorization", yetki(&a))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(ben["yonetici"], true);
+        let g = s.db().gonderi_yaz("2", "uygunsuz", None).unwrap().unwrap();
+        // Zeynep şikâyet eder (ikinci kez sayılmaz), Zeynep silemez, yönetici siler.
+        for beklenen in [true, false] {
+            let (kod, c) = iste(
+                &s,
+                Request::post(format!("/api/akis/{g}/sikayet"))
+                    .header("authorization", yetki(&z))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"neden":"hakaret"}"#))
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(kod, StatusCode::OK);
+            assert_eq!(c["yeni"], beklenen);
+        }
+        assert_eq!(s.db().akis("1", None, None, 10).unwrap()[0].sikayet, 1);
+        let sil = |k: &str| {
+            Request::delete(format!("/api/akis/{g}"))
+                .header("authorization", yetki(k))
+                .body(Body::empty())
+                .unwrap()
+        };
+        let (kod, _) = iste(&s, sil(&z)).await;
+        assert_eq!(kod, StatusCode::FORBIDDEN);
+        let (kod, _) = iste(&s, sil(&a)).await;
+        assert_eq!(kod, StatusCode::OK);
+        assert!(s.db().akis("1", None, None, 10).unwrap().is_empty());
+        let _ = v;
     }
 
     #[tokio::test]

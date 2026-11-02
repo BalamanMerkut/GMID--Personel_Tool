@@ -86,6 +86,8 @@ DISCORD_CLIENT_ID=
 DISCORD_CLIENT_SECRET=
 # GMID Discord sunucusunun kimliği (yalnız üyeler girebilsin)
 DISCORD_SUNUCU_ID=
+# Yöneticiler (herkesin gönderisini silebilir, şikâyetleri görür); boşsa ilk giriş yapan kişi.
+GMID_YONETICILER=
 ENV
 fi
 chmod 600 /etc/gmid/sunucu.env

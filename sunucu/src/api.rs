@@ -66,7 +66,11 @@ pub async fn giris(State(s): State<Arc<Sunucu>>, Json(i): Json<GirisIstek>) -> S
 }
 
 pub async fn ben(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> Sonuc {
-    Ok(Json(json!(kim(&s, &h)?)))
+    let k = kim(&s, &h)?;
+    let yonetici = s.yonetici_mi(&k.id);
+    Ok(Json(
+        json!({ "id": k.id, "ad": k.ad, "avatar": k.avatar, "yonetici": yonetici }),
+    ))
 }
 
 pub async fn cikis(State(s): State<Arc<Sunucu>>, h: HeaderMap) -> StatusCode {

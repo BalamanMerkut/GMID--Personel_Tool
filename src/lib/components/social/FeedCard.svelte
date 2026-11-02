@@ -13,6 +13,31 @@
   /** Silme iki tıkla: ilk tık "Silinsin mi?" olur, birkaç saniye içinde ikinci tık siler. */
   let silOnay = $state(false);
   let silZaman: ReturnType<typeof setTimeout> | undefined;
+  let sikayetOnay = $state(false);
+  let sikayetZaman: ReturnType<typeof setTimeout> | undefined;
+  let sikayetEttim = $state(false);
+  const benim = $derived(o.kisi.id === sosyal.ben?.id);
+  /** Kendi paylaşımım ya da ben yöneticiyim: silebilirim. */
+  const silebilir = $derived(benim || sosyal.yonetici);
+
+  /** Şikâyet de iki tıkla: ilk tık "Şikâyet edilsin mi?", ikinci tık yöneticiye bildirir. */
+  async function sikayet() {
+    if (!sikayetOnay) {
+      sikayetOnay = true;
+      clearTimeout(sikayetZaman);
+      sikayetZaman = setTimeout(() => (sikayetOnay = false), 4000);
+      return;
+    }
+    clearTimeout(sikayetZaman);
+    sikayetOnay = false;
+    try {
+      await istek("POST", `/api/akis/${o.id}/sikayet`, {});
+      sikayetEttim = true;
+      notify("Yöneticiye bildirildi, teşekkürler", "flag");
+    } catch (e) {
+      hata(e);
+    }
+  }
 
   const hata = (e: unknown) => notify(String(e instanceof Error ? e.message : e), "info");
 
@@ -79,11 +104,21 @@
       {#if eylem(o)}<span class="eylem-yazi">{eylem(o)}</span>{/if}
       <span class="nokta">·</span>
       <span class="zaman" title={new Date(o.zaman).toLocaleString("tr-TR")}>{once(o.zaman)}</span>
-      {#if o.kisi.id === sosyal.ben?.id}
-        <button class="ic sil" class:onay={silOnay} title={silOnay ? "Silmek için yeniden tıkla" : "Gönderiyi sil"} aria-label="Gönderiyi sil" onclick={sil}>
-          <Icon name="trash" size={15} />{#if silOnay}<span>Silinsin mi?</span>{/if}
-        </button>
-      {/if}
+      <span class="sag-ust">
+        {#if sosyal.yonetici && o.sikayet}
+          <span class="sikayet-rozet" title="Bu paylaşımı şikâyet eden kişi sayısı"><Icon name="flag" size={13} />{o.sikayet}</span>
+        {/if}
+        {#if !benim && sosyal.ben}
+          <button class="ic sil" class:onay={sikayetOnay} disabled={sikayetEttim} title={sikayetEttim ? "Şikâyet edildi" : sikayetOnay ? "Göndermek için yeniden tıkla" : "Uygunsuz içeriği şikâyet et"} aria-label="Şikâyet et" onclick={sikayet}>
+            <Icon name="flag" size={15} />{#if sikayetOnay}<span>Şikâyet edilsin mi?</span>{/if}
+          </button>
+        {/if}
+        {#if silebilir}
+          <button class="ic sil" class:onay={silOnay} title={silOnay ? "Silmek için yeniden tıkla" : benim ? "Gönderiyi sil" : "Yönetici olarak sil"} aria-label="Gönderiyi sil" onclick={sil}>
+            <Icon name="trash" size={15} />{#if silOnay}<span>Silinsin mi?</span>{/if}
+          </button>
+        {/if}
+      </span>
     </header>
 
     {#if o.tur === "gonderi"}
@@ -131,7 +166,7 @@
               <span><button class="ad kucuk-ad" onclick={() => profilGoster(y.kisi.id)}>{y.kisi.ad}</button> <span class="zaman">· {once(y.zaman)}</span></span>
               <span class="yorum-metin">{y.metin}</span>
             </div>
-            {#if y.kisi.id === sosyal.ben?.id || o.kisi.id === sosyal.ben?.id}
+            {#if y.kisi.id === sosyal.ben?.id || o.kisi.id === sosyal.ben?.id || sosyal.yonetici}
               <button class="ic kucuk" title="Yanıtı sil" aria-label="Yanıtı sil" onclick={() => yorumSil(y.id)}><Icon name="x" size={13} /></button>
             {/if}
           </div>
@@ -159,7 +194,9 @@
   .ad:hover { text-decoration: underline; }
   .eylem-yazi { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .nokta, .zaman { color: var(--dim); font-size: 13.5px; white-space: nowrap; }
-  header .sil { margin-left: auto; align-self: center; }
+  .sag-ust { margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 2px; }
+  .sikayet-rozet { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(229, 72, 77, 0.16); color: #ff8a8d; font-size: 12px; font-weight: 700; }
+  .ic:disabled { opacity: 0.35; cursor: default; }
   .metin { margin: 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
   .etiket { border: 0; background: none; padding: 0; font: inherit; color: var(--gold); cursor: pointer; }
   .etiket:hover { text-decoration: underline; color: var(--gold-glow); }

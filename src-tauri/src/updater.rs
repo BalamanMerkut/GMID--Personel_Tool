@@ -267,23 +267,50 @@ fn updates_dir(app: &AppHandle) -> std::path::PathBuf {
         .join("Güncellemeler")
 }
 
-/// Kurulumu görünür biçimde başlatır: ilerleme penceresi açılır, soru sorulmaz (`/P`), eski sürümün üzerine
-/// kurulur (`/UPDATE`, kısayollar yeniden oluşturulmaz) ve bitince GMID yeniden açılır (`/R`).
+/// Kurulum, bu uygulama **tamamen kapandıktan sonra** başlar: önceden kurulum hemen açılıp bitince yeni sürümü
+/// başlatıyordu (`/R`); eski sürüm o sırada hâlâ kapanıyorsa yeni sürüm "zaten açık" sanıp çıkıyor, ortada hiç
+/// pencere kalmıyordu. Gizli bir PowerShell bu sürecin bitmesini bekler (en çok 60 sn, sonra zorla kapatır),
+/// kalan GMID Tool süreçlerini kapatır, sonra kurulumu görünür biçimde başlatır: ilerleme penceresi açılır, soru
+/// sorulmaz (`/P`), eski sürümün üzerine kurulur (`/UPDATE`) ve bitince GMID yeniden açılır (`/R`).
 #[cfg(windows)]
 fn launch_installer(setup: &Path) -> Result<(), String> {
-    use windows::core::{w, HSTRING, PCWSTR};
-    use windows::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW};
-    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let file = HSTRING::from(setup.as_os_str());
-    let mut info = SHELLEXECUTEINFOW {
-        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
-        lpVerb: w!("open"),
-        lpFile: PCWSTR(file.as_ptr()),
-        lpParameters: w!("/P /R /UPDATE"),
-        nShow: SW_SHOWNORMAL.0,
-        ..Default::default()
-    };
-    unsafe { ShellExecuteExW(&mut info) }.map_err(|e| format!("Kurulum başlatılamadı: {e}"))
+    use base64::Engine;
+    let script = waiter_script(std::process::id(), setup);
+    let utf16: Vec<u8> = script
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-EncodedCommand",
+        &encoded,
+    ]);
+    crate::util::hide_console(&mut cmd);
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Kurulum başlatılamadı: {e}"))
+}
+
+/// Bekleyici betik: GMID kapanınca (gerekirse zorla) kurulumu başlatır.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn waiter_script(pid: u32, setup: &Path) -> String {
+    // Tek tırnak içinde yalnız ' kaçırılır.
+    let path = setup.to_string_lossy().replace('\'', "''");
+    format!(
+        "$ErrorActionPreference = 'SilentlyContinue'\n\
+         Wait-Process -Id {pid} -Timeout 60\n\
+         Stop-Process -Id {pid} -Force\n\
+         Get-Process -Name 'gmid-tool','GMID Tool' | Stop-Process -Force\n\
+         Start-Sleep -Milliseconds 800\n\
+         Start-Process -FilePath '{path}' -ArgumentList '/P','/R','/UPDATE'\n"
+    )
 }
 
 #[cfg(not(windows))]
@@ -323,6 +350,19 @@ pub fn start(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn waiter_waits_then_starts_installer() {
+        let s = waiter_script(
+            4242,
+            Path::new(r"C:\Users\Ali'nin\AppData\Güncellemeler\GMID-Tool-Kurulum-105.exe"),
+        );
+        let bekle = s.find("Wait-Process -Id 4242").unwrap();
+        let kur = s.find("Start-Process -FilePath").unwrap();
+        assert!(bekle < kur, "önce bekler, sonra kurar");
+        assert!(s.contains("Ali''nin"), "tek tırnak kaçırılır");
+        assert!(s.contains("'/P','/R','/UPDATE'"));
+    }
 
     #[test]
     fn release_is_parsed_from_github_json() {

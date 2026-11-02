@@ -17,6 +17,8 @@ pub struct Ayar {
     pub veritabani: PathBuf,
     /// Discord uygulaması henüz açılmadıysa `None`: sunucu çalışır ama giriş kapalıdır.
     pub discord: Option<DiscordAyar>,
+    /// Yöneticilerin Discord kimlikleri (`GMID_YONETICILER=123,456`). Boşsa ilk giriş yapan kişi yöneticidir.
+    pub yoneticiler: Vec<String>,
 }
 
 fn oku(ad: &str) -> Option<String> {
@@ -45,6 +47,15 @@ impl Ayar {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("gmid.db")),
             discord,
+            yoneticiler: oku("GMID_YONETICILER")
+                .map(|v| {
+                    v.split([',', ' '])
+                        .map(str::trim)
+                        .filter(|x| !x.is_empty())
+                        .map(String::from)
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }

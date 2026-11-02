@@ -121,6 +121,13 @@ impl Db {
     }
 
     /// Süresi dolmuş oturumları siler (günde bir).
+    /// Veritabanının tutarlı bir kopyasını yazar (sunucu çalışırken de güvenli).
+    pub fn yedekle(&self, hedef: &std::path::Path) -> rusqlite::Result<()> {
+        self.0
+            .execute("VACUUM INTO ?1", [hedef.to_string_lossy().as_ref()])
+            .map(|_| ())
+    }
+
     pub fn temizle(&self) -> usize {
         self.0
             .execute(

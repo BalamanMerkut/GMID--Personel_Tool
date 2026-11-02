@@ -195,9 +195,50 @@ pub async fn gonderi(
     Ok(Json(json!({ "id": id })))
 }
 
+#[derive(Deserialize)]
+pub struct SikayetIstek {
+    neden: Option<String>,
+}
+
+/// Şikâyet et: çevrim içi yöneticilere bildirim gider; yönetici akışta şikâyet sayısını görür ve silebilir.
+pub async fn sikayet(
+    State(s): State<Arc<Sunucu>>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+    govde: Option<Json<SikayetIstek>>,
+) -> Sonuc {
+    let ben = kim(&s, &h)?;
+    sahip(&s, id)?;
+    let neden: Option<String> = govde
+        .and_then(|Json(g)| g.neden)
+        .map(|n| n.trim().chars().take(300).collect::<String>())
+        .filter(|n| !n.is_empty());
+    let yeni = s
+        .db()
+        .sikayet_et(&ben.id, id, neden.as_deref())
+        .map_err(ic)?;
+    if yeni {
+        let yoneticiler: Vec<String> = {
+            let db = s.db();
+            db.kisiler()
+                .map_err(ic)?
+                .into_iter()
+                .map(|(k, _)| k.id)
+                .filter(|k| db.yonetici_mi(k, &s.ayar.yoneticiler))
+                .collect()
+        };
+        let v = json!({ "tip": "bildirim", "tur": "sikayet", "kisi": ben, "etkinlik": id, "metin": neden });
+        for y in yoneticiler {
+            s.durum.kisiye(&y, &v);
+        }
+    }
+    Ok(Json(json!({ "yeni": yeni })))
+}
+
 pub async fn yorum_sil(State(s): State<Arc<Sunucu>>, h: HeaderMap, Path(id): Path<i64>) -> Sonuc {
     let ben = kim(&s, &h)?;
-    if !s.db().yorum_sil(&ben.id, id).map_err(ic)? {
+    let yonetici = s.yonetici_mi(&ben.id);
+    if !s.db().yorum_sil(&ben.id, id, yonetici).map_err(ic)? {
         return Err(hata(StatusCode::FORBIDDEN, "Bu yorumu silemezsin"));
     }
     s.durum.yay(json!({ "tip": "akis" }));
@@ -210,7 +251,12 @@ pub async fn etkinlik_sil(
     Path(id): Path<i64>,
 ) -> Sonuc {
     let ben = kim(&s, &h)?;
-    let silinen = s.db().etkinlik_sil(&ben.id, id).map_err(ic)?;
+    // Yönetici herkesin paylaşımını silebilir (uygunsuz içerik).
+    let silinen = if s.yonetici_mi(&ben.id) {
+        s.db().etkinlik_sil_yonetici(id).map_err(ic)?
+    } else {
+        s.db().etkinlik_sil(&ben.id, id).map_err(ic)?
+    };
     let Some((tur, veri)) = silinen else {
         return Err(hata(
             StatusCode::FORBIDDEN,
