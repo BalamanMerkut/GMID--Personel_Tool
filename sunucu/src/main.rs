@@ -11,6 +11,7 @@ mod discord;
 mod durum;
 mod gece;
 mod klip;
+mod oda;
 mod sayfa;
 mod sosyal;
 mod sosyal_api;
@@ -27,8 +28,10 @@ pub struct Sunucu {
     pub durum: durum::Durum,
     /// Klip yüklemeleri sırayla: kişi başı ve toplam sınır aynı anda gelen yüklemelerle aşılmasın.
     pub klip_kilidi: tokio::sync::Mutex<()>,
-    /// Birlikte dinleme odaları (bellekte).
+    /// Birlikte dinleme odaları (bellekte, eski tek şarkılık).
     pub dinleme: dinle::Odalar,
+    /// Dinleme odaları 2.0 (bellekte).
+    pub odalar: oda::Odalar,
 }
 
 impl Sunucu {
@@ -90,6 +93,18 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
             "/api/dinle/{sahip}/katil",
             post(dinle::katil).delete(dinle::ayril),
         )
+        .route("/api/odalar", get(oda::liste))
+        .route("/api/oda", post(oda::ac))
+        .route(
+            "/api/oda/{id}",
+            axum::routing::patch(oda::ayarla).delete(oda::kapat),
+        )
+        .route("/api/oda/{id}/katil", post(oda::katil).delete(oda::ayril))
+        .route("/api/oda/{id}/sira", post(oda::sira_ekle))
+        .route("/api/oda/{id}/sira/{oge}", delete(oda::sira_sil))
+        .route("/api/oda/{id}/oynat", post(oda::oynat))
+        .route("/api/oda/{id}/sonraki", post(oda::sonraki))
+        .route("/api/oda/{id}/at/{kisi}", post(oda::at))
         .route("/api/gece", post(gece::ac))
         .route("/api/geceler", get(gece::liste))
         .route("/api/gece/{id}", delete(gece::sil))
@@ -163,6 +178,7 @@ async fn main() {
         durum: durum::Durum::default(),
         klip_kilidi: tokio::sync::Mutex::new(()),
         dinleme: dinle::Odalar::default(),
+        odalar: oda::Odalar::default(),
     });
     // Süresi dolan oturumlar günde bir temizlenir.
     let s2 = s.clone();
@@ -259,6 +275,7 @@ mod tests {
             durum: durum::Durum::default(),
             klip_kilidi: tokio::sync::Mutex::new(()),
             dinleme: dinle::Odalar::default(),
+            odalar: oda::Odalar::default(),
         })
     }
 
@@ -533,6 +550,91 @@ mod tests {
         assert_eq!(kod, StatusCode::OK);
         assert!(s.db().akis("1", None, None, 10).unwrap().is_empty());
         let _ = v;
+    }
+
+    #[tokio::test]
+    async fn oda_ac_katil_ekle_yonet() {
+        let s = sunucu();
+        let kisi = |id: &str| db::Kullanici {
+            id: id.into(),
+            ad: format!("K{id}"),
+            avatar: None,
+        };
+        let a = s.db().giris(&kisi("1")).unwrap();
+        let b = s.db().giris(&kisi("2")).unwrap();
+        let c = s.db().giris(&kisi("3")).unwrap();
+        let istek = |yontem: &str, yol: String, k: &str, govde: &str| {
+            Request::builder()
+                .method(yontem)
+                .uri(yol)
+                .header("authorization", format!("Bearer {k}"))
+                .header("content-type", "application/json")
+                .body(Body::from(govde.to_string()))
+                .unwrap()
+        };
+        let (kod, v) = iste(
+            &s,
+            istek(
+                "POST",
+                "/api/oda".into(),
+                &a,
+                r#"{"ad":"Akşam Rap","sinir":2,"yetki":"herkes"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK, "{v}");
+        let id = v["oda"]["id"].as_str().unwrap().to_string();
+        assert_eq!(v["oda"]["ad"], "Akşam Rap");
+        // B katılır, C sınır yüzünden giremez.
+        let (kod, _) = iste(&s, istek("POST", format!("/api/oda/{id}/katil"), &b, "")).await;
+        assert_eq!(kod, StatusCode::OK);
+        let (kod, _) = iste(&s, istek("POST", format!("/api/oda/{id}/katil"), &c, "")).await;
+        assert_eq!(kod, StatusCode::CONFLICT);
+        // B şarkı ekler (herkes ekleyebilir): hemen çalar.
+        let (kod, v) = iste(
+            &s,
+            istek(
+                "POST",
+                format!("/api/oda/{id}/sira"),
+                &b,
+                r#"{"baslik":"Şarkı","url":"https://youtu.be/x","sure":200}"#,
+            ),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK, "{v}");
+        assert_eq!(v["oda"]["simdiki"]["ekleyen"]["id"], "2");
+        assert_eq!(v["oda"]["caliyor"], true);
+        // B duraklatamaz (DJ değil), A duraklatır.
+        let dur = r#"{"konum":12.5,"caliyor":false}"#;
+        let (kod, _) = iste(&s, istek("POST", format!("/api/oda/{id}/oynat"), &b, dur)).await;
+        assert_eq!(kod, StatusCode::FORBIDDEN);
+        let (kod, v) = iste(&s, istek("POST", format!("/api/oda/{id}/oynat"), &a, dur)).await;
+        assert_eq!(kod, StatusCode::OK);
+        assert_eq!(v["oda"]["caliyor"], false);
+        // A, B'yi DJ yapar; B artık atlayabilir.
+        let (kod, _) = iste(
+            &s,
+            istek(
+                "PATCH",
+                format!("/api/oda/{id}"),
+                &a,
+                r#"{"dj":{"kisi":"2","ver":true}}"#,
+            ),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK);
+        let (kod, v) = iste(
+            &s,
+            istek("POST", format!("/api/oda/{id}/sonraki"), &b, "{}"),
+        )
+        .await;
+        assert_eq!(kod, StatusCode::OK);
+        assert!(v["oda"]["simdiki"].is_null());
+        // A ayrılınca oda B'ye geçer.
+        let (kod, _) = iste(&s, istek("DELETE", format!("/api/oda/{id}/katil"), &a, "")).await;
+        assert_eq!(kod, StatusCode::OK);
+        let (_, v) = iste(&s, istek("GET", "/api/odalar".into(), &c, "")).await;
+        assert_eq!(v["odalar"][0]["sahip"]["id"], "2");
     }
 
     #[tokio::test]

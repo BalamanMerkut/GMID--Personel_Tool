@@ -450,7 +450,12 @@ pub async fn social_stream(app: AppHandle, url: String) -> CmdResult<String> {
 /// en çok 80 MB) ve oradan çalınır. Son 6 şarkı saklanır (aynı şarkıya yeniden katılmak anında olur), eskileri
 /// silinir. Kullanıcının kütüphanesine bir şey eklenmez.
 #[tauri::command]
-pub async fn social_stream_audio(app: AppHandle, url: String) -> CmdResult<tauri::ipc::Response> {
+pub async fn social_stream_audio(
+    app: AppHandle,
+    url: String,
+    video: Option<bool>,
+) -> CmdResult<tauri::ipc::Response> {
+    let video = video.unwrap_or(false);
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("Geçersiz bağlantı".into());
     }
@@ -461,6 +466,8 @@ pub async fn social_stream_audio(app: AppHandle, url: String) -> CmdResult<tauri
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let mut h = std::collections::hash_map::DefaultHasher::new();
         url.hash(&mut h);
+        // Birlikte izleme: aynı bağlantının görüntülü kopyası ayrı saklanır.
+        video.hash(&mut h);
         let ad = format!("{:016x}", h.finish());
         let onceki = std::fs::read_dir(&dir).ok().and_then(|d| {
             d.filter_map(Result::ok).map(|e| e.path()).find(|p| {
@@ -473,18 +480,26 @@ pub async fn social_stream_audio(app: AppHandle, url: String) -> CmdResult<tauri
             None => {
                 let sablon = dir.join(format!("{ad}.%(ext)s"));
                 let mut cmd = crate::downloader::tools::ytdlp(&root);
-                cmd.args([
-                    "--no-playlist",
-                    "--no-warnings",
-                    "--no-part",
-                    "--max-filesize",
-                    "80M",
-                    "-f",
-                    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
-                    "--print",
-                    "after_move:filepath",
-                    "-o",
-                ])
+                cmd.args(["--no-playlist", "--no-warnings", "--no-part"]);
+                if video {
+                    // En çok 720p, tek MP4 (ses + görüntü); uygulamanın oynatıcısı açar.
+                    cmd.args([
+                        "--max-filesize",
+                        "600M",
+                        "-f",
+                        "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[ext=mp4][height<=720]/b[height<=720]/b",
+                        "--merge-output-format",
+                        "mp4",
+                    ]);
+                } else {
+                    cmd.args([
+                        "--max-filesize",
+                        "80M",
+                        "-f",
+                        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                    ]);
+                }
+                cmd.args(["--print", "after_move:filepath", "-o"])
                 .arg(&sablon)
                 .args(["--", &url]);
                 let out = cmd.output().map_err(|_| {

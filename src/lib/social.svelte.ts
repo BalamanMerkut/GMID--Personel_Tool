@@ -371,6 +371,7 @@ function baglan() {
         break;
       }
       case "dinle":
+      case "oda":
         for (const f of wsEk) f(v);
         break;
       case "hata":

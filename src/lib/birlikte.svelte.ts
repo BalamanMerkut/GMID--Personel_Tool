@@ -1,10 +1,9 @@
-// Birlikte dinleme: oynatıcıda çalan şarkıyı arkadaşlarla aynı anda dinlemek.
-//   Yayın (sahip): Oynatıcı'da "Arkadaşlarla dinle" açılınca her oynat/duraklat/sarma/parça değişikliği
-//     sunucuya bildirilir (dinleme odası).
-//   Bağlantıyla oda (indirmeden): Sosyal'de YouTube bağlantısı ya da şarkı adı yazılır; sahibin GMID'i de şarkıyı
-//     kaynağından çalar (oynatıcıya ve indirmeye gerek yok), duraklat/sar/değiştir çubuktan yapılır.
-//   Dinleyen: odaya katılınca şarkının kaynağından (YouTube vb.) kendi bilgisayarında ses alınır ve sahibin
-//     konumuna eşitlenir (saat farkı sunucu saatiyle düzeltilir; 1,2 sn'den fazla kayınca sarılır).
+// Dinleme odaları (2.0): önce oda açılır (ad, kişi sınırı, kimler görebilir, kim şarkı ekleyebilir), sonra şarkılar
+// ve videolar sıraya eklenir. Oda sunucuda durur; herkes kendi bilgisayarında aynı şarkıyı aynı saniyeden çalar.
+//   Sahip ve DJ'ler: oynat/duraklat, sar, atla. Sahip: ayarlar, DJ yap, odadan çıkar, odayı kapat.
+//   Ekleme yetkisi odaya göre: yalnız sahip / sahip + DJ'ler / herkes.
+// Ses (ya da 720p görüntü) GMID'in kendi aracıyla (yt-dlp) geçici klasöre alınır ve oradan çalınır: kütüphaneye
+// eklenmez, doğrudan YouTube adresini çalmaktaki "desteklenen kaynak yok" hatası olmaz.
 import { api, inTauri } from "./api";
 import { controls, player } from "./player.svelte";
 import { istek, sosyal, wsEk, type Kisi } from "./social.svelte";
@@ -16,62 +15,93 @@ export interface Sarki {
   url: string;
   kapak: string | null;
   sure: number | null;
+  /** Birlikte izleme: görüntüsüyle. */
+  video: boolean;
 }
 
-export interface Oda {
-  sahip: Kisi;
+export interface Oge {
+  id: number;
   sarki: Sarki;
+  ekleyen: Kisi;
+}
+
+export type Gizlilik = "herkes" | "arkadaslar";
+export type Yetki = "sahip" | "dj" | "herkes";
+
+export interface Oda {
+  id: string;
+  ad: string;
+  sahip: Kisi;
+  gizlilik: Gizlilik;
+  sinir: number | null;
+  yetki: Yetki;
+  djler: string[];
+  uyeler: Kisi[];
+  simdiki: Oge | null;
+  sira: Oge[];
   /** `guncelleme` anındaki konum (sn). */
   konum: number;
   caliyor: boolean;
   /** Sunucu saatiyle (ms). */
   guncelleme: number;
-  dinleyiciler: Kisi[];
 }
 
 export const birlikte = $state({
-  /** Açık odalar (sahip → oda). */
+  /** Görebildiğim odalar (kimlik → oda). */
   odalar: {} as Record<string, Oda>,
-  /** Ben yayın yapıyorum. */
-  yayin: false,
-  /** Yayının kaynağı: oynatıcıdaki parça ya da bağlantıyla açılan oda (indirmeden). */
-  kaynak: null as "oynatici" | "baglanti" | null,
-  /** Bağlantılı odada çalan şarkı, konumu ve süresi (çubuk için). */
-  simdiki: null as Sarki | null,
-  hostCaliyor: false,
-  hostKonum: 0,
-  hostSure: 0,
-  /** Bağlantı / şarkı adı çözülüyor. */
-  aciliyor: false,
-  /** Oda açılırken hangi aşamada (düğmede yazar). */
-  asama: "",
-  /** Dinlediğim odanın sahibi. */
-  dinlenen: null as string | null,
-  /** Ses kaynağı hazırlanıyor (yt-dlp). */
+  /** İçinde bulunduğum oda. */
+  odaId: null as string | null,
+  /** Oda paneli açık. */
+  panel: false,
+  /** Şarkı hazırlanıyor (yt-dlp). */
   hazirlaniyor: false,
+  /** Şarkı ekleniyor: hangi aşamada (düğmede yazar). */
+  asama: "",
   ses: 0.8,
+  /** Yerelde çalan konum ve süre (çubuk için). */
+  konum: 0,
+  sure: 0,
 });
 
 /** Sunucu saati − yerel saat (ms). */
 let fark = 0;
-let ses: HTMLAudioElement | null = null;
-/** Şu an yüklü olan şarkının kaynak sayfası. */
-let yukluKaynak = "";
+let medya: HTMLVideoElement | null = null;
+/** Yüklü olan sıra öğesi. */
+let yukluOge: number | null = null;
+let blob: string | null = null;
+
+const ben = () => sosyal.ben?.id ?? "";
+const hataYaz = (e: unknown) => String(e instanceof Error ? e.message : e);
+
+export function benimOdam(): Oda | null {
+  return birlikte.odaId ? (birlikte.odalar[birlikte.odaId] ?? null) : null;
+}
+export const yonetir = (o: Oda, id = ben()) => o.sahip.id === id || o.djler.includes(id);
+export const ekleyebilir = (o: Oda, id = ben()) =>
+  o.yetki === "sahip" ? o.sahip.id === id : o.yetki === "dj" ? yonetir(o, id) : o.uyeler.some((u) => u.id === id);
+
+export function odaListesi(): Oda[] {
+  return Object.values(birlikte.odalar).sort((a, b) => b.uyeler.length - a.uyeler.length);
+}
 
 function saat(simdi: unknown) {
   if (typeof simdi === "number") fark = simdi - Date.now();
 }
 
-export function odaListesi(): Oda[] {
-  return Object.values(birlikte.odalar).sort((a, b) => b.dinleyiciler.length - a.dinleyiciler.length);
+function odaYaz(o: Oda) {
+  birlikte.odalar = { ...birlikte.odalar, [o.id]: o };
 }
 
 export async function odalariYukle() {
   if (!sosyal.anahtar) return;
   try {
-    const r = await istek<{ odalar: Oda[]; simdi: number }>("GET", "/api/dinle");
+    const r = await istek<{ odalar: Oda[]; simdi: number }>("GET", "/api/odalar");
     saat(r.simdi);
-    birlikte.odalar = Object.fromEntries(r.odalar.map((o) => [o.sahip.id, o]));
+    birlikte.odalar = Object.fromEntries(r.odalar.map((o) => [o.id, o]));
+    // Bağlantı koptuysa sunucu odadan çıkarmış olabilir.
+    const o = benimOdam();
+    if (birlikte.odaId && (!o || !o.uyeler.some((u) => u.id === ben()))) cikildi();
+    else if (o) void eslestir();
   } catch {
     /* sunucu henüz bilmiyor */
   }
@@ -79,328 +109,290 @@ export async function odalariYukle() {
 
 // Sunucudan gelen oda değişiklikleri.
 wsEk.add((v) => {
-  if (v.tip !== "dinle") return;
+  if (v.tip !== "oda") return;
   saat(v.simdi);
   if (typeof v.kapandi === "string") {
-    const id = v.kapandi;
-    const { [id]: _, ...kalan } = birlikte.odalar;
+    const { [v.kapandi]: _, ...kalan } = birlikte.odalar;
     birlikte.odalar = kalan;
-    if (id === sosyal.ben?.id) {
-      birlikte.yayin = false;
-      if (birlikte.kaynak === "baglanti") hostDurdur();
-      birlikte.kaynak = null;
-    }
-    if (birlikte.dinlenen === id) {
-      durdur();
-      birlikte.dinlenen = null;
+    if (birlikte.odaId === v.kapandi) {
+      cikildi();
       notify("Dinleme odası kapandı", "headphones");
     }
     return;
   }
-  const oda = v.oda as Oda | undefined;
-  if (!oda) return;
-  birlikte.odalar = { ...birlikte.odalar, [oda.sahip.id]: oda };
-  if (birlikte.dinlenen === oda.sahip.id) void eslestir();
-});
-
-// ---------- ses kaynağı ----------
-
-/** Şimdiki blob adresleri (eskisi serbest bırakılsın). */
-const bloblar: Record<"host" | "dinle", string | null> = { host: null, dinle: null };
-
-/**
- * Şarkının sesi: GMID ses dosyasını geçici klasöre alır (yt-dlp), baytlar bir blob adresiyle çalınır. YouTube'un
- * doğrudan adresini uygulama içinde çalmak bazı bilgisayarlarda "desteklenen kaynak yok" hatası veriyordu.
- */
-async function sesAdresi(url: string, kim: "host" | "dinle"): Promise<string> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  const bayt = await invoke<ArrayBuffer>("social_stream_audio", { url });
-  const tur = sesTuru(new Uint8Array(bayt.slice(0, 12)));
-  const adres = URL.createObjectURL(new Blob([bayt], { type: tur }));
-  const eski = bloblar[kim];
-  bloblar[kim] = adres;
-  // Eskisi çalan öğeden ayrıldıktan sonra bırakılır.
-  if (eski) setTimeout(() => URL.revokeObjectURL(eski), 2000);
-  return adres;
-}
-
-/** Dosyanın ilk baytlarından ses türü (m4a / webm / mp3 / ogg). */
-function sesTuru(b: Uint8Array): string {
-  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "audio/mp4";
-  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "audio/webm";
-  if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg";
-  return "audio/mpeg";
-}
-
-// ---------- yayın (sahip) ----------
-
-let bekleyen: ReturnType<typeof setTimeout> | undefined;
-let sonDurum: { item: Download; konum: number; caliyor: boolean } | null = null;
-
-/** Oynatıcı her değişiklikte çağırır; yayın açıksa (kısa bir beklemeyle) sunucuya bildirir. */
-export function yayinDurumu(item: Download | null, konum: number, caliyor: boolean) {
-  // Bağlantıyla açılmış oda oynatıcıyı dinlemez.
-  if (birlikte.kaynak === "baglanti") return;
-  if (!item) {
-    if (birlikte.yayin) void yayinBitir();
+  if (typeof v.atildi === "string" && birlikte.odaId === v.atildi) {
+    cikildi();
+    notify(`"${String(v.ad ?? "Oda")}" odasından çıkarıldın`, "info");
     return;
   }
-  sonDurum = { item, konum, caliyor };
-  if (!birlikte.yayin) return;
-  clearTimeout(bekleyen);
-  bekleyen = setTimeout(() => void gonder(), 250);
+  const o = v.oda as Oda | undefined;
+  if (!o) return;
+  odaYaz(o);
+  if (birlikte.odaId === o.id) void eslestir();
+});
+
+// ---------------- oda ----------------
+
+export interface OdaAyar {
+  ad?: string;
+  gizlilik?: Gizlilik;
+  /** 0: sınırsız. */
+  sinir?: number;
+  yetki?: Yetki;
 }
 
-async function gonder() {
-  if (!birlikte.yayin || !sonDurum) return;
-  const { item, konum, caliyor } = sonDurum;
-  try {
-    await istek("POST", "/api/dinle", {
-      baslik: item.title,
-      url: item.url,
-      kapak: item.thumbnail?.startsWith("https://") ? item.thumbnail : null,
-      sure: item.duration,
-      konum,
-      caliyor,
-    });
-  } catch (e) {
-    birlikte.yayin = false;
-    notify(String(e instanceof Error ? e.message : e), "info");
-  }
-}
-
-/** Parça paylaşılabilir mi (internetten indirilmiş, kaynak sayfası var)? */
-export const paylasilabilir = (item: Download | null) => !!item && /^https?:\/\//.test(item.url);
-
-export async function yayinBaslat() {
+export async function odaAc(a: OdaAyar = {}) {
+  if (!inTauri) return notify("Dinleme odaları yalnız GMID Tool'da çalışır", "info");
   if (!sosyal.anahtar) return notify("Önce Topluluk'tan Discord ile giriş yap", "info");
-  if (!paylasilabilir(sonDurum?.item ?? player.item)) return notify("Bu parçanın internet kaynağı yok", "info");
-  if (birlikte.dinlenen) await ayril();
-  if (birlikte.kaynak === "baglanti") hostDurdur();
-  birlikte.kaynak = "oynatici";
-  birlikte.yayin = true;
-  if (!sonDurum && player.item) sonDurum = { item: player.item, konum: 0, caliyor: player.playing };
-  await gonder();
-  if (birlikte.yayin) notify("Arkadaşların artık seninle dinleyebilir (Sosyal → Birlikte dinle)", "headphones");
-}
-
-export async function yayinBitir() {
-  birlikte.yayin = false;
-  if (birlikte.kaynak === "baglanti") hostDurdur();
-  birlikte.kaynak = null;
-  clearTimeout(bekleyen);
-  await istek("DELETE", "/api/dinle").catch(() => {});
-}
-
-// ---------- dinleyen ----------
-
-function durdur() {
-  if (ses) {
-    ses.pause();
-    ses.removeAttribute("src");
-    ses.load();
-  }
-  yukluKaynak = "";
-}
-
-export async function katil(sahip: string) {
-  if (!inTauri) return notify("Birlikte dinleme yalnız GMID Tool'da çalışır", "info");
-  if (birlikte.yayin) await yayinBitir();
-  // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).
-  if (player.playing) controls.toggle();
   try {
-    const r = await istek<{ oda: Oda | null; simdi: number }>("POST", `/api/dinle/${sahip}/katil`);
+    const r = await istek<{ oda: Oda; simdi: number }>("POST", "/api/oda", a);
     saat(r.simdi);
-    if (r.oda) birlikte.odalar = { ...birlikte.odalar, [sahip]: r.oda };
-    birlikte.dinlenen = sahip;
+    odaYaz(r.oda);
+    birlikte.odaId = r.oda.id;
+    birlikte.panel = true;
+  } catch (e) {
+    const m = hataYaz(e);
+    notify(m.includes("404") ? "GMID sunucusu henüz güncellenmemiş (Mola sohbetinde sunucu güncellemesi)" : m, "info");
+  }
+}
+
+export async function ayarla(d: OdaAyar & { dj?: { kisi: string; ver: boolean } }) {
+  const id = birlikte.odaId;
+  if (!id) return;
+  await istek<{ oda: Oda }>("PATCH", `/api/oda/${id}`, d)
+    .then((r) => odaYaz(r.oda))
+    .catch((e) => notify(hataYaz(e), "info"));
+}
+
+export async function katil(id: string) {
+  if (!inTauri) return notify("Dinleme odaları yalnız GMID Tool'da çalışır", "info");
+  if (birlikte.odaId === id) {
+    birlikte.panel = true;
+    return;
+  }
+  try {
+    const r = await istek<{ oda: Oda; simdi: number }>("POST", `/api/oda/${id}/katil`);
+    saat(r.simdi);
+    durdur();
+    odaYaz(r.oda);
+    birlikte.odaId = id;
+    birlikte.panel = true;
+    // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).
+    if (player.playing) controls.toggle();
     await eslestir();
   } catch (e) {
-    notify(String(e instanceof Error ? e.message : e), "info");
+    notify(hataYaz(e), "info");
   }
+}
+
+function cikildi() {
+  durdur();
+  birlikte.odaId = null;
+  birlikte.panel = false;
 }
 
 export async function ayril() {
-  const sahip = birlikte.dinlenen;
-  birlikte.dinlenen = null;
-  durdur();
-  if (sahip) await istek("DELETE", `/api/dinle/${sahip}/katil`).catch(() => {});
+  const id = birlikte.odaId;
+  cikildi();
+  if (id) await istek("DELETE", `/api/oda/${id}/katil`).catch(() => {});
 }
 
-export function sesAyarla(v: number) {
-  birlikte.ses = Math.max(0, Math.min(1, v));
-  if (ses) ses.volume = birlikte.ses;
-  if (hostSes) hostSes.volume = birlikte.ses;
+export async function odaKapat() {
+  const id = birlikte.odaId;
+  if (!id) return;
+  cikildi();
+  await istek("DELETE", `/api/oda/${id}`).catch((e) => notify(hataYaz(e), "info"));
 }
 
-// ---------- bağlantıyla oda (indirmeden) ----------
+export const at = (kisi: string) =>
+  birlikte.odaId && istek("POST", `/api/oda/${birlikte.odaId}/at/${kisi}`).catch((e) => notify(hataYaz(e), "info"));
+export const djYap = (kisi: string, ver: boolean) => ayarla({ dj: { kisi, ver } });
 
-let hostSes: HTMLAudioElement | null = null;
-let hostBekleyen: ReturnType<typeof setTimeout> | undefined;
-let nabiz: ReturnType<typeof setInterval> | undefined;
+// ---------------- sıra ----------------
 
-function hostDurdur() {
-  clearInterval(nabiz);
-  if (hostSes) {
-    hostSes.pause();
-    hostSes.removeAttribute("src");
-    hostSes.load();
-  }
-  birlikte.simdiki = null;
-  birlikte.hostCaliyor = false;
-  birlikte.hostKonum = 0;
-  birlikte.hostSure = 0;
-}
-
-function hostBildir() {
-  clearTimeout(hostBekleyen);
-  hostBekleyen = setTimeout(() => {
-    const s = birlikte.simdiki;
-    if (!birlikte.yayin || birlikte.kaynak !== "baglanti" || !s || !hostSes) return;
-    void istek("POST", "/api/dinle", { ...s, konum: hostSes.currentTime, caliyor: !hostSes.paused }).catch((e) => {
-      notify(String(e instanceof Error ? e.message : e), "info");
-    });
-  }, 200);
-}
-
-function hostOlustur(): HTMLAudioElement {
-  if (hostSes) return hostSes;
-  const a = new Audio();
-  a.preload = "auto";
-  a.addEventListener("play", () => ((birlikte.hostCaliyor = true), hostBildir()));
-  a.addEventListener("pause", () => ((birlikte.hostCaliyor = false), hostBildir()));
-  a.addEventListener("seeked", hostBildir);
-  a.addEventListener("loadedmetadata", () => {
-    if (isFinite(a.duration)) birlikte.hostSure = a.duration;
-  });
-  a.addEventListener("timeupdate", () => (birlikte.hostKonum = a.currentTime));
-  a.addEventListener("ended", () => ((birlikte.hostCaliyor = false), hostBildir()));
-  hostSes = a;
-  return a;
-}
-
-/**
- * İndirmeden dinleme odası: YouTube bağlantısı ya da şarkı adı (ilk sonuç). Oda açıksa şarkı değişir; dinleyenler
- * yeni şarkıya kendiliğinden geçer.
- */
-export async function baglantiOdasi(giris: string) {
-  if (!inTauri) return notify("Birlikte dinleme yalnız GMID Tool'da çalışır", "info");
-  if (!sosyal.anahtar) return notify("Önce Topluluk'tan Discord ile giriş yap", "info");
-  if (!giris.trim() || birlikte.aciliyor) return;
-  birlikte.aciliyor = true;
+/** yt-dlp yoksa bir kez kendiliğinden kurulur. */
+async function aracla<T>(f: () => Promise<T>): Promise<T> {
   try {
-    // Sunucu birlikte dinlemeyi biliyor mu (0.12+)?
-    birlikte.asama = "Sunucu…";
-    try {
-      await istek("GET", "/api/dinle");
-    } catch (e) {
-      const m = String(e instanceof Error ? e.message : e);
-      throw new Error(
-        m.includes("404") ? "GMID sunucusu henüz güncellenmemiş. Mola sohbetinde sunucu güncelleme komutunu çalıştır." : m,
-      );
-    }
+    return await f();
+  } catch (e) {
+    if (!String(e).includes("yt-dlp bulunamadı")) throw e;
+    birlikte.asama = "Araçlar kuruluyor…";
+    notify("Birlikte dinleme için araçlar kuruluyor (bir kez)…", "download");
+    await api.videos.installTools();
+    return await f();
+  }
+}
+
+/** Şarkı adı ya da bağlantı → sıraya. `video`: birlikte izleme. Oda yoksa önce oda açılır. */
+export async function ekle(giris: string, video = false) {
+  if (!giris.trim() || birlikte.asama) return;
+  if (!birlikte.odaId) await odaAc();
+  const id = birlikte.odaId;
+  if (!id) return;
+  birlikte.asama = "Aranıyor…";
+  try {
     const { invoke } = await import("@tauri-apps/api/core");
-    // yt-dlp yoksa bir kez kendiliğinden kurulur.
-    const ytdlp = async <T,>(f: () => Promise<T>): Promise<T> => {
-      try {
-        return await f();
-      } catch (e) {
-        if (!String(e).includes("yt-dlp bulunamadı")) throw e;
-        birlikte.asama = "Araçlar kuruluyor…";
-        await api.videos.installTools();
-        return await f();
-      }
-    };
-    birlikte.asama = "Şarkı aranıyor…";
-    const bilgi = await ytdlp(() =>
+    const b = await aracla(() =>
       invoke<{ url: string; title: string; duration: number | null; thumbnail: string | null }>("social_resolve", { query: giris }),
     );
-    birlikte.asama = "Şarkı yükleniyor…";
-    const kaynak = await ytdlp(() => sesAdresi(bilgi.url, "host"));
-    if (birlikte.dinlenen) await ayril();
-    // Oynatıcıdan yayın yapılıyorsa bağlantılı odaya geçilir; kendi oynatıcın da duraklar.
-    if (player.playing) controls.toggle();
-    const a = hostOlustur();
-    a.volume = birlikte.ses;
-    a.src = kaynak;
-    birlikte.simdiki = { baslik: bilgi.title, url: bilgi.url, kapak: bilgi.thumbnail, sure: bilgi.duration };
-    birlikte.hostSure = bilgi.duration ?? 0;
-    birlikte.kaynak = "baglanti";
-    birlikte.yayin = true;
-    birlikte.asama = "Başlıyor…";
-    try {
-      await a.play();
-    } catch (e) {
-      hostDurdur();
-      birlikte.yayin = false;
-      birlikte.kaynak = null;
-      throw new Error(`ses çalınamadı (${String(e instanceof Error ? e.message : e)})`);
-    }
-    // Oda sunucuda açılsın (hata varsa hemen söylensin).
-    await istek("POST", "/api/dinle", { ...birlikte.simdiki, konum: a.currentTime, caliyor: !a.paused });
-    // Yarım dakikada bir konum: geç katılan ya da bağlantısı kopan dinleyen kaymasın.
-    clearInterval(nabiz);
-    nabiz = setInterval(hostBildir, 30_000);
-    notify(`Oda açıldı: ${bilgi.title}`, "headphones");
+    birlikte.asama = "Ekleniyor…";
+    await sirayaYaz(id, { baslik: b.title, url: b.url, kapak: b.thumbnail, sure: b.duration, video });
   } catch (e) {
-    notify(`Oda açılamadı: ${String(e instanceof Error ? e.message : e)}`, "info");
+    notify(`Eklenemedi: ${hataYaz(e)}`, "info");
   } finally {
-    birlikte.aciliyor = false;
     birlikte.asama = "";
   }
 }
 
-export function hostOynat() {
-  if (!hostSes) return;
-  if (hostSes.paused) void hostSes.play().catch(() => {});
-  else hostSes.pause();
+/** Medya'daki indirilmiş parçayı odaya ekler (oda yoksa açar). */
+export async function ekleIndirilen(item: Download) {
+  if (!/^https?:\/\//.test(item.url)) return notify("Bu parçanın internet kaynağı yok", "info");
+  if (!birlikte.odaId) await odaAc();
+  const id = birlikte.odaId;
+  if (!id) return;
+  await sirayaYaz(id, {
+    baslik: item.title,
+    url: item.url,
+    kapak: item.thumbnail?.startsWith("https://") ? item.thumbnail : null,
+    sure: item.duration,
+    video: !item.audioOnly,
+  }).catch((e) => notify(hataYaz(e), "info"));
+  notify(`Odaya eklendi: ${item.title}`, "headphones");
 }
 
-export function hostSar(sn: number) {
-  if (hostSes && isFinite(sn)) hostSes.currentTime = Math.max(0, sn);
+async function sirayaYaz(id: string, s: Sarki) {
+  const r = await istek<{ oda: Oda; simdi: number }>("POST", `/api/oda/${id}/sira`, s);
+  saat(r.simdi);
+  odaYaz(r.oda);
+  // Hazırlık (indirme) arkada sürer; ekleme kutusu hemen boşalır.
+  void eslestir();
 }
 
-/** Dinlediğim odanın şarkısını ve konumunu yakalar. */
-async function eslestir() {
-  const o = birlikte.dinlenen ? birlikte.odalar[birlikte.dinlenen] : null;
-  if (!o) return;
-  if (!ses) {
-    ses = new Audio();
-    ses.preload = "auto";
+export const siradanCikar = (oge: number) =>
+  birlikte.odaId && istek("DELETE", `/api/oda/${birlikte.odaId}/sira/${oge}`).catch((e) => notify(hataYaz(e), "info"));
+
+// ---------------- oynatma ----------------
+
+async function oynatBildir(konum: number, caliyor: boolean) {
+  const id = birlikte.odaId;
+  if (!id) return;
+  await istek("POST", `/api/oda/${id}/oynat`, { konum, caliyor }).catch((e) => notify(hataYaz(e), "info"));
+}
+
+export function oynatDuraklat() {
+  const o = benimOdam();
+  if (!o?.simdiki || !medya) return;
+  void oynatBildir(medya.currentTime, !o.caliyor);
+}
+
+export function sar(sn: number) {
+  const o = benimOdam();
+  if (!o?.simdiki || !isFinite(sn)) return;
+  void oynatBildir(Math.max(0, sn), o.caliyor);
+}
+
+export async function atla() {
+  const id = birlikte.odaId;
+  if (!id) return;
+  await istek("POST", `/api/oda/${id}/sonraki`, { oge: benimOdam()?.simdiki?.id ?? null }).catch((e) => notify(hataYaz(e), "info"));
+}
+
+export function sesAyarla(v: number) {
+  birlikte.ses = Math.max(0, Math.min(1, v));
+  if (medya) medya.volume = birlikte.ses;
+}
+
+/** Oda panelinin göstereceği öğe (videoda görüntü, şarkıda yalnız ses; panel kapalıyken de çalar). */
+export function medyaElemani(): HTMLVideoElement {
+  if (medya) return medya;
+  const m = document.createElement("video");
+  m.preload = "auto";
+  m.playsInline = true;
+  m.volume = birlikte.ses;
+  m.addEventListener("timeupdate", () => (birlikte.konum = m.currentTime));
+  m.addEventListener("loadedmetadata", () => {
+    if (isFinite(m.duration)) birlikte.sure = m.duration;
+  });
+  // Şarkı bitti: sıradakine geçilsin (sunucu iki kez geçirmez).
+  m.addEventListener("ended", () => {
+    const id = birlikte.odaId;
+    if (id && yukluOge != null) void istek("POST", `/api/oda/${id}/sonraki`, { oge: yukluOge }).catch(() => {});
+  });
+  medya = m;
+  return m;
+}
+
+function durdur() {
+  if (medya) {
+    medya.pause();
+    medya.removeAttribute("src");
+    medya.load();
   }
-  ses.volume = birlikte.ses;
-  if (o.sarki.url !== yukluKaynak) {
+  if (blob) setTimeout((u: string) => URL.revokeObjectURL(u), 2000, blob);
+  blob = null;
+  yukluOge = null;
+  birlikte.konum = 0;
+  birlikte.sure = 0;
+  birlikte.hazirlaniyor = false;
+}
+
+/** Dosyanın ilk baytlarından tür (m4a/mp4, webm, ogg, mp3). */
+function tur(b: Uint8Array, video: boolean): string {
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return video ? "video/mp4" : "audio/mp4";
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return video ? "video/webm" : "audio/webm";
+  if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg";
+  return "audio/mpeg";
+}
+
+let yukleniyor: number | null = null;
+
+/** Odadaki şarkıyı ve konumu yakalar. */
+async function eslestir() {
+  const o = benimOdam();
+  if (!o) return;
+  const m = medyaElemani();
+  m.volume = birlikte.ses;
+  const simdiki = o.simdiki;
+  if (!simdiki) {
+    if (yukluOge != null) durdur();
+    return;
+  }
+  if (simdiki.id !== yukluOge) {
+    if (yukleniyor === simdiki.id) return;
+    yukleniyor = simdiki.id;
     birlikte.hazirlaniyor = true;
     try {
-      // Dinleyende de yt-dlp yoksa bir kez kendiliğinden kurulur.
-      const kaynak = await sesAdresi(o.sarki.url, "dinle").catch(async (e) => {
-        if (!String(e).includes("yt-dlp bulunamadı")) throw e;
-        notify("Birlikte dinleme için araçlar kuruluyor (bir kez)…", "download");
-        await api.videos.installTools();
-        return sesAdresi(o.sarki.url, "dinle");
-      });
-      // Hazırlanırken oda değiştiyse ya da ayrıldıysa bırak.
-      if (birlikte.dinlenen !== o.sahip.id) return;
-      ses.src = kaynak;
-      yukluKaynak = o.sarki.url;
+      const { invoke } = await import("@tauri-apps/api/core");
+      const bayt = await aracla(() => invoke<ArrayBuffer>("social_stream_audio", { url: simdiki.sarki.url, video: simdiki.sarki.video }));
+      // Hazırlanırken şarkı değiştiyse ya da odadan çıkıldıysa bırak.
+      if (benimOdam()?.simdiki?.id !== simdiki.id) return;
+      const yeni = URL.createObjectURL(new Blob([bayt], { type: tur(new Uint8Array(bayt.slice(0, 12)), simdiki.sarki.video) }));
+      if (blob) setTimeout((u: string) => URL.revokeObjectURL(u), 2000, blob);
+      blob = yeni;
+      m.src = yeni;
+      yukluOge = simdiki.id;
       await new Promise<void>((ok) => {
         const bitti = () => ok();
-        ses!.addEventListener("loadedmetadata", bitti, { once: true });
-        ses!.addEventListener("error", bitti, { once: true });
+        m.addEventListener("loadedmetadata", bitti, { once: true });
+        m.addEventListener("error", bitti, { once: true });
         setTimeout(bitti, 8000);
       });
     } catch (e) {
-      notify(`Şarkı açılamadı: ${String(e instanceof Error ? e.message : e)}`, "info");
+      notify(`Açılamadı: ${hataYaz(e)}`, "info");
       return;
     } finally {
+      if (yukleniyor === simdiki.id) yukleniyor = null;
       birlikte.hazirlaniyor = false;
     }
   }
   // Hazırlanırken gelen son durum geçerli.
-  const son = birlikte.dinlenen ? birlikte.odalar[birlikte.dinlenen] : null;
-  if (!son || !ses) return;
+  const son = benimOdam();
+  if (!son?.simdiki || son.simdiki.id !== yukluOge) return;
   const gecen = son.caliyor ? (Date.now() + fark - son.guncelleme) / 1000 : 0;
   const hedef = son.konum + Math.max(0, gecen);
-  if (Math.abs(ses.currentTime - hedef) > 1.2) ses.currentTime = hedef;
-  if (son.caliyor) await ses.play().catch(() => {});
-  else ses.pause();
+  if (Math.abs(m.currentTime - hedef) > 1.2) m.currentTime = hedef;
+  // Kendi oynatıcın çalıyorsa duraklasın (iki ses üst üste binmesin).
+  if (son.caliyor && player.playing) controls.toggle();
+  if (son.caliyor) await m.play().catch((e) => notify(`Çalınamadı: ${hataYaz(e)}`, "info"));
+  else m.pause();
 }

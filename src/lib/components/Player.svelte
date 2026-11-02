@@ -17,7 +17,7 @@
   import { countPlay } from "../library.svelte";
   import { controls, nav, player } from "../player.svelte";
   import { notify } from "../toast.svelte";
-  import { birlikte, paylasilabilir, yayinBaslat, yayinBitir, yayinDurumu } from "../birlikte.svelte";
+  import { birlikte, ekleIndirilen } from "../birlikte.svelte";
   import { sosyal } from "../social.svelte";
   import type { Download, GmidPlayerState, Segment, Sidecar, Transcript, TranscriptProgress, WhisperStatus } from "../types";
 
@@ -593,23 +593,16 @@
     repeat === "off" ? "Tekrar: kapalı" : repeat === "all" ? "Tekrar: tüm liste" : "Tekrar: bu parça",
   );
 
-  // Birlikte dinleme: yayın açıksa her oynat/duraklat/sarma/parça değişikliği arkadaşlara gider.
-  const yayinla = () => yayinDurumu(item, media?.currentTime ?? 0, !!media && !media.paused);
   // <audio> ve <video> aynı olayları dinler.
-  const onplay = () => ((playing = true), wake(), yayinla());
-  const onpause = () => ((playing = false), wake(), yayinla());
+  const onplay = () => ((playing = true), wake());
+  const onpause = () => ((playing = false), wake());
   const onloadedmetadata = () => {
     if (media && isFinite(media.duration)) duration = media.duration;
     applySpeed();
-    yayinla();
   };
   const onseeked = () => {
     if (media) time = media.currentTime;
-    yayinla();
   };
-  // Oynatıcı kapanınca yayın da biter.
-  $effect(() => () => yayinDurumu(null, 0, false));
-  const dinleyenSayisi = $derived(sosyal.ben ? (birlikte.odalar[sosyal.ben.id]?.dinleyiciler.length ?? 0) : 0);
   const onerror = () => {
     playable = false;
     startDemo();
@@ -884,14 +877,14 @@
     </div>
 
     <div class="right">
-      {#if sosyal.anahtar && paylasilabilir(item)}
+      {#if sosyal.anahtar && /^https?:\/\//.test(item.url)}
         <button
           class="pill birlikte"
-          class:lit={birlikte.yayin}
-          title={birlikte.yayin ? "Yayını bitir" : "Arkadaşların bu parçayı seninle aynı anda dinlesin (Sosyal → Birlikte dinle)"}
-          onclick={() => (birlikte.yayin ? yayinBitir() : yayinBaslat())}
+          class:lit={!!birlikte.odaId}
+          title={birlikte.odaId ? "Bu parçayı içinde olduğun dinleme odasının sırasına ekle" : "Dinleme odası aç ve bu parçayı ilk şarkı yap"}
+          onclick={() => item && ekleIndirilen(item)}
         >
-          <Icon name="headphones" size={15} />{birlikte.yayin ? (dinleyenSayisi ? `${dinleyenSayisi} kişi dinliyor` : "Yayında") : "Arkadaşlarla dinle"}
+          <Icon name="headphones" size={15} />{birlikte.odaId ? "Odaya ekle" : "Oda aç"}
         </button>
       {/if}
       {#if !item.audioOnly && (tracks.length || segments.length)}

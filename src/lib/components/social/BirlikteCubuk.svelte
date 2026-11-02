@@ -1,85 +1,47 @@
 <script lang="ts">
-  // Birlikte dinleme çubuğu (her ekranda, alt ortada): dinliyorsan kiminle ve ne çaldığı, ses ve "Ayrıl";
-  // yayındaysan kaç kişinin dinlediği ve "Bitir".
+  // Dinleme odası çubuğu (her ekranda, alt ortada): bir odadaysan ve oda paneli kapalıysa odanın adı, çalan şarkı,
+  // (sahip/DJ isen) oynat/duraklat, ses, "Odayı aç" ve "Ayrıl".
   import Icon from "../../Icon.svelte";
-  import { ayril, birlikte, hostOynat, hostSar, odalariYukle, sesAyarla, yayinBitir } from "../../birlikte.svelte";
-  import { formatDuration } from "../../downloads.svelte";
+  import { ayril, birlikte, odalariYukle, oynatDuraklat, sesAyarla, yonetir } from "../../birlikte.svelte";
   import { sosyal } from "../../social.svelte";
-  import Avatar from "./Avatar.svelte";
 
-  const oda = $derived(birlikte.dinlenen ? birlikte.odalar[birlikte.dinlenen] : null);
-  const benimOdam = $derived(sosyal.ben ? birlikte.odalar[sosyal.ben.id] : null);
+  const oda = $derived(birlikte.odaId ? (birlikte.odalar[birlikte.odaId] ?? null) : null);
 
-  // Giriş yapılınca açık odaları bir kez al (sonrası canlı gelir).
-  let yuklendi = false;
+  // Giriş yapılınca açık odaları al; bağlantı her yeniden kurulduğunda da (kopukken kaçanlar için).
   $effect(() => {
-    if (sosyal.anahtar && sosyal.bagli && !yuklendi) {
-      yuklendi = true;
-      void odalariYukle();
-    }
+    if (sosyal.anahtar && sosyal.bagli) void odalariYukle();
   });
 </script>
 
-{#if oda}
+{#if oda && !birlikte.panel}
   <div class="cubuk" role="status">
-    <Avatar kisi={oda.sahip} boy={30} nokta={false} />
-    <span class="yazi">
-      <span class="ust"><Icon name="headphones" size={13} />{oda.sahip.ad} ile dinliyorsun</span>
-      <b title={oda.sarki.baslik}>{birlikte.hazirlaniyor ? "Şarkı hazırlanıyor…" : oda.sarki.baslik}</b>
-    </span>
-    {#if !oda.caliyor && !birlikte.hazirlaniyor}<span class="durak">Duraklatıldı</span>{/if}
+    {#if yonetir(oda) && oda.simdiki}
+      <button class="oynat" title={oda.caliyor ? "Duraklat" : "Oynat"} onclick={oynatDuraklat}><Icon name={oda.caliyor ? "pause" : "play"} size={15} /></button>
+    {:else}
+      <span class="simge"><Icon name="headphones" size={16} /></span>
+    {/if}
+    <button class="yazi" title="Odayı aç" onclick={() => (birlikte.panel = true)}>
+      <span class="ust">{oda.ad} · {oda.uyeler.length} kişi</span>
+      <b title={oda.simdiki?.sarki.baslik}>
+        {birlikte.hazirlaniyor ? "Hazırlanıyor…" : (oda.simdiki?.sarki.baslik ?? "Sıra boş, bir şarkı ekleyin")}
+      </b>
+    </button>
+    {#if oda.simdiki && !oda.caliyor && !birlikte.hazirlaniyor}<span class="durak">Duraklatıldı</span>{/if}
     <input class="ses" type="range" min="0" max="1" step="0.05" value={birlikte.ses} oninput={(e) => sesAyarla(+e.currentTarget.value)} aria-label="Ses" />
+    <button class="btn ghost sm" onclick={() => (birlikte.panel = true)}><Icon name="expand" size={14} />Oda</button>
     <button class="btn ghost sm" onclick={ayril}><Icon name="x" size={14} />Ayrıl</button>
-  </div>
-{:else if birlikte.yayin && birlikte.kaynak === "baglanti" && birlikte.simdiki}
-  <!-- İndirmeden açılan oda: şarkıyı sen yönetirsin, dinleyenler eşitlenir. -->
-  <div class="cubuk yayin genis" role="status">
-    <button class="oynat" title={birlikte.hostCaliyor ? "Duraklat" : "Oynat"} onclick={hostOynat}><Icon name={birlikte.hostCaliyor ? "pause" : "play"} size={16} /></button>
-    <span class="yazi">
-      <span class="ust"><span class="canli kucuk"></span>Yayındasın{benimOdam?.dinleyiciler.length ? ` · ${benimOdam.dinleyiciler.length} kişi dinliyor` : ""}</span>
-      <b title={birlikte.simdiki.baslik}>{birlikte.simdiki.baslik}</b>
-      <span class="ilerle">
-        <span class="tnum sure">{formatDuration(birlikte.hostKonum) || "0:00"}</span>
-        <input type="range" min="0" max={birlikte.hostSure || 1} step="1" value={birlikte.hostKonum} onchange={(e) => hostSar(+e.currentTarget.value)} aria-label="Konum" />
-        <span class="tnum sure">{formatDuration(birlikte.hostSure) || "–"}</span>
-      </span>
-    </span>
-    {#if benimOdam?.dinleyiciler.length}
-      <span class="yuzler">{#each benimOdam.dinleyiciler.slice(0, 4) as k (k.id)}<span class="yuz" title={k.ad}><Avatar kisi={k} boy={24} nokta={false} /></span>{/each}</span>
-    {/if}
-    <input class="ses" type="range" min="0" max="1" step="0.05" value={birlikte.ses} oninput={(e) => sesAyarla(+e.currentTarget.value)} aria-label="Ses" />
-    <button class="btn ghost sm" onclick={yayinBitir}>Bitir</button>
-  </div>
-{:else if birlikte.yayin}
-  <div class="cubuk yayin" role="status">
-    <span class="canli"></span>
-    <span class="yazi">
-      <span class="ust"><Icon name="headphones" size={13} />Yayındasın</span>
-      <b>{benimOdam?.dinleyiciler.length ? `${benimOdam.dinleyiciler.length} arkadaşın seninle dinliyor` : "Arkadaşların katılabilir"}</b>
-    </span>
-    {#if benimOdam?.dinleyiciler.length}
-      <span class="yuzler">{#each benimOdam.dinleyiciler.slice(0, 5) as k (k.id)}<span class="yuz" title={k.ad}><Avatar kisi={k} boy={24} nokta={false} /></span>{/each}</span>
-    {/if}
-    <button class="btn ghost sm" onclick={yayinBitir}>Bitir</button>
   </div>
 {/if}
 
 <style>
-  .cubuk { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 10px; border-radius: 999px; border: 1px solid rgba(227, 194, 112, 0.35); background: rgba(20, 22, 26, 0.94); backdrop-filter: blur(10px); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); max-width: min(640px, calc(100vw - 32px)); }
-  .yazi { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-  .ust { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--gold); font-weight: 700; }
+  .cubuk { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 999px; border: 1px solid rgba(227, 194, 112, 0.35); background: rgba(20, 22, 26, 0.94); backdrop-filter: blur(10px); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); max-width: min(680px, calc(100vw - 32px)); }
+  .yazi { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; padding: 0; }
+  .ust { font-size: 11.5px; color: var(--gold); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
   .yazi b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
   .durak { font-size: 12px; color: var(--dim); }
   .ses { width: 90px; accent-color: var(--gold); }
   .sm { padding: 5px 11px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; }
-  .canli { width: 10px; height: 10px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px rgba(80, 200, 120, 0.2); margin-left: 6px; animation: nabiz 1.6s ease-in-out infinite; }
-  @keyframes nabiz { 50% { box-shadow: 0 0 0 7px rgba(80, 200, 120, 0.05); } }
-  .yuzler { display: inline-flex; }
-  .genis { border-radius: 18px; }
-  .oynat { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--gold); color: #1b1608; display: grid; place-items: center; cursor: pointer; }
-  .ilerle { display: flex; align-items: center; gap: 6px; }
-  .ilerle input { width: 200px; accent-color: var(--gold); }
-  .sure { font-size: 11px; color: var(--dim); }
-  .canli.kucuk { width: 7px; height: 7px; margin: 0 2px 0 0; box-shadow: none; }
-  .yuz { margin-right: -6px; border-radius: 50%; box-shadow: 0 0 0 2px #14161a; }
+  .oynat, .simge { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; }
+  .oynat { border: 0; background: var(--gold); color: #1b1608; cursor: pointer; }
+  .simge { background: rgba(227, 194, 112, 0.14); color: var(--gold); }
 </style>

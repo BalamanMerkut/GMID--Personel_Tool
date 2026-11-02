@@ -9,7 +9,7 @@
   import FeedCard from "../components/social/FeedCard.svelte";
   import GeceKart from "../components/social/GeceKart.svelte";
   import GecePlanla from "../components/social/GecePlanla.svelte";
-  import { ayril, baglantiOdasi, birlikte, katil, odaListesi } from "../birlikte.svelte";
+  import { birlikte, katil, odaAc, odaListesi, type Gizlilik, type Yetki } from "../birlikte.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { arkadasEkle, gonderiPaylas, istek, konuGoster, profilGoster, sosyal, uyelerYukle, type Kisi, type Olay } from "../social.svelte";
   import { nav } from "../player.svelte";
@@ -47,16 +47,18 @@
   let onizleme = $state<string | null>(null);
   let gonderiliyor = $state(false);
   let planAcik = $state(false);
-  let odaGiris = $state("");
-  let odaAlan = $state<HTMLInputElement | null>(null);
-  /** Kutu boşsa ne yazılacağını söyler; doluysa odayı açar (ya da şarkıyı değiştirir). */
-  function odaAc() {
-    if (!odaGiris.trim()) {
-      odaAlan?.focus();
-      notify("Önce kutuya bir şarkı adı (ör. Tarkan Kuzu Kuzu) ya da YouTube bağlantısı yaz", "headphones");
-      return;
+  // Dinleme odası açma formu.
+  let odaFormu = $state(false);
+  let odaAdi = $state("");
+  let odaSinir = $state(10);
+  let odaGizlilik = $state<Gizlilik>("herkes");
+  let odaYetki = $state<Yetki>("herkes");
+  async function yeniOda() {
+    await odaAc({ ad: odaAdi.trim() || undefined, sinir: odaSinir, gizlilik: odaGizlilik, yetki: odaYetki });
+    if (birlikte.odaId) {
+      odaFormu = false;
+      odaAdi = "";
     }
-    void baglantiOdasi(odaGiris).then(() => (odaGiris = ""));
   }
   const yaklasan = $derived(Object.values(sosyal.geceler).sort((a, b) => a.zaman - b.zaman).slice(0, 4));
   let dosyaSec = $state<HTMLInputElement | null>(null);
@@ -355,33 +357,53 @@
       </section>
 
       <section class="kutu">
-          <h3>Birlikte dinle</h3>
-          <form class="oda-ac" onsubmit={(e) => (e.preventDefault(), odaAc())}>
-            <input bind:this={odaAlan} bind:value={odaGiris} placeholder="Şarkı adı ya da YouTube bağlantısı yaz…" aria-label="Şarkı" disabled={birlikte.aciliyor} />
-            <button class="btn sm oda-dugme" disabled={birlikte.aciliyor}><Icon name="headphones" size={14} />
-              {birlikte.aciliyor ? birlikte.asama || "Açılıyor…" : birlikte.yayin && birlikte.kaynak === "baglanti" ? "Değiştir" : "Oda aç"}
-            </button>
+        <div class="kutu-bas">
+          <h3>Dinleme odaları</h3>
+          {#if !birlikte.odaId}
+            <button class="btn sm takip" onclick={() => (odaFormu = !odaFormu)}><Icon name={odaFormu ? "x" : "plus"} size={14} />{odaFormu ? "Vazgeç" : "Oda aç"}</button>
+          {/if}
+        </div>
+        {#if odaFormu && !birlikte.odaId}
+          <form class="oda-ac" onsubmit={(e) => (e.preventDefault(), void yeniOda())}>
+            <input bind:value={odaAdi} maxlength="40" placeholder="Oda adı (ör. Akşam Rap)" aria-label="Oda adı" />
+            <label class="oda-satir">Kişi sınırı
+              <select bind:value={odaSinir}>{#each [2, 3, 4, 5, 6, 8, 10, 15, 20] as n (n)}<option value={n}>{n} kişi</option>{/each}<option value={0}>Sınırsız</option></select>
+            </label>
+            <label class="oda-satir">Kim görebilir
+              <select bind:value={odaGizlilik}><option value="herkes">Herkes</option><option value="arkadaslar">Arkadaşlarım</option></select>
+            </label>
+            <label class="oda-satir">Kim şarkı ekler
+              <select bind:value={odaYetki}><option value="herkes">Odadaki herkes</option><option value="dj">Ben ve DJ'ler</option><option value="sahip">Yalnız ben</option></select>
+            </label>
+            <button class="btn sm oda-dugme"><Icon name="headphones" size={14} />Odayı aç</button>
           </form>
-          <span class="sub small oda-not">İndirmek yok: herkes aynı şarkıyı aynı anda dinler.</span>
-          {#each odaListesi() as o (o.sahip.id)}
-            <div class="satir">
-              <button class="satir-sol" onclick={() => profilGoster(o.sahip.id)}>
-                <Avatar kisi={o.sahip} boy={36} />
-                <span class="satir-yazi">
-                  <b>{o.sarki.baslik}</b>
-                  <span class="sub small">{o.sahip.id === sosyal.ben?.id ? "Senin odan" : o.sahip.ad}{o.dinleyiciler.length ? ` · ${o.dinleyiciler.length} kişi dinliyor` : ""}{o.caliyor ? "" : " · duraklatıldı"}</span>
-                </span>
-              </button>
-              {#if o.sahip.id === sosyal.ben?.id}
-                <span class="canli-rozet">Yayında</span>
-              {:else if birlikte.dinlenen === o.sahip.id}
-                <button class="btn ghost sm takip" onclick={ayril}>Ayrıl</button>
-              {:else}
-                <button class="btn sm takip" onclick={() => katil(o.sahip.id)}><Icon name="headphones" size={14} />Katıl</button>
-              {/if}
-            </div>
-          {/each}
-        </section>
+        {:else}
+          <span class="sub small oda-not">İndirmek yok: odadaki herkes aynı şarkıyı ya da videoyu aynı anda dinler.</span>
+        {/if}
+        {#each odaListesi() as o (o.id)}
+          {@const icinde = birlikte.odaId === o.id}
+          {@const dolu = o.sinir != null && o.uyeler.length >= o.sinir}
+          <div class="satir">
+            <button class="satir-sol" onclick={() => (icinde ? (birlikte.panel = true) : profilGoster(o.sahip.id))}>
+              <Avatar kisi={o.sahip} boy={36} />
+              <span class="satir-yazi">
+                <b>{#if o.gizlilik === "arkadaslar"}<Icon name="lock" size={12} /> {/if}{o.ad}</b>
+                <span class="sub small">{o.simdiki ? `${o.caliyor ? "♪" : "⏸"} ${o.simdiki.sarki.baslik}` : "Sıra boş"}</span>
+                <span class="sub small">{o.sahip.id === sosyal.ben?.id ? "Senin odan" : o.sahip.ad} · {o.uyeler.length}{o.sinir ? `/${o.sinir}` : ""} kişi</span>
+              </span>
+            </button>
+            {#if icinde}
+              <button class="btn ghost sm takip" onclick={() => (birlikte.panel = true)}>Odaya git</button>
+            {:else if dolu}
+              <span class="sub small">Dolu</span>
+            {:else}
+              <button class="btn sm takip" onclick={() => katil(o.id)}><Icon name="headphones" size={14} />Katıl</button>
+            {/if}
+          </div>
+        {:else}
+          {#if !odaFormu}<p class="sub small oda-not">Şu an açık oda yok. İlk odayı sen aç!</p>{/if}
+        {/each}
+      </section>
 
       {#if yaklasan.length}
         <section class="kutu">
@@ -470,12 +492,14 @@
   .sm { padding: 6px 11px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .plan-yer { margin: 0 14px 10px; }
   .acik-plan { border-color: var(--gold-dim); color: var(--gold-glow); }
-  .canli-rozet { flex: none; font-size: 11.5px; font-weight: 800; color: var(--good); padding: 3px 9px; border-radius: 999px; background: rgba(80, 200, 120, 0.12); }
   .oda-ac { display: flex; flex-direction: column; gap: 8px; padding: 0 12px; }
   .oda-dugme { justify-content: center; }
   .oda-ac input { flex: 1; min-width: 0; background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; color: var(--text); font: inherit; font-size: 13px; outline: none; }
   .oda-ac input:focus { border-color: var(--gold-dim); }
-  .oda-not { padding: 6px 16px 10px; }
+  .oda-not { padding: 6px 16px 10px; display: block; }
+  .kutu-bas { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 12px; }
+  .oda-satir { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .oda-satir select { background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 5px 8px; color: var(--text); font: inherit; font-size: 12.5px; }
   .geceler { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
   .konu-serit { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 14px 10px; padding: 8px 8px 8px 14px; border-radius: 12px; background: rgba(227, 194, 112, 0.1); border: 1px solid rgba(227, 194, 112, 0.3); font-size: 14px; }
   .konu-serit b { color: var(--gold-glow); }

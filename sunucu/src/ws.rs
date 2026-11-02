@@ -90,5 +90,6 @@ async fn oturum(mut sock: WebSocket, s: Arc<Sunucu>) {
     // Son bağlantısı da kapandıysa dinleme odası kapanır, dinlediği odadan çıkar.
     if s.durum.kisi(&kisi.id).is_none() {
         crate::dinle::kisi_gitti(&s, &kisi.id);
+        crate::oda::kisi_gitti(&s, &kisi.id);
     }
 }

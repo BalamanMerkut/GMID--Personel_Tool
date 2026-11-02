@@ -27,6 +27,7 @@
   import Profile from "./lib/screens/Profile.svelte";
   import FriendsDock from "./lib/components/social/FriendsDock.svelte";
   import BirlikteCubuk from "./lib/components/social/BirlikteCubuk.svelte";
+  import OdaPanel from "./lib/components/social/OdaPanel.svelte";
   import Fun from "./lib/screens/Fun.svelte";
   import Ping from "./lib/screens/Ping.svelte";
   import Install from "./lib/screens/Install.svelte";
@@ -252,6 +253,7 @@
   <FriendsDock />
   <!-- Birlikte dinleme: kiminle dinlediğin / yayındaysan kaç kişinin dinlediği. -->
   <BirlikteCubuk />
+  <OdaPanel />
 
   {#if player.item}
     <!-- Ekran değişse de çalmaya devam eder; küçültülünce altta çalma çubuğu. -->
