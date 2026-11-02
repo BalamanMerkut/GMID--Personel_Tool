@@ -29,7 +29,8 @@
       "host": "gmid.molayazilim.com.tr",
       "port": 2456,
       "description": "GMID'in Valheim sunucusu (dünya: GMID). Arkadaşlarla keşif, inşa ve boss savaşları. Duyurular ve yardım için Discord: discord.gg/upu9VQwFrV",
-      "connect": "Valheim → Oyuna Başla → karakter → Sunucuya Katıl → IP ekle: gmid.molayazilim.com.tr:2456 · Şifre Discord'da: discord.gg/upu9VQwFrV"
+      "connect": "Valheim → Oyuna Başla → karakter → Sunucuya Katıl → IP ekle: gmid.molayazilim.com.tr:2456 · Şifre Discord'da: discord.gg/upu9VQwFrV",
+      "logo": "logolar/valheim.png"
     }
   ],
   "ornek": [
