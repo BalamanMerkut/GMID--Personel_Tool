@@ -259,6 +259,7 @@ pub fn run() {
             commands::social_login,
             commands::social_image,
             commands::social_stream,
+            commands::social_resolve,
             commands::report_create,
             commands::search_all,
             commands::wrapped_get,

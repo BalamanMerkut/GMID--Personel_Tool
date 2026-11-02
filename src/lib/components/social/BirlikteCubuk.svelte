@@ -2,7 +2,8 @@
   // Birlikte dinleme çubuğu (her ekranda, alt ortada): dinliyorsan kiminle ve ne çaldığı, ses ve "Ayrıl";
   // yayındaysan kaç kişinin dinlediği ve "Bitir".
   import Icon from "../../Icon.svelte";
-  import { ayril, birlikte, odalariYukle, sesAyarla, yayinBitir } from "../../birlikte.svelte";
+  import { ayril, birlikte, hostOynat, hostSar, odalariYukle, sesAyarla, yayinBitir } from "../../birlikte.svelte";
+  import { formatDuration } from "../../downloads.svelte";
   import { sosyal } from "../../social.svelte";
   import Avatar from "./Avatar.svelte";
 
@@ -30,6 +31,25 @@
     <input class="ses" type="range" min="0" max="1" step="0.05" value={birlikte.ses} oninput={(e) => sesAyarla(+e.currentTarget.value)} aria-label="Ses" />
     <button class="btn ghost sm" onclick={ayril}><Icon name="x" size={14} />Ayrıl</button>
   </div>
+{:else if birlikte.yayin && birlikte.kaynak === "baglanti" && birlikte.simdiki}
+  <!-- İndirmeden açılan oda: şarkıyı sen yönetirsin, dinleyenler eşitlenir. -->
+  <div class="cubuk yayin genis" role="status">
+    <button class="oynat" title={birlikte.hostCaliyor ? "Duraklat" : "Oynat"} onclick={hostOynat}><Icon name={birlikte.hostCaliyor ? "pause" : "play"} size={16} /></button>
+    <span class="yazi">
+      <span class="ust"><span class="canli kucuk"></span>Yayındasın{benimOdam?.dinleyiciler.length ? ` · ${benimOdam.dinleyiciler.length} kişi dinliyor` : ""}</span>
+      <b title={birlikte.simdiki.baslik}>{birlikte.simdiki.baslik}</b>
+      <span class="ilerle">
+        <span class="tnum sure">{formatDuration(birlikte.hostKonum) || "0:00"}</span>
+        <input type="range" min="0" max={birlikte.hostSure || 1} step="1" value={birlikte.hostKonum} onchange={(e) => hostSar(+e.currentTarget.value)} aria-label="Konum" />
+        <span class="tnum sure">{formatDuration(birlikte.hostSure) || "–"}</span>
+      </span>
+    </span>
+    {#if benimOdam?.dinleyiciler.length}
+      <span class="yuzler">{#each benimOdam.dinleyiciler.slice(0, 4) as k (k.id)}<span class="yuz" title={k.ad}><Avatar kisi={k} boy={24} nokta={false} /></span>{/each}</span>
+    {/if}
+    <input class="ses" type="range" min="0" max="1" step="0.05" value={birlikte.ses} oninput={(e) => sesAyarla(+e.currentTarget.value)} aria-label="Ses" />
+    <button class="btn ghost sm" onclick={yayinBitir}>Bitir</button>
+  </div>
 {:else if birlikte.yayin}
   <div class="cubuk yayin" role="status">
     <span class="canli"></span>
@@ -55,5 +75,11 @@
   .canli { width: 10px; height: 10px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px rgba(80, 200, 120, 0.2); margin-left: 6px; animation: nabiz 1.6s ease-in-out infinite; }
   @keyframes nabiz { 50% { box-shadow: 0 0 0 7px rgba(80, 200, 120, 0.05); } }
   .yuzler { display: inline-flex; }
+  .genis { border-radius: 18px; }
+  .oynat { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--gold); color: #1b1608; display: grid; place-items: center; cursor: pointer; }
+  .ilerle { display: flex; align-items: center; gap: 6px; }
+  .ilerle input { width: 200px; accent-color: var(--gold); }
+  .sure { font-size: 11px; color: var(--dim); }
+  .canli.kucuk { width: 7px; height: 7px; margin: 0 2px 0 0; box-shadow: none; }
   .yuz { margin-right: -6px; border-radius: 50%; box-shadow: 0 0 0 2px #14161a; }
 </style>

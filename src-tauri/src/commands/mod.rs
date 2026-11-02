@@ -445,6 +445,78 @@ pub async fn social_stream(app: AppHandle, url: String) -> CmdResult<String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Birlikte dinleme odası (indirmeden): bağlantı ya da şarkı adı → kaynak sayfa, başlık, süre, kapak.
+/// Ad yazıldıysa YouTube'daki ilk sonuç alınır.
+#[derive(Serialize)]
+pub struct StreamInfo {
+    url: String,
+    title: String,
+    duration: Option<f64>,
+    thumbnail: Option<String>,
+}
+
+#[tauri::command]
+pub async fn social_resolve(app: AppHandle, query: String) -> CmdResult<StreamInfo> {
+    let q = query.trim().to_string();
+    if q.is_empty() || q.len() > 500 {
+        return Err("Bir YouTube bağlantısı ya da şarkı adı yaz".into());
+    }
+    let target = if q.starts_with("https://") || q.starts_with("http://") {
+        q
+    } else {
+        format!("ytsearch1:{q}")
+    };
+    let root = tauri::Manager::state::<DataDir>(&app).root().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = crate::downloader::tools::ytdlp(&root);
+        cmd.args([
+            "--no-playlist",
+            "--no-warnings",
+            "--skip-download",
+            "--print",
+            "%(webpage_url)s\t%(title)s\t%(duration)s\t%(thumbnail)s",
+            "--",
+            &target,
+        ]);
+        let out = cmd
+            .output()
+            .map_err(|_| "yt-dlp bulunamadı; Video İndirici'den araçları kur".to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let line = text
+            .lines()
+            .find(|l| l.starts_with("http"))
+            .ok_or_else(|| {
+                let e = String::from_utf8_lossy(&out.stderr);
+                if e.trim().is_empty() {
+                    "Bulunamadı".to_string()
+                } else {
+                    crate::downloader::ytdlp::friendly_error(&e)
+                }
+            })?;
+        Ok(parse_resolve(line))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn parse_resolve(line: &str) -> StreamInfo {
+    let mut p = line.split('\t');
+    let url = p.next().unwrap_or_default().trim().to_string();
+    let title = p.next().unwrap_or_default().trim().to_string();
+    let duration = p.next().and_then(|d| d.trim().parse::<f64>().ok());
+    let thumbnail = p
+        .next()
+        .map(str::trim)
+        .filter(|t| t.starts_with("https://"))
+        .map(String::from);
+    StreamInfo {
+        title: if title.is_empty() { url.clone() } else { title },
+        url,
+        duration,
+        thumbnail,
+    }
+}
+
 /// Topluluk: paylaşılacak kapak/afiş resminin baytları (arayüz küçültüp sunucuya yükler). Yalnız resim
 /// dosyaları, en çok 15 MB.
 #[tauri::command]
@@ -536,4 +608,24 @@ pub fn report_create(
     let _ = app.opener().reveal_item_in_dir(&path);
     crate::log!("Sorun raporu oluşturuldu");
     Ok(ReportResult { path, summary })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_line() {
+        let i = parse_resolve(
+            "https://www.youtube.com/watch?v=abc\tTarkan - Kuzu Kuzu\t215.0\thttps://i.ytimg.com/vi/abc/hq.jpg",
+        );
+        assert_eq!(i.url, "https://www.youtube.com/watch?v=abc");
+        assert_eq!(i.title, "Tarkan - Kuzu Kuzu");
+        assert_eq!(i.duration, Some(215.0));
+        assert!(i.thumbnail.is_some());
+        let j = parse_resolve("https://x.y/z\t\tNA\tNA");
+        assert_eq!(j.title, "https://x.y/z");
+        assert_eq!(j.duration, None);
+        assert_eq!(j.thumbnail, None);
+    }
 }

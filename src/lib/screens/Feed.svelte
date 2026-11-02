@@ -8,7 +8,7 @@
   import FeedCard from "../components/social/FeedCard.svelte";
   import GeceKart from "../components/social/GeceKart.svelte";
   import GecePlanla from "../components/social/GecePlanla.svelte";
-  import { ayril, birlikte, katil, odaListesi } from "../birlikte.svelte";
+  import { ayril, baglantiOdasi, birlikte, katil, odaListesi } from "../birlikte.svelte";
   import { getJson, setJson } from "../settings.svelte";
   import { arkadasEkle, gonderiPaylas, istek, konuGoster, profilGoster, sosyal, uyelerYukle, type Kisi, type Olay } from "../social.svelte";
   import { nav } from "../player.svelte";
@@ -46,6 +46,7 @@
   let onizleme = $state<string | null>(null);
   let gonderiliyor = $state(false);
   let planAcik = $state(false);
+  let odaGiris = $state("");
   const yaklasan = $derived(Object.values(sosyal.geceler).sort((a, b) => a.zaman - b.zaman).slice(0, 4));
   let dosyaSec = $state<HTMLInputElement | null>(null);
   const kalanHarf = $derived(SINIR - [...taslak].length);
@@ -314,9 +315,15 @@
         {/each}
       </section>
 
-      {#if odaListesi().some((o) => o.sahip.id !== sosyal.ben?.id)}
-        <section class="kutu">
+      <section class="kutu">
           <h3>Birlikte dinle</h3>
+          <form class="oda-ac" onsubmit={(e) => (e.preventDefault(), void baglantiOdasi(odaGiris).then(() => (odaGiris = "")))}>
+            <input bind:value={odaGiris} placeholder="YouTube bağlantısı ya da şarkı adı" aria-label="Şarkı" disabled={birlikte.aciliyor} />
+            <button class="btn sm" disabled={!odaGiris.trim() || birlikte.aciliyor}>
+              {birlikte.aciliyor ? "Aranıyor…" : birlikte.yayin && birlikte.kaynak === "baglanti" ? "Değiştir" : "Oda aç"}
+            </button>
+          </form>
+          <span class="sub small oda-not">İndirmek yok: herkes aynı şarkıyı aynı anda dinler.</span>
           {#each odaListesi().filter((o) => o.sahip.id !== sosyal.ben?.id) as o (o.sahip.id)}
             <div class="satir">
               <button class="satir-sol" onclick={() => profilGoster(o.sahip.id)}>
@@ -334,7 +341,6 @@
             </div>
           {/each}
         </section>
-      {/if}
 
       {#if yaklasan.length}
         <section class="kutu">
@@ -416,6 +422,10 @@
   .sm { padding: 6px 11px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .plan-yer { margin: 0 14px 10px; }
   .acik-plan { border-color: var(--gold-dim); color: var(--gold-glow); }
+  .oda-ac { display: flex; gap: 6px; padding: 0 12px; }
+  .oda-ac input { flex: 1; min-width: 0; background: var(--coal-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; color: var(--text); font: inherit; font-size: 13px; outline: none; }
+  .oda-ac input:focus { border-color: var(--gold-dim); }
+  .oda-not { padding: 6px 16px 10px; }
   .geceler { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
   .konu-serit { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 14px 10px; padding: 8px 8px 8px 14px; border-radius: 12px; background: rgba(227, 194, 112, 0.1); border: 1px solid rgba(227, 194, 112, 0.3); font-size: 14px; }
   .konu-serit b { color: var(--gold-glow); }
