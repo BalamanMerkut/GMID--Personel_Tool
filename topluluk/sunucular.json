@@ -34,12 +34,12 @@
     },
     {
       "id": "gmid-warband",
-      "name": "TR-GMID Topluluk Sunucusu · Warband",
+      "name": "TR_GMID Topluluk Sunucusu · Warband",
       "game": "other",
       "host": "31.57.187.132",
       "port": 7240,
       "description": "GMID'in Warband sunucusu (1.174, Native, Battle modu): iki takım tek canla savaşır, raunt sonunda ayakta kalan kazanır. Şifresiz, herkese açık. Etkinlik ve duyurular için Discord: discord.gg/upu9VQwFrV",
-      "connect": "Warband → Multiplayer → sunucu listesinde 'TR-GMID Topluluk Sunucusu'. Listede yoksa: Multiplayer → IP ile bağlan → 31.57.187.132:7240 · Discord: discord.gg/upu9VQwFrV",
+      "connect": "Warband → Multiplayer → sunucu listesinde '**TR_GMID Topluluk Sunucusu**' (listenin başında). Listede yoksa: Multiplayer → IP ile bağlan → 31.57.187.132:7240 · Discord: discord.gg/upu9VQwFrV",
       "logo": "logolar/warband.png"
     }
   ],
