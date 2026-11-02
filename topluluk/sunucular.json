@@ -20,7 +20,8 @@
       "port": 25565,
       "description": "GMID'in Minecraft Java survival sunucusu (Paper 26.3). Lisanssız girilebilir: ilk girişte /register şifre şifre, sonra /login şifre. Shift'e basılı tutup kırınca maden damarı toplu kazılır, ağaç tek seferde devrilir. Kurallar ve duyurular için Discord: discord.gg/upu9VQwFrV",
       "connect": "Minecraft 26.3 → Çok Oyunculu → Sunucu Ekle → adres: gmid.molayazilim.com.tr · Discord: discord.gg/upu9VQwFrV",
-      "logo": "logolar/minecraft.png"
+      "logo": "logolar/minecraft.png",
+      "cover": "kapaklar/minecraft.jpg"
     },
     {
       "id": "gmid-valheim",
@@ -40,7 +41,8 @@
       "port": 27016,
       "description": "GMID'in Insurgency (2014) sunucusu: Checkpoint modu, oyuncular birlikte botlara karşı (en çok 16 kişi). TR/EU herkese açık. Topluluk, etkinlik ve duyurular için Discord: discord.gg/upu9VQwFrV",
       "connect": "Oyna'ya basınca Steam oyunu açıp sunucuya sokar. Elle: konsola connect gmid.molayazilim.com.tr:27016 · Discord: discord.gg/upu9VQwFrV",
-      "logo": "logolar/insurgency.png"
+      "logo": "logolar/insurgency.png",
+      "cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/222880/library_hero.jpg"
     },
     {
       "id": "gmid-unturned",
@@ -51,7 +53,8 @@
       "queryPort": 27031,
       "description": "GMID'in Unturned sunucusu: PEI haritası, Normal zorluk, PvE (oyuncular birbirine zarar vermez), en çok 16 kişi. Ücretsiz oyun, herkes girebilir. Topluluk ve duyurular için Discord: discord.gg/upu9VQwFrV",
       "connect": "Unturned → Play → Connect: IP 31.57.187.132, port 27030 · Discord: discord.gg/upu9VQwFrV",
-      "logo": "logolar/unturned.png"
+      "logo": "logolar/unturned.png",
+      "cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/304930/library_hero.jpg"
     }
   ],
   "ornek": [
