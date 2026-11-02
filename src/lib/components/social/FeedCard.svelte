@@ -6,6 +6,7 @@
   import Avatar from "./Avatar.svelte";
   import Cover from "./Cover.svelte";
   import GeceKart from "./GeceKart.svelte";
+  import TurnuvaKart from "./TurnuvaKart.svelte";
   import { eylem, kalan, once, parcala, puanYaz, sure, TUR_AD } from "./metin";
 
   let { o, ondegisti, onsil }: { o: Olay; ondegisti: () => void; onsil: (o: Olay) => void } = $props();
@@ -152,6 +153,8 @@
 
     {#if o.tur === "gece" && o.veri.gece}
       <GeceKart id={o.veri.gece} yedek={{ oyun: o.veri.oyun ?? o.veri.ad, zaman: o.veri.zaman, kontenjan: o.veri.kontenjan, not: o.veri.not, hemen: !!o.veri.hemen }} />
+    {:else if o.tur === "turnuva" && o.veri.turnuva}
+      <div class="tk"><TurnuvaKart id={o.veri.turnuva} yedek={{ ad: o.veri.ad, oyun: o.veri.oyun ?? "", boyut: o.veri.boyut, durum: o.veri.durum, sampiyon: o.veri.sampiyon }} /></div>
     {:else if o.tur === "ozet"}
       {@const v = o.veri}
       <div class="ozet">
@@ -328,4 +331,5 @@
   .ozet-satir.vurgu { color: var(--text); }
   .ozet .ozet-link { border: 0; background: none; padding: 0; font: inherit; color: var(--gold-glow); font-weight: 700; cursor: pointer; }
   .ozet .ozet-link:hover { text-decoration: underline; }
+  .tk { margin-top: 6px; }
 </style>

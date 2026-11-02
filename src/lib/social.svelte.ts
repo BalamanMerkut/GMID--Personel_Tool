@@ -61,7 +61,7 @@ export interface Yorum {
 export interface Olay {
   id: number;
   kisi: Kisi;
-  tur: "puan" | "oyun" | "klip" | "gonderi" | "gece" | "ozet";
+  tur: "puan" | "oyun" | "klip" | "gonderi" | "gece" | "ozet" | "turnuva";
   veri: Partial<Puan> & {
     ad: string;
     kapak?: string | null;
@@ -70,6 +70,11 @@ export interface Olay {
     not?: string | null;
     /** Oyun gecesi: gecenin kimliği, başlangıç (ms), kişi sınırı. */
     gece?: number;
+    /** Turnuva kartı: turnuvanın kimliği, boyutu, son durumu ve şampiyonu (silinse de kartta kalır). */
+    turnuva?: number;
+    boyut?: number;
+    durum?: string;
+    sampiyon?: Kisi | null;
     /** Gece kartı "oyuncu arıyorum" mu. */
     hemen?: boolean;
     zaman?: number;
@@ -113,6 +118,28 @@ export interface Gece {
   /** "Oyuncu arıyorum": şimdi oynamak için, 2 saat açık kalır. */
   hemen?: boolean;
   katilanlar: { kisi: Kisi; durum: GeceDurum }[];
+}
+
+export interface TurnuvaMac {
+  tur: number;
+  sira: number;
+  a: Kisi | null;
+  b: Kisi | null;
+  kazanan: string | null;
+}
+
+export interface Turnuva {
+  id: number;
+  olusturan: Kisi;
+  ad: string;
+  oyun: string;
+  boyut: number;
+  durum: "kayit" | "suruyor" | "bitti";
+  sampiyon: Kisi | null;
+  etkinlik: number | null;
+  olusturma: number;
+  oyuncular: Kisi[];
+  maclar: TurnuvaMac[];
 }
 
 export interface Mesaj {
@@ -175,6 +202,8 @@ export const sosyal = $state({
   uyeler: [] as Kisi[],
   /** Yaklaşan oyun geceleri (kimlik → gece). */
   geceler: {} as Record<number, Gece>,
+  /** Sürmekte olan ve yakında biten topluluk turnuvaları. */
+  turnuvalar: {} as Record<number, Turnuva>,
   /** Yönetici: herkesin paylaşımını/yorumunu silebilir, şikâyetleri görür. */
   yonetici: false,
   /** Sosyal'de seçili konu: "#etiket" ya da gündemdeki oyun/film adı (boşsa tüm akış). */
@@ -282,6 +311,12 @@ function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [s
       return [`${ad} seni oyun gecesine çağırıyor${v.metin ? `: ${v.metin}` : ""}`, "bell"];
     case "ariyor":
       return [`${ad} oyuncu arıyor${v.metin ? `: ${v.metin}` : ""} · Sosyal'de "Varım" de`, "users"];
+    case "turnuva":
+      return [`${ad} bir turnuva açtı${v.metin ? `: ${v.metin}` : ""} · Sosyal'den katıl`, "star"];
+    case "turnuva-basladi":
+      return [`Turnuva başladı${v.metin ? `: ${v.metin}` : ""} · ilk maçına bak`, "star"];
+    case "sampiyon":
+      return [`Tebrikler, şampiyonsun${v.metin ? `: ${v.metin}` : ""}! Profiline rozet eklendi`, "star"];
     case "haftanin-klibi":
       return [`Klibin haftanın klibi seçildi${v.metin ? `: ${v.metin}` : ""} · profiline rozet eklendi`, "star"];
     case "varim":
@@ -365,6 +400,12 @@ function baglan() {
         break;
       case "gece":
         void gecelerYukle();
+        break;
+      case "turnuva":
+        if (v.silindi) {
+          const { [Number(v.id)]: _, ...kalan } = sosyal.turnuvalar;
+          sosyal.turnuvalar = kalan;
+        } else void turnuvaYukle(Number(v.id));
         break;
       case "mesaj": {
         const m = v.mesaj as Mesaj;
@@ -600,6 +641,7 @@ function baslat() {
   calisiyor = true;
   baglan();
   void gecelerYukle();
+  void turnuvalarYukle();
   void uyelerYukle();
   void istek<{ yonetici?: boolean }>("GET", "/api/ben")
     .then((b) => (sosyal.yonetici = !!b.yonetici))
@@ -677,6 +719,56 @@ export async function gonderiPaylas(metin: string, resim: Blob | null, anket: { 
 /** Ankette oy ver (fikir değiştirilebilir). Dönen: güncel oylar. */
 export async function oyVer(etkinlik: number, secim: number) {
   return (await istek<{ durum: { oylar: number[]; benim: number | null } }>("POST", `/api/akis/${etkinlik}/oy`, { secim })).durum;
+}
+
+// ---------- turnuva ----------
+
+export async function turnuvalarYukle() {
+  if (!sosyal.anahtar) return;
+  try {
+    const r = await istek<{ turnuvalar: Turnuva[] }>("GET", "/api/turnuvalar");
+    sosyal.turnuvalar = Object.fromEntries(r.turnuvalar.map((t) => [t.id, t]));
+  } catch {
+    /* eski sunucu */
+  }
+}
+
+async function turnuvaYukle(id: number) {
+  try {
+    const r = await istek<{ turnuva: Turnuva }>("GET", `/api/turnuva/${id}`);
+    sosyal.turnuvalar = { ...sosyal.turnuvalar, [id]: r.turnuva };
+  } catch {
+    /* silinmiş */
+  }
+}
+
+function turnuvaYaz(t: Turnuva | null | undefined) {
+  if (t) sosyal.turnuvalar = { ...sosyal.turnuvalar, [t.id]: t };
+}
+
+export async function turnuvaAc(t: { ad: string; oyun: string; boyut: number }) {
+  const r = await istek<{ id: number }>("POST", "/api/turnuva", t);
+  await turnuvaYukle(r.id);
+  sosyal.akisSurum++;
+}
+
+export async function turnuvaKatil(id: number, katil: boolean) {
+  turnuvaYaz((await istek<{ turnuva: Turnuva }>(katil ? "POST" : "DELETE", `/api/turnuva/${id}/katil`)).turnuva);
+}
+
+export async function turnuvaBaslat(id: number) {
+  turnuvaYaz((await istek<{ turnuva: Turnuva }>("POST", `/api/turnuva/${id}/baslat`)).turnuva);
+}
+
+export async function macSonucu(id: number, tur: number, sira: number, kazanan: string) {
+  turnuvaYaz((await istek<{ turnuva: Turnuva }>("POST", `/api/turnuva/${id}/mac`, { tur, sira, kazanan })).turnuva);
+}
+
+export async function turnuvaSil(id: number) {
+  await istek("DELETE", `/api/turnuva/${id}`);
+  const { [id]: _, ...kalan } = sosyal.turnuvalar;
+  sosyal.turnuvalar = kalan;
+  sosyal.akisSurum++;
 }
 
 // ---------- oyun gecesi ----------

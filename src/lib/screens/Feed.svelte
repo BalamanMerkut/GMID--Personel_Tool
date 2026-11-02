@@ -9,8 +9,10 @@
   import FeedCard from "../components/social/FeedCard.svelte";
   import GeceKart from "../components/social/GeceKart.svelte";
   import GecePlanla from "../components/social/GecePlanla.svelte";
+  import TurnuvaKart from "../components/social/TurnuvaKart.svelte";
   import { birlikte, katil, odaAc, odaListesi, type Gizlilik, type Yetki } from "../birlikte.svelte";
   import { getJson, setJson } from "../settings.svelte";
+  import { turnuvaAc } from "../social.svelte";
   import { arkadasEkle, gonderiPaylas, istek, konuGoster, profilGoster, sosyal, uyelerYukle, type Kisi, type Olay } from "../social.svelte";
   import { nav } from "../player.svelte";
   import { notify } from "../toast.svelte";
@@ -49,6 +51,29 @@
   let planAcik = $state(false);
   /** Açık form: oyun gecesi mi, oyuncu arıyorum mu. */
   let planHemen = $state(false);
+  // Turnuva açma formu.
+  let turnuvaFormu = $state(false);
+  let tAd = $state("");
+  let tOyun = $state("");
+  let tBoyut = $state(8);
+  let tGonderiliyor = $state(false);
+  const turnuvaListesi = $derived(Object.values(sosyal.turnuvalar).filter((t) => t.durum !== "bitti").slice(0, 3));
+  async function yeniTurnuva() {
+    if (!tAd.trim() || !tOyun.trim() || tGonderiliyor) return;
+    tGonderiliyor = true;
+    try {
+      await turnuvaAc({ ad: tAd.trim(), oyun: tOyun.trim(), boyut: tBoyut });
+      notify("Turnuva açıldı · arkadaşlarına haber gitti", "star");
+      turnuvaFormu = false;
+      tAd = "";
+      tOyun = "";
+    } catch (e) {
+      hata(e);
+    } finally {
+      tGonderiliyor = false;
+    }
+  }
+
   // Dinleme odası açma formu.
   let odaFormu = $state(false);
   let odaAdi = $state("");
@@ -437,6 +462,28 @@
         {:else}
           {#if !odaFormu}<p class="sub small oda-not">Şu an açık oda yok. İlk odayı sen aç!</p>{/if}
         {/each}
+      </section>
+
+      <section class="kutu">
+        <div class="kutu-bas">
+          <h3>Turnuvalar</h3>
+          <button class="btn sm takip" onclick={() => (turnuvaFormu = !turnuvaFormu)}><Icon name={turnuvaFormu ? "x" : "plus"} size={14} />{turnuvaFormu ? "Vazgeç" : "Turnuva aç"}</button>
+        </div>
+        {#if turnuvaFormu}
+          <form class="oda-ac" onsubmit={(e) => (e.preventDefault(), void yeniTurnuva())}>
+            <input bind:value={tAd} maxlength="60" placeholder="Turnuva adı (ör. Cuma 1v1 Kupası)" aria-label="Turnuva adı" />
+            <input bind:value={tOyun} maxlength="60" placeholder="Oyun (ör. CS2, Valorant)" aria-label="Oyun" />
+            <label class="oda-satir">Kişi sayısı
+              <select bind:value={tBoyut}>{#each [4, 8, 16, 32] as n (n)}<option value={n}>{n} kişi</option>{/each}</select>
+            </label>
+            <button class="btn sm oda-dugme" disabled={!tAd.trim() || !tOyun.trim() || tGonderiliyor}><Icon name="trophy" size={14} />Turnuvayı aç</button>
+          </form>
+        {:else if !turnuvaListesi.length}
+          <p class="sub small oda-not">Açık turnuva yok. Bir turnuva aç; akışa kart düşer, herkes katılır, kazanan şampiyon rozeti alır.</p>
+        {/if}
+        <div class="geceler">
+          {#each turnuvaListesi as t (t.id)}<TurnuvaKart id={t.id} kucuk />{/each}
+        </div>
       </section>
 
       {#if yaklasan.length}

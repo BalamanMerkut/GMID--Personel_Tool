@@ -18,6 +18,7 @@ mod sayfa;
 mod sosyal;
 mod sosyal_api;
 mod topluluk;
+mod turnuva;
 mod ws;
 mod yedek;
 
@@ -109,6 +110,15 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/oda/{id}/sonraki", post(oda::sonraki))
         .route("/api/oda/{id}/at/{kisi}", post(oda::at))
         .route("/api/gece", post(gece::ac))
+        .route("/api/turnuvalar", get(turnuva::liste))
+        .route("/api/turnuva", post(turnuva::ac))
+        .route("/api/turnuva/{id}", get(turnuva::tek).delete(turnuva::sil))
+        .route(
+            "/api/turnuva/{id}/katil",
+            post(turnuva::katil).delete(turnuva::ayril),
+        )
+        .route("/api/turnuva/{id}/baslat", post(turnuva::baslat))
+        .route("/api/turnuva/{id}/mac", post(turnuva::mac))
         .route("/api/sunucuya-girdi", post(oyna::girdi))
         .route("/api/geceler", get(gece::liste))
         .route("/api/gece/{id}", delete(gece::sil))

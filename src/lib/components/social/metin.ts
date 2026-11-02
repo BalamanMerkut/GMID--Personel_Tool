@@ -22,6 +22,7 @@ export const puanYaz = (p: number | null | undefined) =>
 export function eylem(o: Olay): string {
   if (o.tur === "gonderi") return "";
   if (o.tur === "ozet") return "haftalık özet";
+  if (o.tur === "turnuva") return o.veri.durum === "bitti" ? "turnuvası bitti" : "turnuva açtı";
   if (o.tur === "gece") return o.veri.hemen ? "oyuncu arıyor" : "oyun gecesi planladı";
   if (o.tur === "oyun") return "oynamaya başladı";
   if (o.tur === "klip") return o.veri.oyun ? `${o.veri.oyun} klibi paylaştı` : "bir klip paylaştı";

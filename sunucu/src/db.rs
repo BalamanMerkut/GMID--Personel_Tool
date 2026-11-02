@@ -65,6 +65,7 @@ impl Db {
         crate::gece::kur(&c)?;
         crate::topluluk::kur(&c)?;
         crate::hafta::kur(&c)?;
+        crate::turnuva::kur(&c)?;
         Ok(Db(c))
     }
 
