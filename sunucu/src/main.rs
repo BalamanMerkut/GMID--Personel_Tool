@@ -12,6 +12,7 @@ mod durum;
 mod gece;
 mod klip;
 mod oda;
+mod oyna;
 mod sayfa;
 mod sosyal;
 mod sosyal_api;
@@ -106,6 +107,7 @@ pub fn uygulama(s: Arc<Sunucu>) -> Router {
         .route("/api/oda/{id}/sonraki", post(oda::sonraki))
         .route("/api/oda/{id}/at/{kisi}", post(oda::at))
         .route("/api/gece", post(gece::ac))
+        .route("/api/sunucuya-girdi", post(oyna::girdi))
         .route("/api/geceler", get(gece::liste))
         .route("/api/gece/{id}", delete(gece::sil))
         .route("/api/gece/{id}/katil", post(gece::katil))

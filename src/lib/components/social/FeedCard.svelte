@@ -123,7 +123,7 @@
     </header>
 
     {#if o.tur === "gece" && o.veri.gece}
-      <GeceKart id={o.veri.gece} yedek={{ oyun: o.veri.oyun ?? o.veri.ad, zaman: o.veri.zaman, kontenjan: o.veri.kontenjan, not: o.veri.not }} />
+      <GeceKart id={o.veri.gece} yedek={{ oyun: o.veri.oyun ?? o.veri.ad, zaman: o.veri.zaman, kontenjan: o.veri.kontenjan, not: o.veri.not, hemen: !!o.veri.hemen }} />
     {:else if o.tur === "gonderi"}
       {#if o.veri.metin}{@render yazi(o.veri.metin)}{/if}
       {#if o.veri.resim}<img class="medya" src={tamAdres(o.veri.resim)} alt="" loading="lazy" />{/if}

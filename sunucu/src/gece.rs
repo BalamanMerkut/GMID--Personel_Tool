@@ -17,6 +17,8 @@ use std::sync::Arc;
 pub const HATIRLAT_MS: i64 = 15 * 60 * 1000;
 /// Başlamış gece bu kadar süre daha "yaklaşanlar"da görünür (o an oynanıyor).
 const SURUYOR_MS: i64 = 3 * 3600 * 1000;
+/// "Oyuncu arıyorum" kartı bu kadar süre açık kalır.
+pub const HEMEN_MS: i64 = 2 * 3600 * 1000;
 /// Bir kişinin aynı anda en çok bu kadar yaklaşan gecesi olabilir.
 const KISI_BASI: i64 = 5;
 
@@ -34,7 +36,15 @@ pub fn kur(c: &Connection) -> rusqlite::Result<()> {
            -- geliyor | belki | gelemem
            durum TEXT NOT NULL, zaman INTEGER NOT NULL,
            PRIMARY KEY (gece, kullanici));",
-    )
+    )?;
+    // "Oyuncu arıyorum" (şimdi oynamak için oyuncu arayan) kartları: aynı tablo, `hemen = 1`.
+    let var: bool = c
+        .prepare("SELECT 1 FROM pragma_table_info('geceler') WHERE name = 'hemen'")?
+        .exists([])?;
+    if !var {
+        c.execute_batch("ALTER TABLE geceler ADD COLUMN hemen INTEGER NOT NULL DEFAULT 0;")?;
+    }
+    Ok(())
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -52,6 +62,8 @@ pub struct Gece {
     pub zaman: i64,
     pub kontenjan: Option<i64>,
     pub not: Option<String>,
+    /// "Oyuncu arıyorum": şimdi oynamak için; 2 saat açık kalır.
+    pub hemen: bool,
     /// Akıştaki kartın kimliği.
     pub etkinlik: Option<i64>,
     pub katilanlar: Vec<Katilan>,
@@ -79,6 +91,7 @@ impl Db {
         zaman: i64,
         kontenjan: Option<i64>,
         notu: Option<&str>,
+        hemen: bool,
     ) -> R<Option<i64>> {
         let t = simdi();
         let acik: i64 = self
@@ -95,9 +108,9 @@ impl Db {
         let gid: i64 = self
             .0
             .query_row(
-                "INSERT INTO geceler (olusturan, oyun, zaman, kontenjan, notu, olusturma)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id",
-                params![id, oyun, zaman, kontenjan, notu, t],
+                "INSERT INTO geceler (olusturan, oyun, zaman, kontenjan, notu, olusturma, hemen, hatirlatildi)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) RETURNING id",
+                params![id, oyun, zaman, kontenjan, notu, t, hemen],
                 |r| r.get(0),
             )
             .map_err(e)?;
@@ -109,7 +122,7 @@ impl Db {
             )
             .map_err(e)?;
         let veri = json!({ "ad": oyun, "gece": gid, "oyun": oyun, "zaman": zaman,
-                           "kontenjan": kontenjan, "not": notu });
+                           "kontenjan": kontenjan, "not": notu, "hemen": hemen });
         let eid = self.etkinlik_yaz(id, "gece", &format!("gece:{gid}"), &veri, t)?;
         self.0
             .execute(
@@ -124,7 +137,7 @@ impl Db {
         let g = self
             .0
             .query_row(
-                "SELECT g.id, k.id, k.ad, k.avatar, g.oyun, g.zaman, g.kontenjan, g.notu, g.etkinlik
+                "SELECT g.id, k.id, k.ad, k.avatar, g.oyun, g.zaman, g.kontenjan, g.notu, g.etkinlik, g.hemen
                  FROM geceler g JOIN kullanicilar k ON k.id = g.olusturan WHERE g.id = ?1",
                 [gid],
                 gece_satiri,
@@ -170,13 +183,13 @@ impl Db {
         let mut st = self
             .0
             .prepare(
-                "SELECT g.id, k.id, k.ad, k.avatar, g.oyun, g.zaman, g.kontenjan, g.notu, g.etkinlik
+                "SELECT g.id, k.id, k.ad, k.avatar, g.oyun, g.zaman, g.kontenjan, g.notu, g.etkinlik, g.hemen
                  FROM geceler g JOIN kullanicilar k ON k.id = g.olusturan
-                 WHERE g.zaman > ?1 ORDER BY g.zaman LIMIT 30",
+                 WHERE g.zaman > CASE WHEN g.hemen = 1 THEN ?2 ELSE ?1 END ORDER BY g.zaman LIMIT 30",
             )
             .map_err(e)?;
         let mut l: Vec<Gece> = st
-            .query_map([simdi() - SURUYOR_MS], gece_satiri)
+            .query_map([simdi() - SURUYOR_MS, simdi() - HEMEN_MS], gece_satiri)
             .map_err(e)?
             .filter_map(Result::ok)
             .collect();
@@ -190,7 +203,7 @@ impl Db {
         let Some(g) = self.gece(gid)? else {
             return Ok(KatilSonuc::Yok);
         };
-        if g.zaman < simdi() - SURUYOR_MS {
+        if g.zaman < simdi() - if g.hemen { HEMEN_MS } else { SURUYOR_MS } {
             return Ok(KatilSonuc::Bitti);
         }
         if durum == "geliyor" {
@@ -301,6 +314,7 @@ fn gece_satiri(r: &rusqlite::Row) -> rusqlite::Result<Gece> {
         kontenjan: r.get(6)?,
         not: r.get(7)?,
         etkinlik: r.get(8)?,
+        hemen: r.get(9)?,
         katilanlar: Vec::new(),
     })
 }
@@ -315,9 +329,12 @@ pub struct AcIstek {
     zaman: i64,
     kontenjan: Option<i64>,
     not: Option<String>,
+    /// "Oyuncu arıyorum": zaman yok sayılır, şimdi başlar.
+    #[serde(default)]
+    hemen: bool,
 }
 
-/// POST /api/gece: yeni oyun gecesi; arkadaşlara davet bildirimi.
+/// POST /api/gece: yeni oyun gecesi (ya da `hemen`: oyuncu arıyorum); arkadaşlara bildirim.
 pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(i): Json<AcIstek>) -> Sonuc {
     let ben = kim(&s, &h)?;
     let oyun: String = i.oyun.trim().chars().take(80).collect();
@@ -325,7 +342,8 @@ pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(i): Json<AcIste
         return Err(hata(StatusCode::BAD_REQUEST, "Hangi oyun?"));
     }
     let t = simdi();
-    if i.zaman < t - 5 * 60_000 || i.zaman > t + 60 * 24 * 3600 * 1000 {
+    let zaman = if i.hemen { t } else { i.zaman };
+    if zaman < t - 5 * 60_000 || zaman > t + 60 * 24 * 3600 * 1000 {
         return Err(hata(
             StatusCode::BAD_REQUEST,
             "Zaman geçmişte ya da çok ileride (en çok 60 gün sonrası)",
@@ -339,7 +357,7 @@ pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(i): Json<AcIste
     let (gid, arkadaslar) = {
         let db = s.db();
         let gid = db
-            .gece_ac(&ben.id, &oyun, i.zaman, kontenjan, notu.as_deref())
+            .gece_ac(&ben.id, &oyun, zaman, kontenjan, notu.as_deref(), i.hemen)
             .map_err(ic)?
             .ok_or_else(|| {
                 hata(
@@ -350,7 +368,8 @@ pub async fn ac(State(s): State<Arc<Sunucu>>, h: HeaderMap, Json(i): Json<AcIste
         let (ark, _, _) = db.arkadaslar(&ben.id).map_err(ic)?;
         (gid, ark)
     };
-    let v = json!({ "tip": "bildirim", "tur": "davet", "kisi": ben, "gece": gid, "metin": oyun });
+    let tur = if i.hemen { "ariyor" } else { "davet" };
+    let v = json!({ "tip": "bildirim", "tur": tur, "kisi": ben, "gece": gid, "metin": oyun });
     for a in arkadaslar {
         s.durum.kisiye(&a.id, &v);
     }
@@ -395,6 +414,16 @@ pub async fn katil(
     }
     s.durum.yay(json!({ "tip": "gece", "id": gid }));
     let g = s.db().gece(gid).map_err(ic)?;
+    // "Oyuncu arıyorum"da biri "Varım" deyince arayana haber gider.
+    if let Some(g) = g
+        .as_ref()
+        .filter(|g| g.hemen && i.durum == "geliyor" && g.olusturan.id != ben.id)
+    {
+        s.durum.kisiye(
+            &g.olusturan.id,
+            &json!({ "tip": "bildirim", "tur": "varim", "kisi": ben, "gece": gid, "metin": g.oyun }),
+        );
+    }
     Ok(Json(json!({ "gece": g })))
 }
 
@@ -451,7 +480,7 @@ mod tests {
         }
         let t = simdi();
         let g = db
-            .gece_ac("1", "CS2", t + 10 * 60_000, Some(2), Some("ranked"))
+            .gece_ac("1", "CS2", t + 10 * 60_000, Some(2), Some("ranked"), false)
             .unwrap()
             .unwrap();
         // Akışa kart düştü.
@@ -487,8 +516,41 @@ mod tests {
         kisi(&db, "1");
         let t = simdi() + 3_600_000;
         for _ in 0..KISI_BASI {
-            assert!(db.gece_ac("1", "LoL", t, None, None).unwrap().is_some());
+            assert!(db
+                .gece_ac("1", "LoL", t, None, None, false)
+                .unwrap()
+                .is_some());
         }
-        assert!(db.gece_ac("1", "LoL", t, None, None).unwrap().is_none());
+        assert!(db
+            .gece_ac("1", "LoL", t, None, None, false)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn oyuncu_ariyorum() {
+        let db = Db::bellekte();
+        kisi(&db, "1");
+        kisi(&db, "2");
+        let t = simdi();
+        let g = db
+            .gece_ac("1", "CS2", t, Some(2), None, true)
+            .unwrap()
+            .unwrap();
+        let gece = db.gece(g).unwrap().unwrap();
+        assert!(gece.hemen);
+        // Hatırlatma gitmez (zaten şimdi).
+        assert!(db.hatirlatilacaklar(t).unwrap().is_empty());
+        // Açan + 1 kişi aranıyor: ilk "varım" diyen alır.
+        assert_eq!(db.katil(g, "2", "geliyor").unwrap(), KatilSonuc::Tamam);
+        assert_eq!(db.yaklasan_geceler().unwrap().len(), 1);
+        // 2 saat sonra kapanır.
+        db.0.execute(
+            "UPDATE geceler SET zaman = ?1 WHERE id = ?2",
+            params![t - HEMEN_MS - 1000, g],
+        )
+        .unwrap();
+        assert!(db.yaklasan_geceler().unwrap().is_empty());
+        assert_eq!(db.katil(g, "2", "belki").unwrap(), KatilSonuc::Bitti);
     }
 }

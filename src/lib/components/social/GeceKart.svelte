@@ -14,7 +14,7 @@
   }: {
     id: number;
     /** Gece yüklenemezse (bitti / iptal) kartta yazanlar. */
-    yedek?: { oyun?: string; zaman?: number; kontenjan?: number | null; not?: string | null };
+    yedek?: { oyun?: string; zaman?: number; kontenjan?: number | null; not?: string | null; hemen?: boolean };
     /** Sağ sütundaki sıkışık görünüm. */
     kucuk?: boolean;
   } = $props();
@@ -24,9 +24,19 @@
   const zaman = $derived(g?.zaman ?? yedek?.zaman ?? 0);
   const kontenjan = $derived(g?.kontenjan ?? yedek?.kontenjan ?? null);
   const not = $derived(g?.not ?? yedek?.not ?? null);
+  /** "Oyuncu arıyorum": şimdi oynamak için; 2 saat açık kalır, "Varım" / "Vazgeç". */
+  const hemen = $derived(g?.hemen ?? yedek?.hemen ?? false);
+  const HEMEN_MS = 2 * 3600 * 1000;
+  function hemenKalan(ms: number): string {
+    if (ms <= 0) return "bitti";
+    const dk = Math.max(1, Math.round(ms / 60000));
+    return dk > 90 ? "2 saat açık" : dk > 60 ? `1 sa ${dk - 60} dk daha açık` : `${dk} dk daha açık`;
+  }
   const z = $derived(geceZamani(zaman));
-  const kalan = $derived(geceKalan(zaman));
-  const bitti = $derived(!g && zaman < Date.now());
+  const kalan = $derived(
+    hemen ? hemenKalan(zaman + HEMEN_MS - Date.now()) : geceKalan(zaman),
+  );
+  const bitti = $derived(hemen ? zaman + HEMEN_MS < Date.now() : !g && zaman < Date.now());
   const gelen = $derived(g?.katilanlar.filter((k) => k.durum === "geliyor") ?? []);
   const belki = $derived(g?.katilanlar.filter((k) => k.durum === "belki") ?? []);
   const benim = $derived(g?.katilanlar.find((k) => k.kisi.id === sosyal.ben?.id)?.durum ?? null);
@@ -40,7 +50,8 @@
     bekliyor = true;
     try {
       await geceKatil(id, d);
-      if (d === "geliyor") notify(`${oyun}: geliyorsun, 15 dakika önce hatırlatırım`, "bell");
+      if (d === "geliyor")
+        notify(hemen ? `${oyun}: "Varım" dedin · ${g?.olusturan.ad ?? "arayan"} kişiye haber gitti` : `${oyun}: geliyorsun, 15 dakika önce hatırlatırım`, "bell");
     } catch (e) {
       notify(String(e instanceof Error ? e.message : e), "info");
     } finally {
@@ -56,19 +67,27 @@
     }
     try {
       await geceIptal(id);
-      notify("Oyun gecesi iptal edildi", "check");
+      notify(hemen ? "Arama kapatıldı" : "Oyun gecesi iptal edildi", "check");
     } catch (e) {
       notify(String(e instanceof Error ? e.message : e), "info");
     }
   }
 </script>
 
-<div class="gece" class:kucuk class:bitti>
-  <div class="takvim" aria-hidden="true">
-    <span class="gun">{z.gun}</span>
-    <b class="saat tnum">{z.saat}</b>
-    {#if !kucuk}<span class="tarih">{z.tarih}</span>{/if}
-  </div>
+<div class="gece" class:kucuk class:bitti class:hemen>
+  {#if hemen}
+    <div class="takvim simdi" aria-hidden="true">
+      <span class="gun">Şimdi</span>
+      <Icon name="users" size={kucuk ? 20 : 24} />
+      {#if !kucuk}<span class="tarih">oyuncu aranıyor</span>{/if}
+    </div>
+  {:else}
+    <div class="takvim" aria-hidden="true">
+      <span class="gun">{z.gun}</span>
+      <b class="saat tnum">{z.saat}</b>
+      {#if !kucuk}<span class="tarih">{z.tarih}</span>{/if}
+    </div>
+  {/if}
   <div class="bilgi">
     <div class="ust">
       <b class="oyun">{oyun}</b>
@@ -83,18 +102,24 @@
           {/each}
         </span>
         <span class="sayi tnum">
-          <b>{gelen.length}{kontenjan ? `/${kontenjan}` : ""}</b> geliyor{belki.length ? ` · ${belki.length} belki` : ""}
+          {#if hemen}
+            <b>{gelen.length}{kontenjan ? `/${kontenjan}` : ""}</b> kişi{kontenjan && gelen.length < kontenjan ? ` · ${kontenjan - gelen.length} kişi daha lazım` : kontenjan ? " · tamam!" : ""}
+          {:else}
+            <b>{gelen.length}{kontenjan ? `/${kontenjan}` : ""}</b> geliyor{belki.length ? ` · ${belki.length} belki` : ""}
+          {/if}
         </span>
       </div>
       {#if !bitti && kalan !== "bitti"}
         <div class="secim" role="group" aria-label="Katılım">
           <button class:secili={benim === "geliyor"} class="evet" disabled={bekliyor || dolu} title={dolu ? "Kişi sınırı doldu" : ""} onclick={() => sec("geliyor")}>
-            <Icon name="check" size={14} />{dolu ? "Dolu" : "Geliyorum"}
+            <Icon name="check" size={14} />{dolu ? "Dolu" : hemen ? "Varım" : "Geliyorum"}
           </button>
-          <button class:secili={benim === "belki"} disabled={bekliyor} onclick={() => sec("belki")}>Belki</button>
-          <button class:secili={benim === "gelemem"} class="hayir" disabled={bekliyor} onclick={() => sec("gelemem")}>Gelemem</button>
+          {#if !hemen}<button class:secili={benim === "belki"} disabled={bekliyor} onclick={() => sec("belki")}>Belki</button>{/if}
+          {#if !hemen || benim === "geliyor"}
+            <button class:secili={benim === "gelemem"} class="hayir" disabled={bekliyor} onclick={() => sec("gelemem")}>{hemen ? "Vazgeç" : "Gelemem"}</button>
+          {/if}
           {#if iptalEdebilir && !kucuk}
-            <button class="iptal" class:onay={iptalOnay} onclick={iptal}>{iptalOnay ? "İptal edilsin mi?" : "İptal et"}</button>
+            <button class="iptal" class:onay={iptalOnay} onclick={iptal}>{iptalOnay ? (hemen ? "Kapatılsın mı?" : "İptal edilsin mi?") : hemen ? "Aramayı kapat" : "İptal et"}</button>
           {/if}
         </div>
       {/if}
@@ -107,6 +132,9 @@
 <style>
   .gece { display: flex; gap: 14px; padding: 12px; border-radius: 16px; border: 1px solid rgba(227, 194, 112, 0.3); background: linear-gradient(135deg, rgba(227, 194, 112, 0.09), rgba(255, 255, 255, 0.02) 60%); }
   .gece.bitti { opacity: 0.6; }
+  .gece.hemen { border-color: rgba(92, 192, 138, 0.4); background: linear-gradient(135deg, rgba(92, 192, 138, 0.1), rgba(255, 255, 255, 0.02) 60%); }
+  .takvim.simdi { color: var(--good); border-color: rgba(92, 192, 138, 0.35); gap: 4px; }
+  .takvim.simdi .gun { color: var(--good); }
   .gece.kucuk { padding: 10px; gap: 10px; border-radius: 12px; }
   .takvim { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 8px 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(227, 194, 112, 0.25); }
   .kucuk .takvim { width: 60px; padding: 6px 2px; align-self: flex-start; }

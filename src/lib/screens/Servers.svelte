@@ -4,6 +4,7 @@
   import Icon from "../Icon.svelte";
   import { ago } from "../time";
   import { notify } from "../toast.svelte";
+  import { sunucuyaGirdi } from "../social.svelte";
   import Switch from "../components/Switch.svelte";
   import type { GameInfo, Server, ServerInput, ServerStatus, ServerWatch } from "../types";
 
@@ -179,6 +180,8 @@
   async function join(s: Server) {
     try {
       const r = await api.servers.join(s.id);
+      // GMID sunucusuna girerken arkadaşlara "sunucuya girdi" bildirimi (sunucu en çok 10 dakikada bir yollar).
+      if (s.remote) sunucuyaGirdi(s.name, `${s.host}:${s.port}`);
       if (r.kind === "copy") {
         const g = gameOf(s.game);
         await copy(r.address, g ? ` · ${g.name}'ı aç ve sunucu ekle'ye yapıştır` : "");

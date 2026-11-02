@@ -21,7 +21,7 @@ export const puanYaz = (p: number | null | undefined) =>
 /** "bir diziyi puanladı", "bir oyunu bitirdi", "oynamaya başladı" … */
 export function eylem(o: Olay): string {
   if (o.tur === "gonderi") return "";
-  if (o.tur === "gece") return "oyun gecesi planladı";
+  if (o.tur === "gece") return o.veri.hemen ? "oyuncu arıyor" : "oyun gecesi planladı";
   if (o.tur === "oyun") return "oynamaya başladı";
   if (o.tur === "klip") return o.veri.oyun ? `${o.veri.oyun} klibi paylaştı` : "bir klip paylaştı";
   const v = o.veri;

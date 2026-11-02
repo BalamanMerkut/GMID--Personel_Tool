@@ -7,7 +7,8 @@
   import { notify } from "../../toast.svelte";
   import { geceAc, sosyal } from "../../social.svelte";
 
-  let { onkapat }: { onkapat: () => void } = $props();
+  // `hemen`: "Oyuncu arıyorum" — gün/saat yok, şimdi; kaç kişi lazım; 2 saat açık kalır.
+  let { onkapat, hemen = false }: { onkapat: () => void; hemen?: boolean } = $props();
 
   const iki = (n: number) => String(n).padStart(2, "0");
   const gunYaz = (d: Date) => `${d.getFullYear()}-${iki(d.getMonth() + 1)}-${iki(d.getDate())}`;
@@ -19,12 +20,14 @@
   let gun = $state(gunYaz(ilk));
   let saat = $state("21:00");
   let kontenjan = $state<string>("5");
+  /** Oyuncu arıyorum: kaç kişi daha lazım. */
+  let lazim = $state("2");
   let not = $state("");
   let oyunlar = $state<string[]>([]);
   let gonderiliyor = $state(false);
 
   const zaman = $derived(new Date(`${gun}T${saat || "21:00"}`).getTime());
-  const gecerli = $derived(oyun.trim().length > 0 && Number.isFinite(zaman) && zaman > Date.now() - 5 * 60_000);
+  const gecerli = $derived(oyun.trim().length > 0 && (hemen || (Number.isFinite(zaman) && zaman > Date.now() - 5 * 60_000)));
 
   onMount(() => {
     if (inTauri)
@@ -39,8 +42,14 @@
     if (!gecerli || gonderiliyor) return;
     gonderiliyor = true;
     try {
-      await geceAc({ oyun: oyun.trim(), zaman, kontenjan: kontenjan ? Number(kontenjan) : null, not: not.trim() || null });
-      notify("Oyun gecesi planlandı · arkadaşlarına haber gitti", "bell");
+      if (hemen) {
+        // Sınır açanı da sayar: 2 kişi lazımsa 3 kişilik.
+        await geceAc({ oyun: oyun.trim(), zaman: Date.now(), kontenjan: Number(lazim) + 1, not: not.trim() || null, hemen: true });
+        notify("Oyuncu aranıyor · arkadaşlarına haber gitti", "users");
+      } else {
+        await geceAc({ oyun: oyun.trim(), zaman, kontenjan: kontenjan ? Number(kontenjan) : null, not: not.trim() || null });
+        notify("Oyun gecesi planlandı · arkadaşlarına haber gitti", "bell");
+      }
       onkapat();
     } catch (err) {
       notify(String(err instanceof Error ? err.message : err), "info");
@@ -52,7 +61,7 @@
 
 <form class="plan" onsubmit={planla}>
   <div class="baslik">
-    <span><Icon name="bell" size={16} /><b>Oyun gecesi planla</b></span>
+    <span><Icon name={hemen ? "users" : "bell"} size={16} /><b>{hemen ? "Oyuncu arıyorum" : "Oyun gecesi planla"}</b></span>
     <button type="button" class="x" aria-label="Kapat" onclick={onkapat}><Icon name="x" size={15} /></button>
   </div>
   <div class="alanlar">
@@ -61,29 +70,38 @@
       <input bind:value={oyun} list="gece-oyunlar" maxlength="80" placeholder="CS2, Valorant, LoL…" required />
       <datalist id="gece-oyunlar">{#each oyunlar as o (o)}<option value={o}></option>{/each}</datalist>
     </label>
-    <label>
-      <span>Gün</span>
-      <input type="date" bind:value={gun} min={gunYaz(new Date())} required />
-    </label>
-    <label>
-      <span>Saat</span>
-      <input type="time" bind:value={saat} required />
-    </label>
-    <label>
-      <span>Kişi sınırı</span>
-      <select bind:value={kontenjan}>
-        <option value="">Sınırsız</option>
-        {#each [2, 3, 4, 5, 6, 8, 10] as n (n)}<option value={String(n)}>{n} kişi</option>{/each}
-      </select>
-    </label>
+    {#if hemen}
+      <label>
+        <span>Kaç kişi lazım</span>
+        <select bind:value={lazim}>{#each [1, 2, 3, 4, 5, 6, 8, 9] as n (n)}<option value={String(n)}>{n} kişi</option>{/each}</select>
+      </label>
+    {:else}
+      <label>
+        <span>Gün</span>
+        <input type="date" bind:value={gun} min={gunYaz(new Date())} required />
+      </label>
+      <label>
+        <span>Saat</span>
+        <input type="time" bind:value={saat} required />
+      </label>
+      <label>
+        <span>Kişi sınırı</span>
+        <select bind:value={kontenjan}>
+          <option value="">Sınırsız</option>
+          {#each [2, 3, 4, 5, 6, 8, 10] as n (n)}<option value={String(n)}>{n} kişi</option>{/each}
+        </select>
+      </label>
+    {/if}
     <label class="genis">
       <span>Not <em>(isteğe bağlı)</em></span>
-      <input bind:value={not} maxlength="300" placeholder="Ranked, Discord'da Oyun Odası 1" />
+      <input bind:value={not} maxlength="300" placeholder={hemen ? "Ranked, mikrofon şart, Discord'da Oyun Odası 1" : "Ranked, Discord'da Oyun Odası 1"} />
     </label>
   </div>
   <div class="alt">
-    <span class="sub small">Arkadaşlarına davet gider; geleceklere başlamadan 15 dakika önce hatırlatılır.</span>
-    <button class="btn" disabled={!gecerli || gonderiliyor}><Icon name="check" size={15} />{gonderiliyor ? "Planlanıyor…" : "Planla"}</button>
+    <span class="sub small">
+      {hemen ? "Arkadaşlarına haber gider; \"Varım\" diyen olunca sana bildirim gelir. Kart 2 saat açık kalır, kişi tamamlanınca dolar." : "Arkadaşlarına davet gider; geleceklere başlamadan 15 dakika önce hatırlatılır."}
+    </span>
+    <button class="btn" disabled={!gecerli || gonderiliyor}><Icon name="check" size={15} />{gonderiliyor ? "Gönderiliyor…" : hemen ? "Oyuncu ara" : "Planla"}</button>
   </div>
 </form>
 

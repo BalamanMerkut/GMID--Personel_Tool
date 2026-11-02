@@ -70,6 +70,8 @@ export interface Olay {
     not?: string | null;
     /** Oyun gecesi: gecenin kimliği, başlangıç (ms), kişi sınırı. */
     gece?: number;
+    /** Gece kartı "oyuncu arıyorum" mu. */
+    hemen?: boolean;
     zaman?: number;
     kontenjan?: number | null;
     /** Gönderi: yazı ve isteğe bağlı resim ("/resim/…"). */
@@ -98,6 +100,8 @@ export interface Gece {
   kontenjan: number | null;
   not: string | null;
   etkinlik: number | null;
+  /** "Oyuncu arıyorum": şimdi oynamak için, 2 saat açık kalır. */
+  hemen?: boolean;
   katilanlar: { kisi: Kisi; durum: GeceDurum }[];
 }
 
@@ -266,6 +270,12 @@ function bildirimYazisi(tur: string, ad: string, v: Record<string, unknown>): [s
       return [`${ad} senden bahsetti`, "users"];
     case "davet":
       return [`${ad} seni oyun gecesine çağırıyor${v.metin ? `: ${v.metin}` : ""}`, "bell"];
+    case "ariyor":
+      return [`${ad} oyuncu arıyor${v.metin ? `: ${v.metin}` : ""} · Sosyal'de "Varım" de`, "users"];
+    case "varim":
+      return [`${ad} "Varım" dedi${v.metin ? `: ${v.metin}` : ""}`, "users"];
+    case "sunucu":
+      return [`${ad}, ${v.metin ? String(v.metin) : "bir GMID sunucusu"}'na girdi · Sunucular'dan katıl`, "users"];
     case "hatirlat":
       return [`Oyun gecesi 15 dakika sonra başlıyor${v.metin ? `: ${v.metin}` : ""}`, "bell"];
     default:
@@ -665,7 +675,7 @@ export async function gecelerYukle() {
   }
 }
 
-export async function geceAc(g: { oyun: string; zaman: number; kontenjan: number | null; not: string | null }) {
+export async function geceAc(g: { oyun: string; zaman: number; kontenjan: number | null; not: string | null; hemen?: boolean }) {
   await istek("POST", "/api/gece", g);
   await gecelerYukle();
   sosyal.akisSurum++;
@@ -681,6 +691,12 @@ export async function geceIptal(id: number) {
   const { [id]: _, ...kalan } = sosyal.geceler;
   sosyal.geceler = kalan;
   sosyal.akisSurum++;
+}
+
+/** Bir GMID sunucusuna Oyna denince arkadaşlara "sunucuya girdi" bildirimi (sunucu 10 dakikada bir gönderir). */
+export function sunucuyaGirdi(sunucu: string, adres: string) {
+  if (!sosyal.anahtar) return;
+  void istek("POST", "/api/sunucuya-girdi", { sunucu, adres }).catch(() => {});
 }
 
 /** Üye listesi (@anma için); Topluluk ve Sosyal de bunu kullanır. */

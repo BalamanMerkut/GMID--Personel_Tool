@@ -47,6 +47,8 @@
   let onizleme = $state<string | null>(null);
   let gonderiliyor = $state(false);
   let planAcik = $state(false);
+  /** Açık form: oyun gecesi mi, oyuncu arıyorum mu. */
+  let planHemen = $state(false);
   // Dinleme odası açma formu.
   let odaFormu = $state(false);
   let odaAdi = $state("");
@@ -303,7 +305,8 @@
         </div>
         <div class="yaz-alt">
           <button type="button" class="btn ghost sm" onclick={() => dosyaSec?.click()} disabled={gonderiliyor}><Icon name="image" size={15} />Resim</button>
-          <button type="button" class="btn ghost sm" class:acik-plan={planAcik} onclick={() => (planAcik = !planAcik)}><Icon name="bell" size={15} />Oyun gecesi</button>
+          <button type="button" class="btn ghost sm" class:acik-plan={planAcik && planHemen} onclick={() => ((planAcik = !(planAcik && planHemen)), (planHemen = true))}><Icon name="users" size={15} />Oyuncu ara</button>
+          <button type="button" class="btn ghost sm" class:acik-plan={planAcik && !planHemen} onclick={() => ((planAcik = !(planAcik && !planHemen)), (planHemen = false))}><Icon name="bell" size={15} />Oyun gecesi</button>
           <input bind:this={dosyaSec} type="file" accept="image/*" hidden onchange={resimSecildi} />
           <span class="ipucu-tus" title="#etiket yazarsan gündeme girer, @ad yazarsan o kişiye haber gider">#etiket · @ad</span>
           <span class="bosluk"></span>
@@ -315,7 +318,7 @@
       </form>
 
       {#if planAcik}
-        <div class="plan-yer"><GecePlanla onkapat={() => (planAcik = false)} /></div>
+        <div class="plan-yer">{#key planHemen}<GecePlanla hemen={planHemen} onkapat={() => (planAcik = false)} />{/key}</div>
       {/if}
 
       {#if sosyal.konu}
@@ -486,7 +489,7 @@
   .cip:hover:not(:disabled) { border-color: var(--gold-dim); color: var(--gold-glow); }
   .cip :global(svg) { color: var(--gold); }
   .yaz-alt { display: flex; align-items: center; gap: 10px; }
-  .ipucu-tus { font-size: 12px; color: var(--dim); }
+  .ipucu-tus { white-space: nowrap; font-size: 12px; color: var(--dim); }
   .bosluk { flex: 1; }
   .sayac { font-size: 13px; color: var(--dim); }
   .sayac.az { color: var(--gold-glow); }
