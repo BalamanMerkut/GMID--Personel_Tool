@@ -39,7 +39,8 @@
       "host": "31.57.187.132",
       "port": 27016,
       "description": "GMID'in Insurgency (2014) sunucusu: Checkpoint modu, oyuncular birlikte botlara karşı (en çok 16 kişi). TR/EU herkese açık. Topluluk, etkinlik ve duyurular için Discord: discord.gg/upu9VQwFrV",
-      "connect": "Oyna'ya basınca Steam oyunu açıp sunucuya sokar. Elle: konsola connect gmid.molayazilim.com.tr:27016 · Discord: discord.gg/upu9VQwFrV"
+      "connect": "Oyna'ya basınca Steam oyunu açıp sunucuya sokar. Elle: konsola connect gmid.molayazilim.com.tr:27016 · Discord: discord.gg/upu9VQwFrV",
+      "logo": "logolar/insurgency.png"
     },
     {
       "id": "gmid-unturned",
@@ -49,7 +50,8 @@
       "port": 27030,
       "queryPort": 27031,
       "description": "GMID'in Unturned sunucusu: PEI haritası, Normal zorluk, PvE (oyuncular birbirine zarar vermez), en çok 16 kişi. Ücretsiz oyun, herkes girebilir. Topluluk ve duyurular için Discord: discord.gg/upu9VQwFrV",
-      "connect": "Unturned → Play → Connect: IP 31.57.187.132, port 27030 · Discord: discord.gg/upu9VQwFrV"
+      "connect": "Unturned → Play → Connect: IP 31.57.187.132, port 27030 · Discord: discord.gg/upu9VQwFrV",
+      "logo": "logolar/unturned.png"
     }
   ],
   "ornek": [
