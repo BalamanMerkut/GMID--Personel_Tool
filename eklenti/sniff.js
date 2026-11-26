@@ -8,6 +8,7 @@
   if (window.__gmidSniff) return;
   Object.defineProperty(window, "__gmidSniff", { value: true });
   const MAX = 2 * 1024 * 1024;
+  const SKIP = /^(video|audio|font)\/|json|html|javascript|ecmascript|css|wasm|svg|protobuf|grpc/;
   const seen = new Set();
 
   const SRT = /^\uFEFF?\d+\r?\n\d\d:\d\d:\d\d[,.]\d+ --> /;
@@ -52,6 +53,7 @@
     this.addEventListener("load", function () {
       try {
         const url = this.responseURL || this.__gmidUrl;
+        if (SKIP.test((this.getResponseHeader("content-type") || "").toLowerCase())) return;
         if (this.responseType === "" || this.responseType === "text") {
           if (this.responseText.length < MAX) report(url, this.responseText);
         } else if (this.responseType === "arraybuffer" && this.response && this.response.byteLength < MAX) {
@@ -74,7 +76,8 @@
         try {
           const type = (r.headers.get("content-type") || "").toLowerCase();
           const len = Number(r.headers.get("content-length") || 0);
-          if (!r.ok || !r.body || len > MAX || type.startsWith("video/") || type.startsWith("audio/")) return;
+          // Yayın listesi olamayacak türler (JSON, sayfa, betik, yazı tipi…) kopyalanıp okunmaz.
+          if (!r.ok || !r.body || len > MAX || SKIP.test(type)) return;
           const reader = r.clone().body.getReader();
           const decoder = new TextDecoder();
           let text = "";

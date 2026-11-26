@@ -8,6 +8,8 @@
 
   const MIN_W = 200;
   const MIN_H = 110;
+  // Video sığmayacak kadar küçük çerçeveler (reklam kutuları vb.) hiç izlenmez: her sekmede onlarca olabiliyor.
+  if (window !== window.top && (innerWidth < MIN_W || innerHeight < MIN_H)) return;
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483646;";
@@ -140,12 +142,18 @@
     });
     if (videos.length && !host.isConnected) (document.body || document.documentElement).append(host);
   }
+  // Tarama hafif tutulur: sayfa değiştikçe en çok 0,5 sn'de bir, ayrıca 5 sn'de bir; arkadaki sekmede hiç.
   let scanTimer = 0;
-  new MutationObserver(() => {
-    clearTimeout(scanTimer);
-    scanTimer = setTimeout(scan, 400);
-  }).observe(document.documentElement, { childList: true, subtree: true });
-  setInterval(scan, 2000);
+  const later = () => {
+    if (scanTimer || document.hidden) return;
+    scanTimer = setTimeout(() => {
+      scanTimer = 0;
+      scan();
+    }, 500);
+  };
+  new MutationObserver(later).observe(document.documentElement, { childList: true, subtree: true });
+  setInterval(() => !document.hidden && scan(), 5000);
+  document.addEventListener("visibilitychange", later);
   scan();
 
   let hovered = null;
