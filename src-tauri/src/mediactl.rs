@@ -77,16 +77,26 @@ mod win {
     use windows::Storage::Streams::DataReader;
     use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
+    /// Windows'un medya oturumu yöneticisi bir kez alınır ve saklanır (her sorguda yeniden istemek Windows'un
+    /// "Now Playing" hizmetini yoruyordu).
+    static MANAGER: std::sync::Mutex<Option<Manager>> = std::sync::Mutex::new(None);
+    /// Son kapak (uygulama + başlık + sanatçı → resim); kapak yalnız şarkı değişince yeniden okunur.
+    static KAPAK: std::sync::Mutex<Option<(String, Option<String>)>> = std::sync::Mutex::new(None);
+
     fn session() -> Option<Session> {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         }
-        Manager::RequestAsync()
-            .ok()?
-            .join()
-            .ok()?
-            .GetCurrentSession()
-            .ok()
+        let mut m = MANAGER.lock().unwrap_or_else(|e| e.into_inner());
+        if m.is_none() {
+            *m = Some(Manager::RequestAsync().ok()?.join().ok()?);
+        }
+        let s = m.as_ref()?.GetCurrentSession();
+        if s.is_err() {
+            // Yönetici bozulduysa sonraki sorguda yeniden alınır.
+            *m = None;
+        }
+        s.ok()
     }
 
     /// Kapak: en çok 512 KB.
@@ -179,10 +189,24 @@ mod win {
         }
         Some(NowPlaying {
             app: app_name(&source),
-            title,
+            title: title.clone(),
             artist: props.Artist().map(|h| h.to_string()).unwrap_or_default(),
             playing,
-            thumb: thumb(&props),
+            thumb: {
+                let anahtar = format!(
+                    "{source}\u{1}{title}\u{1}{}",
+                    props.Artist().map(|h| h.to_string()).unwrap_or_default()
+                );
+                let mut k = KAPAK.lock().unwrap_or_else(|e| e.into_inner());
+                match k.as_ref() {
+                    Some((a, t)) if *a == anahtar => t.clone(),
+                    _ => {
+                        let t = thumb(&props);
+                        *k = Some((anahtar, t.clone()));
+                        t
+                    }
+                }
+            },
             source,
             shuffle,
             repeat,
