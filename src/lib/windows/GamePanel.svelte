@@ -2,7 +2,7 @@
   // Oyun İçi Panel (Ctrl+Shift+G): oyunun üstünde yarı saydam katman. Ses, mikrofon, Oyun Modu, sayaç,
   // bu oyuna not, son klip, yaklaşan hatırlatıcılar. Esc ya da aynı tuş kapatır; odak oyuna döner.
   import { onMount } from "svelte";
-  import { api } from "../api";
+  import { api, inTauri } from "../api";
   import { emitAll, on } from "../bus";
   import AppMixer from "../components/AppMixer.svelte";
   import NoteEditor from "../components/NoteEditor.svelte";
@@ -148,8 +148,11 @@
   }
   const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
+  /** Panel ekranda: ölçümler ve ses karıştırıcısı yalnız bu sırada çalışır. */
+  let acik = $state(false);
   function startPerf() {
     stopPerf();
+    acik = true;
     const tick = () => void api.panel.perf().then((p) => (perf = p)).catch(() => {});
     tick();
     perfTimer = setInterval(tick, 1000);
@@ -157,6 +160,7 @@
     mediaTimer = setInterval(loadMedia, 2000);
   }
   function stopPerf() {
+    acik = false;
     clearInterval(perfTimer);
     perfTimer = undefined;
     clearInterval(mediaTimer);
@@ -318,7 +322,12 @@
     void refresh();
     void loadAlarms();
     void loadFootball();
-    startPerf();
+    // Panel açılışta gizli hazırlanır; ölçüm (FPS, işlemci, medya) yalnız panel görünürken yapılır.
+    // Gizliyken de ölçüm sürünce bilgisayarı yoruyordu.
+    if (inTauri)
+      void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+        if (await getCurrentWindow().isVisible()) startPerf();
+      });
     const stops = [
       on<PanelOpen | null>("panel-open", (info) => {
         if (info) openInfo = info;
@@ -391,7 +400,7 @@
       <button class="x" onclick={close} title="Kapat (Ctrl+Shift+G)"><Icon name="x" size={20} /></button>
     </header>
 
-    <PowerWarn />
+    {#if acik}<PowerWarn />{/if}
     {#each alarmReminders as r (r.id)}
       <div class="alarm">
         <span class="ring"><Icon name="bell" size={20} /></span>
@@ -521,7 +530,7 @@
 
       <section class="card wide">
         <h3><Icon name="headphones" size={17} />Uygulamalar</h3>
-        <AppMixer compact max={6} />
+        {#if acik}<AppMixer compact max={6} />{/if}
       </section>
       <section class="card">
         <h3><Icon name="mic" size={17} />Mikrofon</h3>

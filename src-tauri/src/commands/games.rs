@@ -328,8 +328,18 @@ pub fn panel_hide(app: AppHandle) {
 #[tauri::command]
 pub async fn panel_perf(app: AppHandle) -> CmdResult<crate::perf::Sample> {
     tauri::async_runtime::spawn_blocking(move || {
-        let pid = crate::panel::game_pid(&app);
         let root = app.state::<crate::paths::DataDir>().root().to_path_buf();
+        // Panel gizliyken ölçüm yapılmaz: FPS izleyicisi (PresentMon) bütün programların karelerini izleyip diske
+        // yazar; gizli panelde sürekli çalışınca bilgisayarı yoruyordu.
+        let visible = app
+            .get_webview_window(crate::panel::PANEL)
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(false);
+        if !visible {
+            app.state::<crate::perf::Perf>().presentmon.stop(&root);
+            return crate::perf::Sample::default();
+        }
+        let pid = crate::panel::game_pid(&app);
         app.state::<crate::perf::Perf>().sample(pid, &root)
     })
     .await
